@@ -4,6 +4,7 @@ import secrets
 import sqlite3
 import time
 import uuid
+from contextlib import closing, contextmanager
 from pathlib import Path
 
 
@@ -15,7 +16,7 @@ class AuthStore:
     def __init__(self, path: Path, clock=time.time):
         self.path, self.clock = Path(path), clock
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.connect() as c:
+        with self.transaction() as c:
             c.executescript('''
             CREATE TABLE IF NOT EXISTS pairings(hash TEXT PRIMARY KEY, expires REAL, scopes TEXT, accounts TEXT);
             CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, hash TEXT UNIQUE, device_id TEXT,
@@ -34,12 +35,17 @@ class AuthStore:
         c.row_factory = sqlite3.Row
         return c
 
+    @contextmanager
+    def transaction(self):
+        with closing(self.connect()) as connection, connection:
+            yield connection
+
     def pairing(self, *, accounts=("AUTO", "MANUAL"), scanner_write=False, paper_write=False, profiles_write=False, notifications_write=False, discovery_write=False):
         if not accounts or not set(accounts) <= {"AUTO", "MANUAL"}:
             raise ValueError("Invalid accounts")
         code = secrets.token_urlsafe(24)
         scopes = ["read", "analyze"] + (["scanner:write"] if scanner_write else []) + (["paper:write"] if paper_write else []) + (["profiles:write"] if profiles_write else []) + (["notifications:write"] if notifications_write else []) + (["discovery:write"] if discovery_write else [])
-        with self.connect() as c:
+        with self.transaction() as c:
             c.execute("DELETE FROM pairings WHERE expires<=?", (self.clock(),))
             if c.execute("SELECT count(*) FROM pairings").fetchone()[0] >= 5:
                 raise ValueError("At most five active pairing codes")
@@ -50,7 +56,7 @@ class AuthStore:
         now = self.clock()
         token = "tg_" + secrets.token_urlsafe(32)
         sid = str(uuid.uuid4())
-        with self.connect() as c:
+        with self.transaction() as c:
             c.execute("BEGIN IMMEDIATE")
             row = c.execute("SELECT * FROM pairings WHERE hash=? AND expires>?", (digest(code), now)).fetchone()
             if row is None:
@@ -63,28 +69,28 @@ class AuthStore:
         return {"session": token, **self.session(token)}
 
     def session(self, token):
-        with self.connect() as c:
+        with self.transaction() as c:
             row = c.execute("SELECT * FROM sessions WHERE hash=? AND revoked=0 AND expires>?", (digest(token), self.clock())).fetchone()
         if row is None:
             return None
-        with self.connect() as c:
+        with self.transaction() as c:
             family=c.execute('SELECT f.* FROM renewal_families f JOIN renewal_sessions s ON f.id=s.family_id WHERE s.sid=?',(row['id'],)).fetchone()
         if family and (family['revoked'] or family['expires']<=self.clock()): return None
         return self._metadata(row,family)
 
     def revoke(self, sid):
-        with self.connect() as c:
+        with self.transaction() as c:
             c.execute("UPDATE sessions SET revoked=1 WHERE id=?", (sid,))
             family=c.execute('SELECT family_id FROM renewal_sessions WHERE sid=?',(sid,)).fetchone()
             if family: self._revoke_family(c,family['family_id'])
 
     def sessions(self):
-        with self.connect() as c:
+        with self.transaction() as c:
             return [dict(r) for r in c.execute("SELECT id,device_id,name,expires,revoked FROM sessions ORDER BY expires DESC")]
 
     def permit(self, key, maximum, period=60):
         bucket = int(self.clock())//period
-        with self.connect() as c:
+        with self.transaction() as c:
             c.execute("BEGIN IMMEDIATE")
             c.execute("DELETE FROM limits WHERE bucket<?", (bucket-2,))
             row = c.execute("SELECT bucket,count FROM limits WHERE key=?", (key,)).fetchone()
@@ -102,7 +108,7 @@ class AuthStore:
         """Only called inside initial one-use pairing, never from a bearer-only endpoint."""
         refresh = 'tr_' + secrets.token_urlsafe(32)
         fid = str(uuid.uuid4())
-        with self.connect() as c:
+        with self.transaction() as c:
             c.execute('BEGIN IMMEDIATE')
             row = c.execute('SELECT * FROM sessions WHERE hash=? AND revoked=0 AND expires>?', (digest(session_token), self.clock())).fetchone()
             if row is None: raise ValueError('Pairing session missing')
@@ -117,7 +123,7 @@ class AuthStore:
         only metadata, issues nothing new, and never extends absolute expiry."""
         old_hash=digest(body['refresh_token'])
         request_hash=digest(json.dumps(body,sort_keys=True,separators=(',',':')))
-        with self.connect() as c:
+        with self.transaction() as c:
             c.execute('BEGIN IMMEDIATE')
             token=c.execute('SELECT * FROM renewal_tokens WHERE hash=?',(old_hash,)).fetchone()
             if token is None: return None
