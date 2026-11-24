@@ -1,0 +1,43 @@
+{
+  "audit_seconds": 15.374417,
+  "audits": 63,
+  "cycles": 3,
+  "database_bytes": 2977792,
+  "duplicate_responses": 225,
+  "environment": {
+    "measurement": "single controlled fixture run; tracemalloc enabled; not RSS or production benchmark",
+    "os": "Linux",
+    "python": "3.12.14"
+  },
+  "events": 935,
+  "financial_mismatches": 0,
+  "fixture_only": true,
+  "incomplete_checks": 282,
+  "injected_sqlite_failures": 3,
+  "lost_ack_recoveries": 10,
+  "notifications": 722,
+  "orders": 10,
+  "peak_python_bytes": 12042576,
+  "positions": 10,
+  "query_plans": {
+    "account_journal": [
+      "SEARCH transactions USING INDEX transaction_account (portfolio=?)",
+      "USE TEMP B-TREE FOR ORDER BY"
+    ],
+    "analysis_history": [
+      "SCAN analyses USING COVERING INDEX analysis_time"
+    ],
+    "event_tail": [
+      "SEARCH events"
+    ],
+    "source_order_journal": [
+      "SCAN transactions"
+    ]
+  },
+  "records_last_audit": 1060,
+  "restarts": 4,
+  "seed": 12,
+  "transactions": 50,
+  "unexpected_errors": 0,
+  "utc_days": 2
+}

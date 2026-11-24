@@ -1,0 +1,12 @@
+[
+  {
+    "analysis_id": "4fb058f30b0f652080bf90243568cabf64ce5916e34dc56dc4f5b65714efeb46",
+    "closed_bar_ms": 1792584000000,
+    "job_id": "fa85b422298c8d770573fd1370312bed3588e50ea4ab447d0bff714fba774d82",
+    "reason": "conditional_setup",
+    "started_at_ms": 1792584120000,
+    "status": "completed",
+    "symbol": "BTCUSDT",
+    "timeframe": "1H"
+  }
+]

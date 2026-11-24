@@ -1,0 +1,117 @@
+{
+  "start_sha": "d2bf026885cec0dcbf0ac803a589b5cfdb95b9a0",
+  "code_checkpoint": "f1cf856d34dd3d1b0f8fbbcbc8d806ab3909b858",
+  "code_sha256": "04f874f4b085ec212686a86553fa6f840a3138d653a8ce517e8bd77ab56d7c59",
+  "branch": "codex/unified-forex-engine-v6",
+  "pr": "https://github.com/FatihBirgul/trade-ai-unified/pull/1",
+  "private": true,
+  "draft": true,
+  "main_merged": false,
+  "baseline": {
+    "v5": 423,
+    "v2": 152,
+    "host": 107,
+    "total": 682,
+    "failed": 0,
+    "skipped": 0
+  },
+  "final": {
+    "v5": 423,
+    "v2": 152,
+    "host": 127,
+    "total": 702,
+    "failed": 0,
+    "skipped": 0
+  },
+  "code_ci_run": 42244153003,
+  "code_ci_jobs": [
+    {
+      "os": "windows-latest",
+      "python": "3.11",
+      "job_id": 127981848593,
+      "counts": [
+        423,
+        152,
+        127
+      ],
+      "conclusion": "success",
+      "source_sha256": "04f874f4b085ec212686a86553fa6f840a3138d653a8ce517e8bd77ab56d7c59"
+    },
+    {
+      "os": "windows-latest",
+      "python": "3.12",
+      "job_id": 127981848678,
+      "counts": [
+        423,
+        152,
+        127
+      ],
+      "conclusion": "success",
+      "source_sha256": "04f874f4b085ec212686a86553fa6f840a3138d653a8ce517e8bd77ab56d7c59"
+    },
+    {
+      "os": "ubuntu-latest",
+      "python": "3.12",
+      "job_id": 127981848748,
+      "counts": [
+        423,
+        152,
+        127
+      ],
+      "conclusion": "success",
+      "source_sha256": "04f874f4b085ec212686a86553fa6f840a3138d653a8ce517e8bd77ab56d7c59"
+    },
+    {
+      "os": "ubuntu-latest",
+      "python": "3.11",
+      "job_id": 127981849006,
+      "counts": [
+        423,
+        152,
+        127
+      ],
+      "conclusion": "success",
+      "source_sha256": "04f874f4b085ec212686a86553fa6f840a3138d653a8ce517e8bd77ab56d7c59"
+    }
+  ],
+  "intermediate_failure": {
+    "run": 42243686985,
+    "job": 127980240603,
+    "os": "windows-latest",
+    "python": "3.12",
+    "cause": "CPython stat/fstat ctime disagreement for unchanged file",
+    "resolution_commit": "f1cf856d34dd3d1b0f8fbbcbc8d806ab3909b858",
+    "reference": "https://github.com/python/cpython/issues/157671",
+    "skipped_to_hide_failure": false
+  },
+  "source_a": "fdcdd418d96d05e71453e70c1f39956dd1cfe9d5",
+  "source_b": "b69111608ea3c2e78609fd84a0d81dee2781c980",
+  "coverage": {
+    "scope": "unified_forex only; host test suite on Linux Python 3.12.14; not whole-repository coverage",
+    "baseline_statement_percent": 95.49010584445467,
+    "baseline_branch_percent": 78.60696517412936,
+    "totals": {
+      "covered_lines": 2470,
+      "num_statements": 2578,
+      "percent_covered": 90.2330743618202,
+      "percent_covered_display": "90",
+      "missing_lines": 108,
+      "excluded_lines": 0,
+      "percent_statements_covered": 95.81070597362296,
+      "percent_statements_covered_display": "96",
+      "num_branches": 1026,
+      "num_partial_branches": 228,
+      "covered_branches": 782,
+      "missing_branches": 244,
+      "percent_branches_covered": 76.21832358674465,
+      "percent_branches_covered_display": "76"
+    }
+  },
+  "market_validation": false,
+  "real_mt5_validation": "UNVERIFIED",
+  "verified_bid_ask_replay": "UNAVAILABLE",
+  "orders_sent": 0,
+  "production_mutations": 0,
+  "public_deployment": false,
+  "evidence_commit_note": "This code checkpoint precedes the documentation-only evidence commit. Final GitHub delivery SHA is discoverable from branch/PR; no recursive self-hash is asserted."
+}

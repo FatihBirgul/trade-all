@@ -1,0 +1,71 @@
+{
+  "data_mode": "fixture",
+  "items": [
+    {
+      "availability": "configured",
+      "contract_type": "spot",
+      "market": "crypto_spot",
+      "provider": "fixture_spot",
+      "provider_status": "reachable",
+      "quote_currency": "USDT",
+      "symbol": "BTCUSDT",
+      "timeframes": [
+        "1m",
+        "5m",
+        "15m",
+        "1H",
+        "4H",
+        "1D"
+      ],
+      "venue": "fixture"
+    },
+    {
+      "availability": "configured",
+      "contract_type": "spot",
+      "market": "crypto_spot",
+      "provider": "fixture_spot",
+      "provider_status": "reachable",
+      "quote_currency": "USDT",
+      "symbol": "ETHUSDT",
+      "timeframes": [
+        "1m",
+        "5m",
+        "15m",
+        "1H",
+        "4H",
+        "1D"
+      ],
+      "venue": "fixture"
+    },
+    {
+      "availability": "configured",
+      "contract_type": "spot",
+      "market": "crypto_spot",
+      "provider": "fixture_spot",
+      "provider_status": "reachable",
+      "quote_currency": "USDT",
+      "symbol": "SOLUSDT",
+      "timeframes": [
+        "1m",
+        "5m",
+        "15m",
+        "1H",
+        "4H",
+        "1D"
+      ],
+      "venue": "fixture"
+    },
+    {
+      "availability": "unavailable",
+      "market": "forex_spot",
+      "reason": "verified_provider_and_calendar_required",
+      "symbol": "EURUSD"
+    },
+    {
+      "availability": "unavailable",
+      "market": "gold_spot",
+      "reason": "verified_provider_and_calendar_required",
+      "symbol": "XAUUSD"
+    }
+  ]
+}

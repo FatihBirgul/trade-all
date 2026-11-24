@@ -1,0 +1,109 @@
+{
+  "age_ms": null,
+  "analysis_id": "8c884eb27405b5c266319a97498b63e2c6de6d692e6b1f0464f9779f13b5895f",
+  "auto_order_id": null,
+  "conflicting_evidence": [],
+  "contract_type": "spot",
+  "created_at_ms": 1792584120000,
+  "data_mode": "live",
+  "direction": "WAIT",
+  "expires_at_ms": 1792587720000,
+  "indicators": {},
+  "levels": null,
+  "market": "crypto_spot",
+  "market_rules": {},
+  "mtf": {
+    "alignment_ratio": 0.0,
+    "conflict_ratio": 0.0,
+    "current": {
+      "available": false,
+      "confidence": 0.0,
+      "direction": "neutral",
+      "final_score": 0.0,
+      "gate_passed": false,
+      "timeframe": "1H",
+      "tradeable": false
+    },
+    "current_timeframe": "1H",
+    "direction": "neutral",
+    "evidence": [],
+    "higher_timeframe_alignment": {
+      "agreement_ratio": 0.0,
+      "available_count": 0,
+      "conflict_ratio": 0.0,
+      "direction": "neutral",
+      "evidence": [],
+      "opposing_count": 0,
+      "supporting_count": 0
+    },
+    "higher_timeframe_bias": {
+      "confidence": 0.0,
+      "direction": "neutral",
+      "final_score": 0.0,
+      "gate_passed": false,
+      "timeframe": null,
+      "tradeable": false
+    },
+    "lower_timeframe_confirmation": {
+      "agreement_ratio": 0.0,
+      "available_count": 0,
+      "conflict_ratio": 0.0,
+      "direction": "neutral",
+      "evidence": [],
+      "opposing_count": 0,
+      "supporting_count": 0
+    },
+    "opposing_count": 0,
+    "supporting_count": 0
+  },
+  "price": null,
+  "price_kind": "last",
+  "price_time_ms": null,
+  "provider": "binance_public_spot",
+  "quality": {
+    "issues": [
+      "provider_unavailable"
+    ],
+    "ok": false,
+    "timeframes": {}
+  },
+  "quote_currency": "USDT",
+  "reason": "provider_unavailable",
+  "regime": {
+    "direction": "neutral",
+    "regime": "unknown"
+  },
+  "risk": {
+    "policy_version": "demo-spot-conservative-1",
+    "quantity": "0",
+    "reason": "provider_unavailable",
+    "status": "wait"
+  },
+  "risk_portfolio": "AUTO",
+  "router": {
+    "eligible_strategy_ids": [],
+    "reason": "provider_unavailable",
+    "status": "wait",
+    "strategy_id": null
+  },
+  "scenarios": {
+    "bearish": "No validated bearish setup is available; wait for confirmed levels.",
+    "bullish": "No validated bullish setup is available; wait for confirmed levels.",
+    "neutral": "Wait for a confirmed break or a better-defined setup; no executable trade is implied."
+  },
+  "strategy_setups": {},
+  "supporting_evidence": [],
+  "symbol": "BTCUSDT",
+  "technical_methods": {},
+  "timeframe": "1H",
+  "timeframes": [
+    "1H"
+  ],
+  "venue": "binance",
+  "version": "v2-product-analysis-2",
+  "warnings": [
+    "Conditional heuristic scenario; not a validated probability or trade recommendation.",
+    "News/calendar, order book, funding and liquidation feeds are unavailable.",
+    "No live replacement data was generated; source unavailable."
+  ]
+}

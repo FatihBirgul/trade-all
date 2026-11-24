@@ -1,0 +1,279 @@
+{
+  "account": "FatihBirgul",
+  "date": "2026-11-24",
+  "repositories": {
+    "trade-ai": {
+      "selected_branch": "codex/v2-premium-experience-handoff",
+      "selected_commit": "cb3eaa1f9cbd857eb2fe0563ddaa81f501d75e87",
+      "branches": {
+        "bionic/task9-inspect-20261028": "4b3999dc1c5a564f11744a5bf5824861737f230d",
+        "codex/task11-paper-integrity-20261031": "f690a1301aa2f75da36d0d37a84da6f25ac93d25",
+        "codex/task12-ledger-replay-audit": "02152e9f869a14222860ff1b1aae526b4f592d09",
+        "codex/task13-domain-event-journal": "980340d70b134375abc58cd2846247b584fb8476",
+        "codex/trade-ai-v2-equity-history": "b5411982b1877d53d0b9f988dddc0bdde970855f",
+        "codex/trade-ai-v2-history-research": "c5202ef2b94e8ddb870e3d6aca5004ef5f76a166",
+        "codex/trade-ai-v2-master-continuation": "b69111608ea3c2e78609fd84a0d81dee2781c980",
+        "codex/trade-ai-v2-master-development": "4ae1fdc7b33c38a83f4b2316a9659aa5a7ff8537",
+        "codex/trade-ai-v2-notification-controls": "9fe7a3aba800cfbfdd7bee2e99b830df3e3f2ed5",
+        "codex/trade-ai-v2-product-integration": "07f1878354c19769664acb21a5b580f5c8290fd5",
+        "codex/v2-android-integration-20261029": "b6066bf8f10ac28229db81d1448c475e455c1a41",
+        "codex/v2-immutable-research-anchor": "33e4ef5f1f9830648f414f0554c638edd0addffb",
+        "codex/v2-mobile-quotes-20261026": "6b545e72f4439301eda277d4ee789bb94608cdcb",
+        "codex/v2-opportunity-discovery": "137c0844de4f9246ba488c899aaea481707cceaa",
+        "codex/v2-premium-experience-handoff": "cb3eaa1f9cbd857eb2fe0563ddaa81f501d75e87",
+        "codex/v2-release-candidate": "195af2ee62bf77083e1bcb12bec9a8511bba475d",
+        "codex/v2-scanner-activation": "4e5bb9bb3b5079bc7a8201a7b16b202ff6db8249",
+        "main": "50136e13428028156b17c5953bdb27dc99eb682f",
+        "trade-ai-v2": "022e3e2173f2448de089945a41956517a643eb40"
+      },
+      "additional_refs": {
+        "refs/pull/1/head": "6b545e72f4439301eda277d4ee789bb94608cdcb",
+        "refs/pull/10/head": "c5202ef2b94e8ddb870e3d6aca5004ef5f76a166",
+        "refs/pull/11/head": "9fe7a3aba800cfbfdd7bee2e99b830df3e3f2ed5",
+        "refs/pull/12/head": "33e4ef5f1f9830648f414f0554c638edd0addffb",
+        "refs/pull/13/head": "195af2ee62bf77083e1bcb12bec9a8511bba475d",
+        "refs/pull/14/head": "137c0844de4f9246ba488c899aaea481707cceaa",
+        "refs/pull/15/head": "4e5bb9bb3b5079bc7a8201a7b16b202ff6db8249",
+        "refs/pull/16/head": "cb3eaa1f9cbd857eb2fe0563ddaa81f501d75e87",
+        "refs/pull/2/head": "b6066bf8f10ac28229db81d1448c475e455c1a41",
+        "refs/pull/3/head": "f690a1301aa2f75da36d0d37a84da6f25ac93d25",
+        "refs/pull/4/head": "02152e9f869a14222860ff1b1aae526b4f592d09",
+        "refs/pull/5/head": "980340d70b134375abc58cd2846247b584fb8476",
+        "refs/pull/6/head": "4ae1fdc7b33c38a83f4b2316a9659aa5a7ff8537",
+        "refs/pull/7/head": "b69111608ea3c2e78609fd84a0d81dee2781c980",
+        "refs/pull/8/head": "07f1878354c19769664acb21a5b580f5c8290fd5",
+        "refs/pull/9/head": "b5411982b1877d53d0b9f988dddc0bdde970855f"
+      }
+    },
+    "trade-ai-unified": {
+      "selected_branch": "codex/unified-forex-engine-v6",
+      "selected_commit": "46723e3b71089287bee6f36b96fa42a482eb3959",
+      "branches": {
+        "codex/unified-forex-engine-v6": "46723e3b71089287bee6f36b96fa42a482eb3959",
+        "main": "4df4b48556df0a5e8a32324fdbf6d9d3bf1e5203"
+      },
+      "additional_refs": {
+        "refs/pull/1/head": "46723e3b71089287bee6f36b96fa42a482eb3959"
+      }
+    },
+    "trade-ai-android": {
+      "selected_branch": "codex/android-final-startup-ux",
+      "selected_commit": "4ff34864705c4ff50b8d892e0b172ed3f8983a36",
+      "branches": {
+        "codex/android-equity-apk": "2a60c994b70d30021051636b02ba686c4b197c57",
+        "codex/android-final-startup-ux": "4ff34864705c4ff50b8d892e0b172ed3f8983a36",
+        "codex/android-history-pagination": "c4b3df2a3055e755f97e29fdd0e7d44cc481217b",
+        "codex/android-integration-20261029": "a14c11775288051b54c8a8fcb78749167a9b0304",
+        "codex/android-notification-controls": "776d21f0065a07384aea9ecd0e570345ae57d555",
+        "codex/android-opportunity-discovery": "dce8b22028e730a342c1d89a1c8d4a2c761daf20",
+        "codex/android-premium-health-brand": "4be11a66e3f45e0a119db3647d5c7ce40c3f58e0",
+        "codex/android-product-integration": "92e4e3ea4d7a8ad03c069cf41275b1a17f2b6a4d",
+        "codex/android-release-candidate": "761bec051de2d61ca234e48b4f86b12079fbdb46",
+        "codex/android-scanner-activation": "d3a2e9ddccef7fe507dc43977147897a08c14ff7",
+        "codex/android-snapshot-research": "ca0f9018ffbad83bd7d375b91001e13e83e89609",
+        "codex/android-stability-20261026": "c30e596dcc354a61dcf077d54204d2d1b6e73cb7",
+        "codex/task7-premium-mobile-20261027": "eba362bcfca0b99c1276fab72780e420f6904e66",
+        "codex/task8-native-reliability-20261027": "b2f829bffeaafa6017e0b16d36d2f1a9c9df1318",
+        "gpt/task9-android-reliability-20261028": "0958e69a6b5390ebc23e50126cd03f060166ea50",
+        "main": "9cacf8df2f12ee81ac699dc337cf0941786101dc"
+      },
+      "additional_refs": {
+        "refs/pull/1/head": "c30e596dcc354a61dcf077d54204d2d1b6e73cb7",
+        "refs/pull/10/head": "ca0f9018ffbad83bd7d375b91001e13e83e89609",
+        "refs/pull/11/head": "761bec051de2d61ca234e48b4f86b12079fbdb46",
+        "refs/pull/12/head": "dce8b22028e730a342c1d89a1c8d4a2c761daf20",
+        "refs/pull/13/head": "d3a2e9ddccef7fe507dc43977147897a08c14ff7",
+        "refs/pull/14/head": "4be11a66e3f45e0a119db3647d5c7ce40c3f58e0",
+        "refs/pull/15/head": "4ff34864705c4ff50b8d892e0b172ed3f8983a36",
+        "refs/pull/2/head": "eba362bcfca0b99c1276fab72780e420f6904e66",
+        "refs/pull/3/head": "b2f829bffeaafa6017e0b16d36d2f1a9c9df1318",
+        "refs/pull/4/head": "0958e69a6b5390ebc23e50126cd03f060166ea50",
+        "refs/pull/5/head": "a14c11775288051b54c8a8fcb78749167a9b0304",
+        "refs/pull/6/head": "92e4e3ea4d7a8ad03c069cf41275b1a17f2b6a4d",
+        "refs/pull/7/head": "2a60c994b70d30021051636b02ba686c4b197c57",
+        "refs/pull/8/head": "c4b3df2a3055e755f97e29fdd0e7d44cc481217b",
+        "refs/pull/9/head": "776d21f0065a07384aea9ecd0e570345ae57d555"
+      }
+    },
+    "trade-ai-gateway": {
+      "selected_branch": "codex/gateway-scanner-activation",
+      "selected_commit": "d1c0e4d2263626a30e81af9e2b40d5e952cb7b76",
+      "branches": {
+        "codex/gateway-continuity-20261026": "19038bdecd5ef472ff7826bb074208d300d682f8",
+        "codex/gateway-equity-history": "a57556bcfe76bb2365317a7281059b5b41c6ef72",
+        "codex/gateway-history-pagination": "c9fca90db2e088c4d1a27837de7c98f147f0a783",
+        "codex/gateway-notification-controls": "fca040c1a276e301c6a3c2eac97c77ce3a1efb35",
+        "codex/gateway-opportunity-discovery": "18d8e9b125276954f78b1606caa13ce774f85fb3",
+        "codex/gateway-product-profiles": "8b1cf0a1e26e18462d6703c6bc838181338d6a67",
+        "codex/gateway-release-candidate": "e63ac56cd0dbe7139624766b0a8f289b852c712c",
+        "codex/gateway-scanner-activation": "d1c0e4d2263626a30e81af9e2b40d5e952cb7b76",
+        "codex/gateway-snapshot-research": "b75cb790bbb712a542a63085681c27036f057b3b",
+        "main": "983351cec13cf94ddecb8e5101bd09d0a12d93a5"
+      },
+      "additional_refs": {
+        "refs/pull/1/head": "19038bdecd5ef472ff7826bb074208d300d682f8",
+        "refs/pull/2/head": "8b1cf0a1e26e18462d6703c6bc838181338d6a67",
+        "refs/pull/3/head": "a57556bcfe76bb2365317a7281059b5b41c6ef72",
+        "refs/pull/4/head": "c9fca90db2e088c4d1a27837de7c98f147f0a783",
+        "refs/pull/5/head": "fca040c1a276e301c6a3c2eac97c77ce3a1efb35",
+        "refs/pull/6/head": "b75cb790bbb712a542a63085681c27036f057b3b",
+        "refs/pull/7/head": "e63ac56cd0dbe7139624766b0a8f289b852c712c",
+        "refs/pull/8/head": "18d8e9b125276954f78b1606caa13ce774f85fb3",
+        "refs/pull/9/head": "d1c0e4d2263626a30e81af9e2b40d5e952cb7b76"
+      }
+    },
+    "Trade": {
+      "selected_branch": "main",
+      "selected_commit": "ac09f6f01ece11e8a5e4ac5b2c6be2986b0b7b60",
+      "branches": {
+        "main": "ac09f6f01ece11e8a5e4ac5b2c6be2986b0b7b60"
+      },
+      "additional_refs": {}
+    },
+    "day-trader-skill": {
+      "selected_branch": "codex/forex-xauusd-backend-v1",
+      "selected_commit": "fdcdd418d96d05e71453e70c1f39956dd1cfe9d5",
+      "branches": {
+        "codex/forex-xauusd-backend-v1": "fdcdd418d96d05e71453e70c1f39956dd1cfe9d5",
+        "main": "3d0f4ef6986f4984b7c6bd46f7ff4f87744c3abd"
+      },
+      "additional_refs": {
+        "refs/pull/1/head": "fdcdd418d96d05e71453e70c1f39956dd1cfe9d5"
+      }
+    },
+    "trade-ai-pwa": {
+      "selected_branch": null,
+      "selected_commit": null,
+      "branches": {},
+      "additional_refs": {}
+    }
+  },
+  "local_sources": {
+    "trade-ai-v3-core": {
+      "head": "56cbd7e05a40b106deda9298e2be28b488d0d952",
+      "branches": {
+        "codex/forex-xauusd-backend-v1": "d9e79b37cdbc5706ce8786dbdba5ae0bbb131ffa",
+        "codex/v3-broker-evidence-readiness": "93c3382d20540ee40653c43176fac2974eedbb76",
+        "codex/v3-demo-acceptance": "d18bb558f1e5faccd43d245a1b67ca4a53862255",
+        "codex/v3-exness-session-integration": "55a0b9d8172c70f57f5ba2c5c059a79b6e0f3659",
+        "codex/v3-real-readonly-analysis": "56cbd7e05a40b106deda9298e2be28b488d0d952",
+        "codex/v3-v2-analysis-integration": "b99ba81c0c713e6914e34eeca3cdb18af4f0b8ec",
+        "codex/v3-v2-manual-analysis-bridge": "c9941b9117d7996dedacaca9bc69084baa196067",
+        "codex/v3-v2-p1-descriptive-analysis": "753ed59269c36d3d6d0da561924cd5c144b20ea0"
+      }
+    },
+    "trade-ai-v3-historical-sessions": {
+      "head": "24df2ed6a6c94b8eea8548ec8980ba897057e0b5",
+      "branches": {
+        "codex/v3-historical-session-evidence": "24df2ed6a6c94b8eea8548ec8980ba897057e0b5",
+        "codex/v3-real-readonly-analysis": "3c8adb810058b4738640f46bde84de8ec12205ad"
+      }
+    },
+    "trade-ai-v3-runtime-candidate": {
+      "head": "56cbd7e05a40b106deda9298e2be28b488d0d952",
+      "branches": {
+        "codex/v3-real-readonly-analysis": "56cbd7e05a40b106deda9298e2be28b488d0d952"
+      }
+    },
+    "trade-ai-v3-19-symbols": {
+      "head": "56cbd7e05a40b106deda9298e2be28b488d0d952",
+      "branches": {
+        "codex/v3-real-readonly-analysis": "56cbd7e05a40b106deda9298e2be28b488d0d952",
+        "local/v5-19-symbols": "56cbd7e05a40b106deda9298e2be28b488d0d952"
+      }
+    },
+    "trade-ai-v3-v2-p1": {
+      "head": "753ed59269c36d3d6d0da561924cd5c144b20ea0",
+      "branches": {
+        "codex/forex-xauusd-backend-v1": "d9e79b37cdbc5706ce8786dbdba5ae0bbb131ffa",
+        "codex/v3-broker-evidence-readiness": "93c3382d20540ee40653c43176fac2974eedbb76",
+        "codex/v3-demo-acceptance": "d18bb558f1e5faccd43d245a1b67ca4a53862255",
+        "codex/v3-exness-session-integration": "55a0b9d8172c70f57f5ba2c5c059a79b6e0f3659",
+        "codex/v3-real-readonly-analysis": "56cbd7e05a40b106deda9298e2be28b488d0d952",
+        "codex/v3-v2-analysis-integration": "b99ba81c0c713e6914e34eeca3cdb18af4f0b8ec",
+        "codex/v3-v2-manual-analysis-bridge": "c9941b9117d7996dedacaca9bc69084baa196067",
+        "codex/v3-v2-p1-descriptive-analysis": "753ed59269c36d3d6d0da561924cd5c144b20ea0"
+      }
+    },
+    "trade-ai-v2-antigravity": {
+      "head": "c80c97f227a2c233a610df669919ba2f464e4f9f",
+      "branches": {
+        "antigravity/v2-analysis-research": "c80c97f227a2c233a610df669919ba2f464e4f9f",
+        "codex/v2-release-candidate": "195af2ee62bf77083e1bcb12bec9a8511bba475d"
+      }
+    },
+    "day-trader-skill": {
+      "head": "3d0f4ef6986f4984b7c6bd46f7ff4f87744c3abd",
+      "branches": {
+        "main": "3d0f4ef6986f4984b7c6bd46f7ff4f87744c3abd"
+      }
+    },
+    "trade-ai-v2-local": {
+      "head": "6b545e72f4439301eda277d4ee789bb94608cdcb",
+      "branches": {
+        "codex/v2-android-integration-20261029": "b6066bf8f10ac28229db81d1448c475e455c1a41",
+        "codex/v2-mobile-quotes-20261026": "6b545e72f4439301eda277d4ee789bb94608cdcb",
+        "trade-ai-v2": "022e3e2173f2448de089945a41956517a643eb40"
+      }
+    },
+    "trade-ai-v2-integration-20261029": {
+      "head": "b6066bf8f10ac28229db81d1448c475e455c1a41",
+      "branches": {
+        "codex/v2-android-integration-20261029": "b6066bf8f10ac28229db81d1448c475e455c1a41",
+        "codex/v2-mobile-quotes-20261026": "6b545e72f4439301eda277d4ee789bb94608cdcb",
+        "trade-ai-v2": "022e3e2173f2448de089945a41956517a643eb40"
+      }
+    },
+    "trade-ai-gateway-local": {
+      "head": "19038bdecd5ef472ff7826bb074208d300d682f8",
+      "branches": {
+        "codex/gateway-android-integration-20261029": "19038bdecd5ef472ff7826bb074208d300d682f8",
+        "codex/gateway-continuity-20261026": "19038bdecd5ef472ff7826bb074208d300d682f8",
+        "main": "983351cec13cf94ddecb8e5101bd09d0a12d93a5"
+      }
+    },
+    "trade-ai-gateway-integration-20261029": {
+      "head": "19038bdecd5ef472ff7826bb074208d300d682f8",
+      "branches": {
+        "codex/gateway-android-integration-20261029": "19038bdecd5ef472ff7826bb074208d300d682f8",
+        "codex/gateway-continuity-20261026": "19038bdecd5ef472ff7826bb074208d300d682f8",
+        "main": "983351cec13cf94ddecb8e5101bd09d0a12d93a5"
+      }
+    },
+    "trade-ai-android-integration-20261029": {
+      "head": "a14c11775288051b54c8a8fcb78749167a9b0304",
+      "branches": {
+        "codex/android-integration-20261029": "a14c11775288051b54c8a8fcb78749167a9b0304",
+        "gpt/task9-android-reliability-20261028": "0958e69a6b5390ebc23e50126cd03f060166ea50"
+      }
+    },
+    "trade-ai-forex-web-v3-integration": {
+      "head": "e9dc135af64df378c71af8ee1b00a23870e24d06",
+      "branches": {
+        "codex/pwa-v3-manual-analysis": "e9dc135af64df378c71af8ee1b00a23870e24d06"
+      }
+    },
+    "Trade-main V1": {
+      "head": "50136e13428028156b17c5953bdb27dc99eb682f",
+      "included": "V1 scenario rendering and AI narrative sanitation"
+    },
+    "trade-ai-forex-web": {
+      "included": "19-symbol React application, MT5 and news/calendar bridges",
+      "sha256_before_portability_edits": {
+        "src/App.tsx": "e26f8e7a71a2d222e6b04fc5b941ab39ddb4d021c6a1f24000dc921cc2d3ad37",
+        "src/AnalysisPanel.tsx": "6ffa4737dc1e26d5031b63b44960f4a7ccc9dd944b571ef47060e03bf25ce7fd",
+        "src/MarketChart.tsx": "8ced7327f17d6032a422033ab804b728713880098c43136dd29c1b9a6a267d40",
+        "mt5_bridge.py": "1a74d26f8b6ec217ff3122bfeb9bdda5db2839db6aab0d3af7f3d2a4163f8ef7",
+        "news_bridge.py": "782f1d388f2a792c58d403b13a2e25af89373c014a554a0c9ccc275914dd516d",
+        "vite.config.ts": "1ffbc679ebbe8bccc9c222768497f053080f0f6d23732d9d765664552c2f516d"
+      }
+    },
+    "Trade AI Başlat.cmd": {
+      "included": "scripts/start-forex-windows.cmd",
+      "source_sha256": "a702f55d9341d821e3166197ac152951f83a7fb4cb268c6fc09b957db2adf4dd"
+    },
+    "Trade-AI-GPT-Baglanti-Testi": {
+      "included": "tools/gpt-connection"
+    }
+  }
+}

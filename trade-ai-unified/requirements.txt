@@ -1,0 +1,8 @@
+# Python 3.11/3.12; source V2 numerical/ASGI versions retained.
+fastapi==0.115.14
+pydantic==2.11.7
+uvicorn==0.34.3
+httpx==0.28.1
+numpy==2.2.6
+pandas==2.2.3
+# Optional Windows terminal binding, installed separately: MetaTrader5

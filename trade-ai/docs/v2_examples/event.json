@@ -1,0 +1,26 @@
+{
+  "close_time_ms": 1792584060000,
+  "data_mode": "fixture",
+  "event_id": "044ec3f787d5f4e6aefd7865a387ed257afe344ee480bd379bd365c7a305f7f7",
+  "market_event": {
+    "close": "130.00000000",
+    "close_time_ms": 1792584060000,
+    "high": "130.20000000",
+    "is_final": true,
+    "low": "129.50000000",
+    "open": "129.90000000",
+    "open_time_ms": 1792584000000,
+    "symbol": "BTCUSDT",
+    "volume": "10000.00000000"
+  },
+  "processed": [
+    {
+      "order_id": "082633e7f179b46718488c9f51fa6eb9472b67465ebf0fd6b3b7335f7ff1c3fd",
+      "status": "open"
+    },
+    {
+      "order_id": "ee883a156e46d791caf94391572e5cb06dfa48d14bd6b7c44133b0cf04711961",
+      "status": "open"
+    }
+  ]
+}

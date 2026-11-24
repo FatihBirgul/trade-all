@@ -1,0 +1,34 @@
+[
+  {
+    "cash_delta_quote": "130.40866305",
+    "data_mode": "fixture",
+    "event_id": "9bc46ea71cc8f2c6eb62195b396f296b063b587fd522a27691396c533c476536",
+    "fee_quote": "0.06523695",
+    "kind": "manual_close:7198629f15584aedf4329f2ecaf872bdd9cac74fd8c8b1aa18a7346566931033",
+    "order_id": "082633e7f179b46718488c9f51fa6eb9472b67465ebf0fd6b3b7335f7ff1c3fd",
+    "paper_only": true,
+    "portfolio_id": "MANUAL",
+    "position_id": "082633e7f179b46718488c9f51fa6eb9472b67465ebf0fd6b3b7335f7ff1c3fd",
+    "price": "130.47390000",
+    "quantity": "1.00000000",
+    "realized_pnl_quote": "0.41772006",
+    "time_ms": 1792584120000,
+    "transaction_id": "f0cff22bb8c05a3e636c4c68d54b7b78e23ebeb4d9fdc6ff6b2be30db2046171"
+  },
+  {
+    "cash_delta_quote": "-129.99094299",
+    "data_mode": "fixture",
+    "event_id": "044ec3f787d5f4e6aefd7865a387ed257afe344ee480bd379bd365c7a305f7f7",
+    "fee_quote": "0.06496299",
+    "kind": "entry",
+    "order_id": "082633e7f179b46718488c9f51fa6eb9472b67465ebf0fd6b3b7335f7ff1c3fd",
+    "paper_only": true,
+    "portfolio_id": "MANUAL",
+    "position_id": "082633e7f179b46718488c9f51fa6eb9472b67465ebf0fd6b3b7335f7ff1c3fd",
+    "price": "129.92598000",
+    "quantity": "1.00000000",
+    "realized_pnl_quote": "0.00000000",
+    "time_ms": 1792584060000,
+    "transaction_id": "9bcfdc6374fdca492f1510882d9b0c7b917c64b4d7586071762db0124daee390"
+  }
+]

@@ -1,0 +1,5 @@
+open_time_ms,close_time_ms,open,high,low,close,is_final,symbol,source,contract_type
+1767225600000,1767226500000,2000,2002,1999,2001,true,XAUUSD,handmade-test,cfd
+1767226500000,1767227400000,2001,2003,2000,2002,true,XAUUSD,handmade-test,cfd
+1767227400000,1767228300000,2002,2004,2001,2003,true,XAUUSD,handmade-test,cfd
+1767228300000,1767229200000,2003,2005,2002,2004,true,XAUUSD,handmade-test,cfd

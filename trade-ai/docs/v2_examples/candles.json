@@ -1,0 +1,48 @@
+{
+  "analysis_id": "bb3183fd8c699220f4b1685372c11d2961359af92962b097b014a407a7e3e2ad",
+  "as_of_ms": 1792584000000,
+  "candles": [
+    {
+      "close": "129.7",
+      "close_time_ms": 1792576800000,
+      "high": "130.2",
+      "is_final": true,
+      "low": "129.2",
+      "open": "129.64999999999998",
+      "open_time_ms": 1792573200000,
+      "volume": "100.0"
+    },
+    {
+      "close": "129.8",
+      "close_time_ms": 1792580400000,
+      "high": "130.3",
+      "is_final": true,
+      "low": "129.3",
+      "open": "129.75",
+      "open_time_ms": 1792576800000,
+      "volume": "100.0"
+    },
+    {
+      "close": "129.9",
+      "close_time_ms": 1792584000000,
+      "high": "130.4",
+      "is_final": true,
+      "low": "129.4",
+      "open": "129.85",
+      "open_time_ms": 1792580400000,
+      "volume": "300.0"
+    }
+  ],
+  "contract_type": "spot",
+  "data_mode": "fixture",
+  "price_kind": "last",
+  "provider": "fixture_spot",
+  "quote_currency": "USDT",
+  "snapshot_only": true,
+  "source": "fixture_spot",
+  "source_record_id": "4c04525a5815192a00be429c177822e0239fb8226b5833b3b051c97b8b518659",
+  "symbol": "BTCUSDT",
+  "timeframe": "1H",
+  "venue": "fixture",
+  "volume_kind": "real"
+}

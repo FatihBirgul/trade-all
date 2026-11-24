@@ -1,0 +1,231 @@
+{
+  "engine_version": "9.0.0-rc1",
+  "code_sha256": "89702620cb970df3bffd517aa302a0a1e6000654cc33f0c0adaf9ecf951772ff",
+  "data_kind": "SYNTHETIC_TEST",
+  "market_performance_evidence": false,
+  "environment": {
+    "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "python": "3.12.14"
+  },
+  "measurement": "3 sequential timing repetitions plus separate tracemalloc run; Python allocations are not process RSS or MT5 latency",
+  "benchmarks": {
+    "single_xauusd": {
+      "repetitions": 3,
+      "median_seconds": 0.10990016199866659,
+      "timings_seconds": [
+        0.15880502999789314,
+        0.09962711400294211,
+        0.10990016199866659
+      ],
+      "python_peak_bytes_separate_run": 1168188,
+      "provider_calls_per_run": {
+        "metadata": 1.0,
+        "quote": 1.0,
+        "candles": 2.0
+      },
+      "source_checkpoint": "57b09271dd804564d350a4ab64b6bde6636e4cfe",
+      "code_sha256": "89702620cb970df3bffd517aa302a0a1e6000654cc33f0c0adaf9ecf951772ff"
+    },
+    "four_symbol_scanner": {
+      "repetitions": 3,
+      "median_seconds": 0.5685859170007461,
+      "timings_seconds": [
+        0.5273859730004915,
+        0.5880400589994679,
+        0.5685859170007461
+      ],
+      "python_peak_bytes_separate_run": 2539307,
+      "provider_calls": 16,
+      "cache_stats": {
+        "hits": 0,
+        "misses": 16,
+        "scope": "request_only"
+      },
+      "source_checkpoint": "57b09271dd804564d350a4ab64b6bde6636e4cfe",
+      "code_sha256": "89702620cb970df3bffd517aa302a0a1e6000654cc33f0c0adaf9ecf951772ff"
+    },
+    "three_timeframes": {
+      "repetitions": 3,
+      "median_seconds": 0.16778076700211386,
+      "timings_seconds": [
+        0.1760692130010284,
+        0.12161755299894139,
+        0.16778076700211386
+      ],
+      "python_peak_bytes_separate_run": 1940537,
+      "source_checkpoint": "57b09271dd804564d350a4ab64b6bde6636e4cfe",
+      "code_sha256": "89702620cb970df3bffd517aa302a0a1e6000654cc33f0c0adaf9ecf951772ff"
+    },
+    "candlestick_catalogue": {
+      "repetitions": 3,
+      "median_seconds": 0.004097162000107346,
+      "timings_seconds": [
+        0.004276874002243858,
+        0.004097162000107346,
+        0.0040243619987450074
+      ],
+      "python_peak_bytes_separate_run": 203391,
+      "source_checkpoint": "57b09271dd804564d350a4ab64b6bde6636e4cfe",
+      "code_sha256": "89702620cb970df3bffd517aa302a0a1e6000654cc33f0c0adaf9ecf951772ff"
+    },
+    "chart_geometry": {
+      "repetitions": 3,
+      "median_seconds": 0.013194883002142888,
+      "timings_seconds": [
+        0.012827286998799536,
+        0.04465546200299286,
+        0.013194883002142888
+      ],
+      "python_peak_bytes_separate_run": 57400,
+      "source_checkpoint": "57b09271dd804564d350a4ab64b6bde6636e4cfe",
+      "code_sha256": "89702620cb970df3bffd517aa302a0a1e6000654cc33f0c0adaf9ecf951772ff"
+    },
+    "v2_confluence_100": {
+      "repetitions": 3,
+      "median_seconds": 0.0018578669987618923,
+      "timings_seconds": [
+        0.0021151259970793035,
+        0.0018164549983339384,
+        0.0018578669987618923
+      ],
+      "python_peak_bytes_separate_run": 144472,
+      "source_checkpoint": "57b09271dd804564d350a4ab64b6bde6636e4cfe",
+      "code_sha256": "89702620cb970df3bffd517aa302a0a1e6000654cc33f0c0adaf9ecf951772ff"
+    },
+    "500_bar_replay": {
+      "repetitions": 3,
+      "median_seconds": 1.3290632650023326,
+      "timings_seconds": [
+        1.4044045430018741,
+        1.2784317359983106,
+        1.3290632650023326
+      ],
+      "python_peak_bytes_separate_run": 998908,
+      "analyses": 13,
+      "closed_trades": 12,
+      "source_checkpoint": "57b09271dd804564d350a4ab64b6bde6636e4cfe",
+      "code_sha256": "89702620cb970df3bffd517aa302a0a1e6000654cc33f0c0adaf9ecf951772ff"
+    },
+    "2000_bar_replay": {
+      "repetitions": 3,
+      "median_seconds": 8.020515623997198,
+      "timings_seconds": [
+        7.877914941000199,
+        8.020515623997198,
+        8.08741521399861
+      ],
+      "python_peak_bytes_separate_run": 3071259,
+      "analyses": 88,
+      "closed_trades": 87,
+      "source_checkpoint": "57b09271dd804564d350a4ab64b6bde6636e4cfe",
+      "code_sha256": "89702620cb970df3bffd517aa302a0a1e6000654cc33f0c0adaf9ecf951772ff"
+    },
+    "two_fold_validation_oos": {
+      "repetitions": 3,
+      "median_seconds": 1.3099794349982403,
+      "timings_seconds": [
+        1.3489866300005815,
+        1.3099794349982403,
+        1.1961332989994844
+      ],
+      "python_peak_bytes_separate_run": 1037998,
+      "source_checkpoint": "57b09271dd804564d350a4ab64b6bde6636e4cfe",
+      "code_sha256": "89702620cb970df3bffd517aa302a0a1e6000654cc33f0c0adaf9ecf951772ff"
+    },
+    "monte_carlo_200_draws_100_trades": {
+      "repetitions": 3,
+      "median_seconds": 0.009027126001456054,
+      "timings_seconds": [
+        0.009614483999030199,
+        0.008868056000210345,
+        0.009027126001456054
+      ],
+      "python_peak_bytes_separate_run": 20832,
+      "source_checkpoint": "57b09271dd804564d350a4ab64b6bde6636e4cfe",
+      "code_sha256": "89702620cb970df3bffd517aa302a0a1e6000654cc33f0c0adaf9ecf951772ff"
+    },
+    "api_analysis_testclient": {
+      "repetitions": 3,
+      "median_seconds": 0.077730855999107,
+      "timings_seconds": [
+        0.08742252799856942,
+        0.07605940999928862,
+        0.077730855999107
+      ],
+      "python_peak_bytes_separate_run": 1269397,
+      "source_checkpoint": "57b09271dd804564d350a4ab64b6bde6636e4cfe",
+      "code_sha256": "89702620cb970df3bffd517aa302a0a1e6000654cc33f0c0adaf9ecf951772ff"
+    },
+    "four_bar_local_import": {
+      "repetitions": 3,
+      "median_seconds": 0.0007945409997773822,
+      "timings_seconds": [
+        0.0013431099978333805,
+        0.0006205280005815439,
+        0.0007945409997773822
+      ],
+      "python_peak_bytes_separate_run": 8012999,
+      "source_checkpoint": "f1cf856d34dd3d1b0f8fbbcbc8d806ab3909b858",
+      "code_sha256": "04f874f4b085ec212686a86553fa6f840a3138d653a8ce517e8bd77ab56d7c59"
+    }
+  },
+  "source_checkpoint": "57b09271dd804564d350a4ab64b6bde6636e4cfe",
+  "scope_note": "Full benchmark at 57b0927; subsequent f1cf856 only changes importer Windows cross-API stat comparison. Affected local-import measurement rerun at f1cf856; per-row source identity is authoritative. No cloud speed change is claimed as an algorithmic improvement.",
+  "v8_comparison": {
+    "single_xauusd": {
+      "v8_median_seconds": 0.06697211800019431,
+      "v9_median_seconds": 0.10990016199866659,
+      "ratio_v9_over_v8": 1.6409838195403603
+    },
+    "four_symbol_scanner": {
+      "v8_median_seconds": 0.36465397699976165,
+      "v9_median_seconds": 0.5685859170007461,
+      "ratio_v9_over_v8": 1.5592478153642015
+    },
+    "three_timeframes": {
+      "v8_median_seconds": 0.18346070500047063,
+      "v9_median_seconds": 0.16778076700211386,
+      "ratio_v9_over_v8": 0.9145324444364447
+    },
+    "candlestick_catalogue": {
+      "v8_median_seconds": 0.0027014730003429577,
+      "v9_median_seconds": 0.004097162000107346,
+      "ratio_v9_over_v8": 1.51663999587899
+    },
+    "chart_geometry": {
+      "v8_median_seconds": 0.011257673000727664,
+      "v9_median_seconds": 0.013194883002142888,
+      "ratio_v9_over_v8": 1.172079078979289
+    },
+    "v2_confluence_100": {
+      "v8_median_seconds": 0.001308368000536575,
+      "v9_median_seconds": 0.0018578669987618923,
+      "ratio_v9_over_v8": 1.4199881057928367
+    },
+    "500_bar_replay": {
+      "v8_median_seconds": 1.271572849000222,
+      "v9_median_seconds": 1.3290632650023326,
+      "ratio_v9_over_v8": 1.0452120506090647
+    },
+    "2000_bar_replay": {
+      "v8_median_seconds": 8.85860949400012,
+      "v9_median_seconds": 8.020515623997198,
+      "ratio_v9_over_v8": 0.9053921644733796
+    },
+    "two_fold_validation_oos": {
+      "v8_median_seconds": 1.3392774519998056,
+      "v9_median_seconds": 1.3099794349982403,
+      "ratio_v9_over_v8": 0.978124012348735
+    },
+    "monte_carlo_200_draws_100_trades": {
+      "v8_median_seconds": 0.0097718420001911,
+      "v9_median_seconds": 0.009027126001456054,
+      "ratio_v9_over_v8": 0.9237895988575663
+    },
+    "api_analysis_testclient": {
+      "v8_median_seconds": 0.08651535200078797,
+      "v9_median_seconds": 0.077730855999107,
+      "ratio_v9_over_v8": 0.8984631536654795
+    }
+  }
+}

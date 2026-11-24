@@ -1,0 +1,32 @@
+name: private-unified-validation
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  offline:
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ['3.11', '3.12']
+    runs-on: ${{ matrix.os }}
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: requirements-lock.txt
+      - run: python -m pip install -r requirements-lock.txt
+      - name: Compile selected source and host
+        run: python -m compileall -q unified_forex vendor/day_trader/forex vendor/trade_ai/backend/market_ai scripts
+      - name: Portable source fingerprint
+        run: python -c "from unified_forex.engine import code_digest; print('SOURCE_SHA256=' + code_digest())"
+      - name: Preserved V5 and selected V2 source regressions (offline)
+        run: python scripts/check_sources.py
+      - name: Canonical V6 integration and financial tests (offline)
+        run: python scripts/run_suite.py engine

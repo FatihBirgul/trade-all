@@ -1,0 +1,10 @@
+{
+  "auth_required": true,
+  "data_mode": "fixture",
+  "provider": "fixture_spot",
+  "provider_status": "reachable",
+  "real_execution": false,
+  "status": "ok",
+  "storage": "sqlite_product_1",
+  "version": "v2-backend-1"
+}

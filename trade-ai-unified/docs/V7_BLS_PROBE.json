@@ -1,0 +1,14 @@
+{
+  "coverage_status": "UNVERIFIED",
+  "source_authenticated": false,
+  "payload_sha256": "92a350111ace106deaab5584e4084366bd367b594a0d0bad116008d82d63e501",
+  "directional_permission": false,
+  "data_status": "OFFICIAL_URL_RETRIEVED",
+  "future_event_count": 21,
+  "latest_release_at": "2026-12-30T15:00:00+00:00",
+  "retrieved_at": "2026-11-06T11:05:33.622759+00:00",
+  "url": "https://www.bls.gov/schedule/news_release/bls.ics",
+  "event_count": 313,
+  "issue_count": 0,
+  "source_publication_status": "UNAVAILABLE where DTSTAMP absent; first observation is retrieval, never an invented source publication"
+}

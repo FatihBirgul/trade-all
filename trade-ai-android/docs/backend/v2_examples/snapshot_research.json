@@ -1,0 +1,1317 @@
+{
+  "analysis_id": "e8dd6bf64ce8c8e96190a1b52370b481e6678591a5f5e1380fa2f49a3ed49b78",
+  "anchored_vwap": {
+    "definition": "OHLC_typical_price_times_real_base_volume_approximation",
+    "from_ms": 1799989200000,
+    "known_at": 1800000000000,
+    "status": "available",
+    "trade_permission": false,
+    "value": "129.84",
+    "version": "v2-explicit-anchor-1",
+    "volume": "500.0"
+  },
+  "anchors": [
+    {
+      "close_time_ms": 1798923600000,
+      "open_time_ms": 1798920000000
+    },
+    {
+      "close_time_ms": 1798927200000,
+      "open_time_ms": 1798923600000
+    },
+    {
+      "close_time_ms": 1798930800000,
+      "open_time_ms": 1798927200000
+    },
+    {
+      "close_time_ms": 1798934400000,
+      "open_time_ms": 1798930800000
+    },
+    {
+      "close_time_ms": 1798938000000,
+      "open_time_ms": 1798934400000
+    },
+    {
+      "close_time_ms": 1798941600000,
+      "open_time_ms": 1798938000000
+    },
+    {
+      "close_time_ms": 1798945200000,
+      "open_time_ms": 1798941600000
+    },
+    {
+      "close_time_ms": 1798948800000,
+      "open_time_ms": 1798945200000
+    },
+    {
+      "close_time_ms": 1798952400000,
+      "open_time_ms": 1798948800000
+    },
+    {
+      "close_time_ms": 1798956000000,
+      "open_time_ms": 1798952400000
+    },
+    {
+      "close_time_ms": 1798959600000,
+      "open_time_ms": 1798956000000
+    },
+    {
+      "close_time_ms": 1798963200000,
+      "open_time_ms": 1798959600000
+    },
+    {
+      "close_time_ms": 1798966800000,
+      "open_time_ms": 1798963200000
+    },
+    {
+      "close_time_ms": 1798970400000,
+      "open_time_ms": 1798966800000
+    },
+    {
+      "close_time_ms": 1798974000000,
+      "open_time_ms": 1798970400000
+    },
+    {
+      "close_time_ms": 1798977600000,
+      "open_time_ms": 1798974000000
+    },
+    {
+      "close_time_ms": 1798981200000,
+      "open_time_ms": 1798977600000
+    },
+    {
+      "close_time_ms": 1798984800000,
+      "open_time_ms": 1798981200000
+    },
+    {
+      "close_time_ms": 1798988400000,
+      "open_time_ms": 1798984800000
+    },
+    {
+      "close_time_ms": 1798992000000,
+      "open_time_ms": 1798988400000
+    },
+    {
+      "close_time_ms": 1798995600000,
+      "open_time_ms": 1798992000000
+    },
+    {
+      "close_time_ms": 1798999200000,
+      "open_time_ms": 1798995600000
+    },
+    {
+      "close_time_ms": 1799002800000,
+      "open_time_ms": 1798999200000
+    },
+    {
+      "close_time_ms": 1799006400000,
+      "open_time_ms": 1799002800000
+    },
+    {
+      "close_time_ms": 1799010000000,
+      "open_time_ms": 1799006400000
+    },
+    {
+      "close_time_ms": 1799013600000,
+      "open_time_ms": 1799010000000
+    },
+    {
+      "close_time_ms": 1799017200000,
+      "open_time_ms": 1799013600000
+    },
+    {
+      "close_time_ms": 1799020800000,
+      "open_time_ms": 1799017200000
+    },
+    {
+      "close_time_ms": 1799024400000,
+      "open_time_ms": 1799020800000
+    },
+    {
+      "close_time_ms": 1799028000000,
+      "open_time_ms": 1799024400000
+    },
+    {
+      "close_time_ms": 1799031600000,
+      "open_time_ms": 1799028000000
+    },
+    {
+      "close_time_ms": 1799035200000,
+      "open_time_ms": 1799031600000
+    },
+    {
+      "close_time_ms": 1799038800000,
+      "open_time_ms": 1799035200000
+    },
+    {
+      "close_time_ms": 1799042400000,
+      "open_time_ms": 1799038800000
+    },
+    {
+      "close_time_ms": 1799046000000,
+      "open_time_ms": 1799042400000
+    },
+    {
+      "close_time_ms": 1799049600000,
+      "open_time_ms": 1799046000000
+    },
+    {
+      "close_time_ms": 1799053200000,
+      "open_time_ms": 1799049600000
+    },
+    {
+      "close_time_ms": 1799056800000,
+      "open_time_ms": 1799053200000
+    },
+    {
+      "close_time_ms": 1799060400000,
+      "open_time_ms": 1799056800000
+    },
+    {
+      "close_time_ms": 1799064000000,
+      "open_time_ms": 1799060400000
+    },
+    {
+      "close_time_ms": 1799067600000,
+      "open_time_ms": 1799064000000
+    },
+    {
+      "close_time_ms": 1799071200000,
+      "open_time_ms": 1799067600000
+    },
+    {
+      "close_time_ms": 1799074800000,
+      "open_time_ms": 1799071200000
+    },
+    {
+      "close_time_ms": 1799078400000,
+      "open_time_ms": 1799074800000
+    },
+    {
+      "close_time_ms": 1799082000000,
+      "open_time_ms": 1799078400000
+    },
+    {
+      "close_time_ms": 1799085600000,
+      "open_time_ms": 1799082000000
+    },
+    {
+      "close_time_ms": 1799089200000,
+      "open_time_ms": 1799085600000
+    },
+    {
+      "close_time_ms": 1799092800000,
+      "open_time_ms": 1799089200000
+    },
+    {
+      "close_time_ms": 1799096400000,
+      "open_time_ms": 1799092800000
+    },
+    {
+      "close_time_ms": 1799100000000,
+      "open_time_ms": 1799096400000
+    },
+    {
+      "close_time_ms": 1799103600000,
+      "open_time_ms": 1799100000000
+    },
+    {
+      "close_time_ms": 1799107200000,
+      "open_time_ms": 1799103600000
+    },
+    {
+      "close_time_ms": 1799110800000,
+      "open_time_ms": 1799107200000
+    },
+    {
+      "close_time_ms": 1799114400000,
+      "open_time_ms": 1799110800000
+    },
+    {
+      "close_time_ms": 1799118000000,
+      "open_time_ms": 1799114400000
+    },
+    {
+      "close_time_ms": 1799121600000,
+      "open_time_ms": 1799118000000
+    },
+    {
+      "close_time_ms": 1799125200000,
+      "open_time_ms": 1799121600000
+    },
+    {
+      "close_time_ms": 1799128800000,
+      "open_time_ms": 1799125200000
+    },
+    {
+      "close_time_ms": 1799132400000,
+      "open_time_ms": 1799128800000
+    },
+    {
+      "close_time_ms": 1799136000000,
+      "open_time_ms": 1799132400000
+    },
+    {
+      "close_time_ms": 1799139600000,
+      "open_time_ms": 1799136000000
+    },
+    {
+      "close_time_ms": 1799143200000,
+      "open_time_ms": 1799139600000
+    },
+    {
+      "close_time_ms": 1799146800000,
+      "open_time_ms": 1799143200000
+    },
+    {
+      "close_time_ms": 1799150400000,
+      "open_time_ms": 1799146800000
+    },
+    {
+      "close_time_ms": 1799154000000,
+      "open_time_ms": 1799150400000
+    },
+    {
+      "close_time_ms": 1799157600000,
+      "open_time_ms": 1799154000000
+    },
+    {
+      "close_time_ms": 1799161200000,
+      "open_time_ms": 1799157600000
+    },
+    {
+      "close_time_ms": 1799164800000,
+      "open_time_ms": 1799161200000
+    },
+    {
+      "close_time_ms": 1799168400000,
+      "open_time_ms": 1799164800000
+    },
+    {
+      "close_time_ms": 1799172000000,
+      "open_time_ms": 1799168400000
+    },
+    {
+      "close_time_ms": 1799175600000,
+      "open_time_ms": 1799172000000
+    },
+    {
+      "close_time_ms": 1799179200000,
+      "open_time_ms": 1799175600000
+    },
+    {
+      "close_time_ms": 1799182800000,
+      "open_time_ms": 1799179200000
+    },
+    {
+      "close_time_ms": 1799186400000,
+      "open_time_ms": 1799182800000
+    },
+    {
+      "close_time_ms": 1799190000000,
+      "open_time_ms": 1799186400000
+    },
+    {
+      "close_time_ms": 1799193600000,
+      "open_time_ms": 1799190000000
+    },
+    {
+      "close_time_ms": 1799197200000,
+      "open_time_ms": 1799193600000
+    },
+    {
+      "close_time_ms": 1799200800000,
+      "open_time_ms": 1799197200000
+    },
+    {
+      "close_time_ms": 1799204400000,
+      "open_time_ms": 1799200800000
+    },
+    {
+      "close_time_ms": 1799208000000,
+      "open_time_ms": 1799204400000
+    },
+    {
+      "close_time_ms": 1799211600000,
+      "open_time_ms": 1799208000000
+    },
+    {
+      "close_time_ms": 1799215200000,
+      "open_time_ms": 1799211600000
+    },
+    {
+      "close_time_ms": 1799218800000,
+      "open_time_ms": 1799215200000
+    },
+    {
+      "close_time_ms": 1799222400000,
+      "open_time_ms": 1799218800000
+    },
+    {
+      "close_time_ms": 1799226000000,
+      "open_time_ms": 1799222400000
+    },
+    {
+      "close_time_ms": 1799229600000,
+      "open_time_ms": 1799226000000
+    },
+    {
+      "close_time_ms": 1799233200000,
+      "open_time_ms": 1799229600000
+    },
+    {
+      "close_time_ms": 1799236800000,
+      "open_time_ms": 1799233200000
+    },
+    {
+      "close_time_ms": 1799240400000,
+      "open_time_ms": 1799236800000
+    },
+    {
+      "close_time_ms": 1799244000000,
+      "open_time_ms": 1799240400000
+    },
+    {
+      "close_time_ms": 1799247600000,
+      "open_time_ms": 1799244000000
+    },
+    {
+      "close_time_ms": 1799251200000,
+      "open_time_ms": 1799247600000
+    },
+    {
+      "close_time_ms": 1799254800000,
+      "open_time_ms": 1799251200000
+    },
+    {
+      "close_time_ms": 1799258400000,
+      "open_time_ms": 1799254800000
+    },
+    {
+      "close_time_ms": 1799262000000,
+      "open_time_ms": 1799258400000
+    },
+    {
+      "close_time_ms": 1799265600000,
+      "open_time_ms": 1799262000000
+    },
+    {
+      "close_time_ms": 1799269200000,
+      "open_time_ms": 1799265600000
+    },
+    {
+      "close_time_ms": 1799272800000,
+      "open_time_ms": 1799269200000
+    },
+    {
+      "close_time_ms": 1799276400000,
+      "open_time_ms": 1799272800000
+    },
+    {
+      "close_time_ms": 1799280000000,
+      "open_time_ms": 1799276400000
+    },
+    {
+      "close_time_ms": 1799283600000,
+      "open_time_ms": 1799280000000
+    },
+    {
+      "close_time_ms": 1799287200000,
+      "open_time_ms": 1799283600000
+    },
+    {
+      "close_time_ms": 1799290800000,
+      "open_time_ms": 1799287200000
+    },
+    {
+      "close_time_ms": 1799294400000,
+      "open_time_ms": 1799290800000
+    },
+    {
+      "close_time_ms": 1799298000000,
+      "open_time_ms": 1799294400000
+    },
+    {
+      "close_time_ms": 1799301600000,
+      "open_time_ms": 1799298000000
+    },
+    {
+      "close_time_ms": 1799305200000,
+      "open_time_ms": 1799301600000
+    },
+    {
+      "close_time_ms": 1799308800000,
+      "open_time_ms": 1799305200000
+    },
+    {
+      "close_time_ms": 1799312400000,
+      "open_time_ms": 1799308800000
+    },
+    {
+      "close_time_ms": 1799316000000,
+      "open_time_ms": 1799312400000
+    },
+    {
+      "close_time_ms": 1799319600000,
+      "open_time_ms": 1799316000000
+    },
+    {
+      "close_time_ms": 1799323200000,
+      "open_time_ms": 1799319600000
+    },
+    {
+      "close_time_ms": 1799326800000,
+      "open_time_ms": 1799323200000
+    },
+    {
+      "close_time_ms": 1799330400000,
+      "open_time_ms": 1799326800000
+    },
+    {
+      "close_time_ms": 1799334000000,
+      "open_time_ms": 1799330400000
+    },
+    {
+      "close_time_ms": 1799337600000,
+      "open_time_ms": 1799334000000
+    },
+    {
+      "close_time_ms": 1799341200000,
+      "open_time_ms": 1799337600000
+    },
+    {
+      "close_time_ms": 1799344800000,
+      "open_time_ms": 1799341200000
+    },
+    {
+      "close_time_ms": 1799348400000,
+      "open_time_ms": 1799344800000
+    },
+    {
+      "close_time_ms": 1799352000000,
+      "open_time_ms": 1799348400000
+    },
+    {
+      "close_time_ms": 1799355600000,
+      "open_time_ms": 1799352000000
+    },
+    {
+      "close_time_ms": 1799359200000,
+      "open_time_ms": 1799355600000
+    },
+    {
+      "close_time_ms": 1799362800000,
+      "open_time_ms": 1799359200000
+    },
+    {
+      "close_time_ms": 1799366400000,
+      "open_time_ms": 1799362800000
+    },
+    {
+      "close_time_ms": 1799370000000,
+      "open_time_ms": 1799366400000
+    },
+    {
+      "close_time_ms": 1799373600000,
+      "open_time_ms": 1799370000000
+    },
+    {
+      "close_time_ms": 1799377200000,
+      "open_time_ms": 1799373600000
+    },
+    {
+      "close_time_ms": 1799380800000,
+      "open_time_ms": 1799377200000
+    },
+    {
+      "close_time_ms": 1799384400000,
+      "open_time_ms": 1799380800000
+    },
+    {
+      "close_time_ms": 1799388000000,
+      "open_time_ms": 1799384400000
+    },
+    {
+      "close_time_ms": 1799391600000,
+      "open_time_ms": 1799388000000
+    },
+    {
+      "close_time_ms": 1799395200000,
+      "open_time_ms": 1799391600000
+    },
+    {
+      "close_time_ms": 1799398800000,
+      "open_time_ms": 1799395200000
+    },
+    {
+      "close_time_ms": 1799402400000,
+      "open_time_ms": 1799398800000
+    },
+    {
+      "close_time_ms": 1799406000000,
+      "open_time_ms": 1799402400000
+    },
+    {
+      "close_time_ms": 1799409600000,
+      "open_time_ms": 1799406000000
+    },
+    {
+      "close_time_ms": 1799413200000,
+      "open_time_ms": 1799409600000
+    },
+    {
+      "close_time_ms": 1799416800000,
+      "open_time_ms": 1799413200000
+    },
+    {
+      "close_time_ms": 1799420400000,
+      "open_time_ms": 1799416800000
+    },
+    {
+      "close_time_ms": 1799424000000,
+      "open_time_ms": 1799420400000
+    },
+    {
+      "close_time_ms": 1799427600000,
+      "open_time_ms": 1799424000000
+    },
+    {
+      "close_time_ms": 1799431200000,
+      "open_time_ms": 1799427600000
+    },
+    {
+      "close_time_ms": 1799434800000,
+      "open_time_ms": 1799431200000
+    },
+    {
+      "close_time_ms": 1799438400000,
+      "open_time_ms": 1799434800000
+    },
+    {
+      "close_time_ms": 1799442000000,
+      "open_time_ms": 1799438400000
+    },
+    {
+      "close_time_ms": 1799445600000,
+      "open_time_ms": 1799442000000
+    },
+    {
+      "close_time_ms": 1799449200000,
+      "open_time_ms": 1799445600000
+    },
+    {
+      "close_time_ms": 1799452800000,
+      "open_time_ms": 1799449200000
+    },
+    {
+      "close_time_ms": 1799456400000,
+      "open_time_ms": 1799452800000
+    },
+    {
+      "close_time_ms": 1799460000000,
+      "open_time_ms": 1799456400000
+    },
+    {
+      "close_time_ms": 1799463600000,
+      "open_time_ms": 1799460000000
+    },
+    {
+      "close_time_ms": 1799467200000,
+      "open_time_ms": 1799463600000
+    },
+    {
+      "close_time_ms": 1799470800000,
+      "open_time_ms": 1799467200000
+    },
+    {
+      "close_time_ms": 1799474400000,
+      "open_time_ms": 1799470800000
+    },
+    {
+      "close_time_ms": 1799478000000,
+      "open_time_ms": 1799474400000
+    },
+    {
+      "close_time_ms": 1799481600000,
+      "open_time_ms": 1799478000000
+    },
+    {
+      "close_time_ms": 1799485200000,
+      "open_time_ms": 1799481600000
+    },
+    {
+      "close_time_ms": 1799488800000,
+      "open_time_ms": 1799485200000
+    },
+    {
+      "close_time_ms": 1799492400000,
+      "open_time_ms": 1799488800000
+    },
+    {
+      "close_time_ms": 1799496000000,
+      "open_time_ms": 1799492400000
+    },
+    {
+      "close_time_ms": 1799499600000,
+      "open_time_ms": 1799496000000
+    },
+    {
+      "close_time_ms": 1799503200000,
+      "open_time_ms": 1799499600000
+    },
+    {
+      "close_time_ms": 1799506800000,
+      "open_time_ms": 1799503200000
+    },
+    {
+      "close_time_ms": 1799510400000,
+      "open_time_ms": 1799506800000
+    },
+    {
+      "close_time_ms": 1799514000000,
+      "open_time_ms": 1799510400000
+    },
+    {
+      "close_time_ms": 1799517600000,
+      "open_time_ms": 1799514000000
+    },
+    {
+      "close_time_ms": 1799521200000,
+      "open_time_ms": 1799517600000
+    },
+    {
+      "close_time_ms": 1799524800000,
+      "open_time_ms": 1799521200000
+    },
+    {
+      "close_time_ms": 1799528400000,
+      "open_time_ms": 1799524800000
+    },
+    {
+      "close_time_ms": 1799532000000,
+      "open_time_ms": 1799528400000
+    },
+    {
+      "close_time_ms": 1799535600000,
+      "open_time_ms": 1799532000000
+    },
+    {
+      "close_time_ms": 1799539200000,
+      "open_time_ms": 1799535600000
+    },
+    {
+      "close_time_ms": 1799542800000,
+      "open_time_ms": 1799539200000
+    },
+    {
+      "close_time_ms": 1799546400000,
+      "open_time_ms": 1799542800000
+    },
+    {
+      "close_time_ms": 1799550000000,
+      "open_time_ms": 1799546400000
+    },
+    {
+      "close_time_ms": 1799553600000,
+      "open_time_ms": 1799550000000
+    },
+    {
+      "close_time_ms": 1799557200000,
+      "open_time_ms": 1799553600000
+    },
+    {
+      "close_time_ms": 1799560800000,
+      "open_time_ms": 1799557200000
+    },
+    {
+      "close_time_ms": 1799564400000,
+      "open_time_ms": 1799560800000
+    },
+    {
+      "close_time_ms": 1799568000000,
+      "open_time_ms": 1799564400000
+    },
+    {
+      "close_time_ms": 1799571600000,
+      "open_time_ms": 1799568000000
+    },
+    {
+      "close_time_ms": 1799575200000,
+      "open_time_ms": 1799571600000
+    },
+    {
+      "close_time_ms": 1799578800000,
+      "open_time_ms": 1799575200000
+    },
+    {
+      "close_time_ms": 1799582400000,
+      "open_time_ms": 1799578800000
+    },
+    {
+      "close_time_ms": 1799586000000,
+      "open_time_ms": 1799582400000
+    },
+    {
+      "close_time_ms": 1799589600000,
+      "open_time_ms": 1799586000000
+    },
+    {
+      "close_time_ms": 1799593200000,
+      "open_time_ms": 1799589600000
+    },
+    {
+      "close_time_ms": 1799596800000,
+      "open_time_ms": 1799593200000
+    },
+    {
+      "close_time_ms": 1799600400000,
+      "open_time_ms": 1799596800000
+    },
+    {
+      "close_time_ms": 1799604000000,
+      "open_time_ms": 1799600400000
+    },
+    {
+      "close_time_ms": 1799607600000,
+      "open_time_ms": 1799604000000
+    },
+    {
+      "close_time_ms": 1799611200000,
+      "open_time_ms": 1799607600000
+    },
+    {
+      "close_time_ms": 1799614800000,
+      "open_time_ms": 1799611200000
+    },
+    {
+      "close_time_ms": 1799618400000,
+      "open_time_ms": 1799614800000
+    },
+    {
+      "close_time_ms": 1799622000000,
+      "open_time_ms": 1799618400000
+    },
+    {
+      "close_time_ms": 1799625600000,
+      "open_time_ms": 1799622000000
+    },
+    {
+      "close_time_ms": 1799629200000,
+      "open_time_ms": 1799625600000
+    },
+    {
+      "close_time_ms": 1799632800000,
+      "open_time_ms": 1799629200000
+    },
+    {
+      "close_time_ms": 1799636400000,
+      "open_time_ms": 1799632800000
+    },
+    {
+      "close_time_ms": 1799640000000,
+      "open_time_ms": 1799636400000
+    },
+    {
+      "close_time_ms": 1799643600000,
+      "open_time_ms": 1799640000000
+    },
+    {
+      "close_time_ms": 1799647200000,
+      "open_time_ms": 1799643600000
+    },
+    {
+      "close_time_ms": 1799650800000,
+      "open_time_ms": 1799647200000
+    },
+    {
+      "close_time_ms": 1799654400000,
+      "open_time_ms": 1799650800000
+    },
+    {
+      "close_time_ms": 1799658000000,
+      "open_time_ms": 1799654400000
+    },
+    {
+      "close_time_ms": 1799661600000,
+      "open_time_ms": 1799658000000
+    },
+    {
+      "close_time_ms": 1799665200000,
+      "open_time_ms": 1799661600000
+    },
+    {
+      "close_time_ms": 1799668800000,
+      "open_time_ms": 1799665200000
+    },
+    {
+      "close_time_ms": 1799672400000,
+      "open_time_ms": 1799668800000
+    },
+    {
+      "close_time_ms": 1799676000000,
+      "open_time_ms": 1799672400000
+    },
+    {
+      "close_time_ms": 1799679600000,
+      "open_time_ms": 1799676000000
+    },
+    {
+      "close_time_ms": 1799683200000,
+      "open_time_ms": 1799679600000
+    },
+    {
+      "close_time_ms": 1799686800000,
+      "open_time_ms": 1799683200000
+    },
+    {
+      "close_time_ms": 1799690400000,
+      "open_time_ms": 1799686800000
+    },
+    {
+      "close_time_ms": 1799694000000,
+      "open_time_ms": 1799690400000
+    },
+    {
+      "close_time_ms": 1799697600000,
+      "open_time_ms": 1799694000000
+    },
+    {
+      "close_time_ms": 1799701200000,
+      "open_time_ms": 1799697600000
+    },
+    {
+      "close_time_ms": 1799704800000,
+      "open_time_ms": 1799701200000
+    },
+    {
+      "close_time_ms": 1799708400000,
+      "open_time_ms": 1799704800000
+    },
+    {
+      "close_time_ms": 1799712000000,
+      "open_time_ms": 1799708400000
+    },
+    {
+      "close_time_ms": 1799715600000,
+      "open_time_ms": 1799712000000
+    },
+    {
+      "close_time_ms": 1799719200000,
+      "open_time_ms": 1799715600000
+    },
+    {
+      "close_time_ms": 1799722800000,
+      "open_time_ms": 1799719200000
+    },
+    {
+      "close_time_ms": 1799726400000,
+      "open_time_ms": 1799722800000
+    },
+    {
+      "close_time_ms": 1799730000000,
+      "open_time_ms": 1799726400000
+    },
+    {
+      "close_time_ms": 1799733600000,
+      "open_time_ms": 1799730000000
+    },
+    {
+      "close_time_ms": 1799737200000,
+      "open_time_ms": 1799733600000
+    },
+    {
+      "close_time_ms": 1799740800000,
+      "open_time_ms": 1799737200000
+    },
+    {
+      "close_time_ms": 1799744400000,
+      "open_time_ms": 1799740800000
+    },
+    {
+      "close_time_ms": 1799748000000,
+      "open_time_ms": 1799744400000
+    },
+    {
+      "close_time_ms": 1799751600000,
+      "open_time_ms": 1799748000000
+    },
+    {
+      "close_time_ms": 1799755200000,
+      "open_time_ms": 1799751600000
+    },
+    {
+      "close_time_ms": 1799758800000,
+      "open_time_ms": 1799755200000
+    },
+    {
+      "close_time_ms": 1799762400000,
+      "open_time_ms": 1799758800000
+    },
+    {
+      "close_time_ms": 1799766000000,
+      "open_time_ms": 1799762400000
+    },
+    {
+      "close_time_ms": 1799769600000,
+      "open_time_ms": 1799766000000
+    },
+    {
+      "close_time_ms": 1799773200000,
+      "open_time_ms": 1799769600000
+    },
+    {
+      "close_time_ms": 1799776800000,
+      "open_time_ms": 1799773200000
+    },
+    {
+      "close_time_ms": 1799780400000,
+      "open_time_ms": 1799776800000
+    },
+    {
+      "close_time_ms": 1799784000000,
+      "open_time_ms": 1799780400000
+    },
+    {
+      "close_time_ms": 1799787600000,
+      "open_time_ms": 1799784000000
+    },
+    {
+      "close_time_ms": 1799791200000,
+      "open_time_ms": 1799787600000
+    },
+    {
+      "close_time_ms": 1799794800000,
+      "open_time_ms": 1799791200000
+    },
+    {
+      "close_time_ms": 1799798400000,
+      "open_time_ms": 1799794800000
+    },
+    {
+      "close_time_ms": 1799802000000,
+      "open_time_ms": 1799798400000
+    },
+    {
+      "close_time_ms": 1799805600000,
+      "open_time_ms": 1799802000000
+    },
+    {
+      "close_time_ms": 1799809200000,
+      "open_time_ms": 1799805600000
+    },
+    {
+      "close_time_ms": 1799812800000,
+      "open_time_ms": 1799809200000
+    },
+    {
+      "close_time_ms": 1799816400000,
+      "open_time_ms": 1799812800000
+    },
+    {
+      "close_time_ms": 1799820000000,
+      "open_time_ms": 1799816400000
+    },
+    {
+      "close_time_ms": 1799823600000,
+      "open_time_ms": 1799820000000
+    },
+    {
+      "close_time_ms": 1799827200000,
+      "open_time_ms": 1799823600000
+    },
+    {
+      "close_time_ms": 1799830800000,
+      "open_time_ms": 1799827200000
+    },
+    {
+      "close_time_ms": 1799834400000,
+      "open_time_ms": 1799830800000
+    },
+    {
+      "close_time_ms": 1799838000000,
+      "open_time_ms": 1799834400000
+    },
+    {
+      "close_time_ms": 1799841600000,
+      "open_time_ms": 1799838000000
+    },
+    {
+      "close_time_ms": 1799845200000,
+      "open_time_ms": 1799841600000
+    },
+    {
+      "close_time_ms": 1799848800000,
+      "open_time_ms": 1799845200000
+    },
+    {
+      "close_time_ms": 1799852400000,
+      "open_time_ms": 1799848800000
+    },
+    {
+      "close_time_ms": 1799856000000,
+      "open_time_ms": 1799852400000
+    },
+    {
+      "close_time_ms": 1799859600000,
+      "open_time_ms": 1799856000000
+    },
+    {
+      "close_time_ms": 1799863200000,
+      "open_time_ms": 1799859600000
+    },
+    {
+      "close_time_ms": 1799866800000,
+      "open_time_ms": 1799863200000
+    },
+    {
+      "close_time_ms": 1799870400000,
+      "open_time_ms": 1799866800000
+    },
+    {
+      "close_time_ms": 1799874000000,
+      "open_time_ms": 1799870400000
+    },
+    {
+      "close_time_ms": 1799877600000,
+      "open_time_ms": 1799874000000
+    },
+    {
+      "close_time_ms": 1799881200000,
+      "open_time_ms": 1799877600000
+    },
+    {
+      "close_time_ms": 1799884800000,
+      "open_time_ms": 1799881200000
+    },
+    {
+      "close_time_ms": 1799888400000,
+      "open_time_ms": 1799884800000
+    },
+    {
+      "close_time_ms": 1799892000000,
+      "open_time_ms": 1799888400000
+    },
+    {
+      "close_time_ms": 1799895600000,
+      "open_time_ms": 1799892000000
+    },
+    {
+      "close_time_ms": 1799899200000,
+      "open_time_ms": 1799895600000
+    },
+    {
+      "close_time_ms": 1799902800000,
+      "open_time_ms": 1799899200000
+    },
+    {
+      "close_time_ms": 1799906400000,
+      "open_time_ms": 1799902800000
+    },
+    {
+      "close_time_ms": 1799910000000,
+      "open_time_ms": 1799906400000
+    },
+    {
+      "close_time_ms": 1799913600000,
+      "open_time_ms": 1799910000000
+    },
+    {
+      "close_time_ms": 1799917200000,
+      "open_time_ms": 1799913600000
+    },
+    {
+      "close_time_ms": 1799920800000,
+      "open_time_ms": 1799917200000
+    },
+    {
+      "close_time_ms": 1799924400000,
+      "open_time_ms": 1799920800000
+    },
+    {
+      "close_time_ms": 1799928000000,
+      "open_time_ms": 1799924400000
+    },
+    {
+      "close_time_ms": 1799931600000,
+      "open_time_ms": 1799928000000
+    },
+    {
+      "close_time_ms": 1799935200000,
+      "open_time_ms": 1799931600000
+    },
+    {
+      "close_time_ms": 1799938800000,
+      "open_time_ms": 1799935200000
+    },
+    {
+      "close_time_ms": 1799942400000,
+      "open_time_ms": 1799938800000
+    },
+    {
+      "close_time_ms": 1799946000000,
+      "open_time_ms": 1799942400000
+    },
+    {
+      "close_time_ms": 1799949600000,
+      "open_time_ms": 1799946000000
+    },
+    {
+      "close_time_ms": 1799953200000,
+      "open_time_ms": 1799949600000
+    },
+    {
+      "close_time_ms": 1799956800000,
+      "open_time_ms": 1799953200000
+    },
+    {
+      "close_time_ms": 1799960400000,
+      "open_time_ms": 1799956800000
+    },
+    {
+      "close_time_ms": 1799964000000,
+      "open_time_ms": 1799960400000
+    },
+    {
+      "close_time_ms": 1799967600000,
+      "open_time_ms": 1799964000000
+    },
+    {
+      "close_time_ms": 1799971200000,
+      "open_time_ms": 1799967600000
+    },
+    {
+      "close_time_ms": 1799974800000,
+      "open_time_ms": 1799971200000
+    },
+    {
+      "close_time_ms": 1799978400000,
+      "open_time_ms": 1799974800000
+    },
+    {
+      "close_time_ms": 1799982000000,
+      "open_time_ms": 1799978400000
+    },
+    {
+      "close_time_ms": 1799985600000,
+      "open_time_ms": 1799982000000
+    },
+    {
+      "close_time_ms": 1799989200000,
+      "open_time_ms": 1799985600000
+    },
+    {
+      "close_time_ms": 1799992800000,
+      "open_time_ms": 1799989200000
+    },
+    {
+      "close_time_ms": 1799996400000,
+      "open_time_ms": 1799992800000
+    }
+  ],
+  "as_of_ms": 1800000000000,
+  "configuration_id": "070271bdc54703aa16966c6a8decaa9a509fe8b147e32d6acd4655f09d320d7e",
+  "data_mode": "fixture",
+  "indicator_research": {
+    "as_of_ms": 1800000000000,
+    "bias": null,
+    "bias_confirmation": false,
+    "configuration_id": "39e8ef52545dd7fe445b1edeb4d1156da2b2acbfe66548917f775193ee25833b",
+    "definition": "Legacy adjust=False EMA / rolling SMA-RSI-ATR / sample-std bands; research Wilder ADX and Supertrend, previous Donchian; flat stochastic undefined. Not live strategy settings.",
+    "evidence_status": "INSUFFICIENT_EVIDENCE",
+    "filter_name": "none",
+    "implementation_version": "v2-indicator-parameters-1",
+    "input_digest": "b99adbdba6f12d86504007fe280ff3dddb4b57d5ad0f69d9046f0030eaf757ff",
+    "methods": {
+      "adx_wilder": "100",
+      "atr_sma": "1.0",
+      "bollinger_lower": "127.76678404337186",
+      "bollinger_middle": "128.95",
+      "bollinger_upper": "130.13321595662813",
+      "close": "129.9",
+      "donchian_lower": "127.4",
+      "donchian_upper": "130.3",
+      "ema": "128.9500000000001",
+      "macd_histogram": "0.00000000005966083183039927",
+      "macd_line": "0.6999999998731425",
+      "macd_signal": "0.6999999998134817",
+      "minus_di": "0",
+      "plus_di": "10.0000000000000001558794966346213900754018073628945438042376",
+      "rsi_sma": "100.0",
+      "sma": "128.95",
+      "stochastic_d": "78.260869565217391304347826086956521739130434782608695652174",
+      "stochastic_k": "78.2608695652173913043478260869565217391304347826086956521739",
+      "supertrend": "126.90000000000000005559060566555523",
+      "supertrend_direction": "bullish"
+    },
+    "parameter_id": "5566e2ed179b3a42499b75fbd4c6513147c3ac80a61432f05db2dd1514e55b56",
+    "status": "available",
+    "strategy_versions": {
+      "confirmed_breakout_v2": "1",
+      "failed_breakout_v2": "1",
+      "range_mean_reversion_v2": "1",
+      "trend_momentum_v2": "2"
+    },
+    "timeframe": "1H",
+    "trade_permission": false,
+    "warmup_bars": 61
+  },
+  "limitations": [
+    "Immutable historical snapshot only; not a current quote or trade confirmation.",
+    "OHLC typical-price VWAP approximates trades; historical fees/rules/licensing are not established.",
+    "No execution permission; no market profitability or forward validation."
+  ],
+  "parameter_id": "5566e2ed179b3a42499b75fbd4c6513147c3ac80a61432f05db2dd1514e55b56",
+  "parameter_version": "v2-indicator-parameters-1",
+  "parameters": {
+    "adx_period": 14,
+    "atr_period": 14,
+    "bias_confirmation": false,
+    "bias_timeframe": null,
+    "bollinger_multiplier": "2",
+    "bollinger_period": 20,
+    "confirmation_filter": "none",
+    "donchian_period": 20,
+    "ema_period": 20,
+    "implementation_version": "v2-indicator-parameters-1",
+    "macd_fast": 12,
+    "macd_signal": 9,
+    "macd_slow": 26,
+    "rsi_period": 14,
+    "sma_period": 20,
+    "stochastic_period": 14,
+    "stochastic_smooth": 3,
+    "strategy_versions": [
+      [
+        "confirmed_breakout_v2",
+        "1"
+      ],
+      [
+        "failed_breakout_v2",
+        "1"
+      ],
+      [
+        "range_mean_reversion_v2",
+        "1"
+      ],
+      [
+        "trend_momentum_v2",
+        "2"
+      ]
+    ],
+    "supertrend_multiplier": "3",
+    "supertrend_period": 10
+  },
+  "portfolio_id": "MANUAL",
+  "reason": null,
+  "schema_version": 1,
+  "snapshot_only": true,
+  "source": "fixture_spot",
+  "source_digest": "4437f4f030d1536c29648adf7585c5909f59ab613d37d8b60b28c18d35328af4",
+  "source_record_id": "6577d9d132c2b712e0d9ca740f8f5d2c16d5db82f6388c94859d04542820e46a",
+  "status": "available",
+  "symbol": "BTCUSDT",
+  "timeframe": "1H",
+  "trade_permission": false,
+  "version": "v2-snapshot-research-1",
+  "warmup_bars": 61
+}

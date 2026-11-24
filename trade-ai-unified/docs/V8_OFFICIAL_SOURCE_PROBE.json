@@ -1,0 +1,45 @@
+{
+  "fed_calendar": {
+    "version": "fx-official-calendar-v8-1",
+    "source": "fed_calendar",
+    "data_status": "OFFICIAL_SCHEDULE_PARSED",
+    "payload_sha256": "2740ce0bc3fbadc987832218acb2956cfe3efb599c14ee774f82378795133cd5",
+    "coverage_state": "UNVERIFIED",
+    "directional_permission": false,
+    "event_count": 54,
+    "observed_at": "2026-11-06T11:47:26.105317+00:00",
+    "issue_count": 3
+  },
+  "ecb": {
+    "version": "fx-official-calendar-v8-1",
+    "source": "ecb",
+    "data_status": "OFFICIAL_SCHEDULE_PARSED",
+    "payload_sha256": "0183173d02124c4019229386697e9cfef8fd6c29cb9dd0eb458ea58959afab59",
+    "coverage_state": "UNVERIFIED",
+    "directional_permission": false,
+    "event_count": 34,
+    "observed_at": "2026-11-06T11:47:27.396854+00:00",
+    "issue_count": 0
+  },
+  "bea": {
+    "coverage_status": "UNVERIFIED",
+    "source_authenticated": false,
+    "payload_sha256": "cbebc02fc884f265b1ae3820134b5b0ac2202ace72974129b27665c2660f15cd",
+    "directional_permission": false,
+    "data_status": "OFFICIAL_SCHEDULE_PARSED",
+    "source": "bea",
+    "coverage_state": "UNVERIFIED",
+    "event_count": 169,
+    "observed_at": "2026-11-06T11:47:28.016093+00:00",
+    "issue_count": 0
+  },
+  "boe": {
+    "source": "boe",
+    "data_status": "DATA_UNAVAILABLE",
+    "coverage_state": "UNVERIFIED",
+    "reason": "source unavailable or schema unsupported",
+    "event_count": 0,
+    "observed_at": "2026-11-06T11:47:28.961608+00:00",
+    "issue_count": 0
+  }
+}

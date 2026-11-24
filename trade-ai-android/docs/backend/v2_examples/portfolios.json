@@ -1,0 +1,36 @@
+[
+  {
+    "available_cash_quote": "9870.00905701",
+    "cash_quote": "9870.00905701",
+    "data_mode": "fixture",
+    "equity_quote": "10000.60905701",
+    "open_positions": 1,
+    "paper_only": true,
+    "paused": false,
+    "pending_orders": 0,
+    "portfolio_id": "AUTO",
+    "quote_currency": "USDT",
+    "realized_loss_today_quote": "0.00000000",
+    "realized_pnl_quote": "0.00000000",
+    "reserved_cash_quote": "0.00000000",
+    "seed_equity_quote": "10000",
+    "unrealized_pnl_quote": "0.60905701"
+  },
+  {
+    "available_cash_quote": "10000.41772006",
+    "cash_quote": "10000.41772006",
+    "data_mode": "fixture",
+    "equity_quote": "10000.41772006",
+    "open_positions": 0,
+    "paper_only": true,
+    "paused": false,
+    "pending_orders": 0,
+    "portfolio_id": "MANUAL",
+    "quote_currency": "USDT",
+    "realized_loss_today_quote": "0.00000000",
+    "realized_pnl_quote": "0.41772006",
+    "reserved_cash_quote": "0.00000000",
+    "seed_equity_quote": "10000",
+    "unrealized_pnl_quote": "0.00000000"
+  }
+]

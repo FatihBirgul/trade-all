@@ -1,0 +1,59 @@
+{
+  "expo": {
+    "name": "Trade AI 2.0",
+    "slug": "trade-ai-android",
+    "version": "0.7.7",
+    "scheme": "tradeai",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "web": {
+      "bundler": "metro"
+    },
+    "android": {
+      "package": "com.fatihbirgul.tradeai",
+      "versionCode": 16,
+      "softwareKeyboardLayoutMode": "resize",
+      "allowBackup": false,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/brand/adaptive-foreground.png",
+        "backgroundImage": "./assets/brand/adaptive-background.png",
+        "backgroundColor": "#111316",
+        "monochromeImage": "./assets/brand/adaptive-monochrome.png"
+      }
+    },
+    "plugins": [
+      "./plugins/withLaunchWindow.cjs",
+      "expo-router",
+      "expo-status-bar",
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#111316",
+          "image": "./assets/brand/adaptive-foreground.png",
+          "imageWidth": 176,
+          "resizeMode": "contain",
+          "dark": {
+            "backgroundColor": "#111316",
+            "image": "./assets/brand/adaptive-foreground.png"
+          }
+        }
+      ],
+      [
+        "expo-navigation-bar",
+        {
+          "enforceContrast": false,
+          "style": "light",
+          "hidden": false
+        }
+      ]
+    ],
+    "icon": "./assets/brand/icon.png",
+    "backgroundColor": "#111316",
+    "androidStatusBar": {
+      "backgroundColor": "#111316",
+      "barStyle": "light-content"
+    }
+  }
+}

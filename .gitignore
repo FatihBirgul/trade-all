@@ -1,0 +1,30 @@
+# Local credentials, terminal state and user data
+.env
+.env.*
+!.env.example
+*.dpapi
+*.pem
+*.pfx
+*.jks
+*.keystore
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.db
+*.db-*
+*.log
+
+# Dependency trees and generated build / test output
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.pytest-tmp*/
+.expo/
+.gradle/
+dist/
+.artifacts/
+test-results/
+playwright-report/
+*.apk

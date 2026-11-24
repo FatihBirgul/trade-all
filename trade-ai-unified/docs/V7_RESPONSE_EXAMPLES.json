@@ -1,0 +1,2254 @@
+{
+  "data_kind": "SYNTHETIC_TEST",
+  "market_validation": false,
+  "code_sha256": "36c1d28de7764b83ea0bd3e7147eb72ab73cdf59dc1fe225372f15cfbc8703be",
+  "examples": {
+    "BUY": {
+      "analysis_id": "28a41ea7800d1c6af92416b2af66519dceed361a9609d2145a8438089946590a",
+      "schema_version": "forex-analysis-6",
+      "engine_version": "7.0.0",
+      "source_versions": {
+        "day_trader": "fdcdd418d96d05e71453e70c1f39956dd1cfe9d5",
+        "trade_ai": "b69111608ea3c2e78609fd84a0d81dee2781c980",
+        "target_code_sha256": "36c1d28de7764b83ea0bd3e7147eb72ab73cdf59dc1fe225372f15cfbc8703be",
+        "parameters_sha256": "f32dbb7ef62534a8e044228616036c1f9f45c2386d599f9dc126b5cab715d5de",
+        "algorithms": {
+          "canonical": "forex-v5-sma-seed-wilder-rsi-sma-atr-population-bb",
+          "rsi_rolling": "v2-rolling-rsi14-1",
+          "stoch_rsi": "v2-rolling-rsi-stochastic14-3-1",
+          "extra_methods": "v2-technical-research-1",
+          "volatility": "fx-atr-ratio20-v1",
+          "divergence": "fx-aligned-divergence-v7-1"
+        },
+        "forex_strategies": "fx-price-setups-v7-1",
+        "risk": "forex-cost-netrr-v7-1"
+      },
+      "symbol": "XAUUSD",
+      "market_type": "cfd",
+      "contract_type": "cfd",
+      "broker_symbol": "XAUUSD.test",
+      "provider": "fixture-test-only",
+      "timeframe": "M15",
+      "as_of_utc": "2027-01-15T08:00:00+00:00",
+      "snapshot_id": "9b9a4fea2c38ab35295b7a3a2ad581f025c4bf28b789a56aff74f2b18aca1783",
+      "market_status": "OPEN",
+      "data_status": "OK",
+      "trading_eligibility": "ELIGIBLE",
+      "integration_status": "PRIVATE_INTEGRATED",
+      "private_extension": {
+        "status": "AVAILABLE",
+        "source_sha": "b69111608ea3c2e78609fd84a0d81dee2781c980",
+        "bridge_version": "in-process-v6-owned-source"
+      },
+      "trend": {
+        "direction": "bullish",
+        "ema20": 2021.140476190476,
+        "ema50": 2019.5284313725485,
+        "ema200": 2011.9699004975107
+      },
+      "momentum": {
+        "rsi14_wilder": 100.0,
+        "rsi14_rolling": 100.0,
+        "macd": 0.8595441595441571,
+        "macd_histogram": 0.1276353276352895,
+        "momentum_change": 0.1276353276352893
+      },
+      "volatility": {
+        "atr14": 0.5357142857143832,
+        "normalized_atr": 0.0002646940489719765,
+        "regime": "NORMAL"
+      },
+      "indicators": {
+        "ema9": 2021.8999999999999,
+        "ema20": 2021.140476190476,
+        "ema21": 2021.0818181818179,
+        "ema50": 2019.5284313725485,
+        "ema100": 2016.9896039603948,
+        "ema200": 2011.9699004975107,
+        "sma20": 2021.05,
+        "sma50": 2019.49,
+        "rsi14": 100.0,
+        "atr14": 0.5357142857143832,
+        "normalized_atr": 0.0002646940489719765,
+        "macd": 0.8595441595441571,
+        "macd_signal": 0.7319088319088676,
+        "macd_histogram": 0.1276353276352895,
+        "momentum_change": 0.1276353276352893,
+        "bollinger_upper": 2022.7381943016135,
+        "bollinger_lower": 2019.3618056983864,
+        "bollinger_width": 0.0016706111195798675,
+        "swing_high": 2022.0,
+        "swing_low": 2019.7,
+        "higher_high": true,
+        "higher_low": true,
+        "lower_high": false,
+        "lower_low": false,
+        "ema20_slope": 0.2904761904762836,
+        "ema20_previous": 2020.8499999999997,
+        "price_ema20_distance": 0.0013634684567044447,
+        "rsi14_wilder": 100.0,
+        "rsi14_rolling": 100.0,
+        "stochastic_rsi_k": null,
+        "stochastic_rsi_d": null,
+        "previous_wilder_rsi": 100.0,
+        "research_methods": {
+          "version": "v2-technical-research-1",
+          "status": "available",
+          "issues": [],
+          "as_of_ms": 1800000000000,
+          "timeframe": "15m",
+          "trade_permission": false,
+          "methods": {
+            "roc12": {
+              "status": "available",
+              "percent": "0.15836096402236848616815954867125253624981442074528628693000"
+            },
+            "stochastic14": {
+              "status": "available",
+              "k": "94.5945945945921840759678598819418395751415166573202626207212"
+            },
+            "donchian20_previous": {
+              "status": "available",
+              "upper": "2022.0",
+              "lower": "2019.7",
+              "definition": "Previous20 closed bars; latest bar excluded from channel."
+            },
+            "bollinger_bandwidth20": {
+              "status": "available",
+              "percent": "0.171401084350525716830360456198510675144108260557630934415279",
+              "definition": "Legacy SMA20 sample-standard-deviation bands, unrounded."
+            },
+            "adx14_wilder": {
+              "status": "available",
+              "adx": "100",
+              "plus_di": "45.3333333333309229367400327336713803013340137464933059540084",
+              "minus_di": "0",
+              "atr_wilder": "0.535714285714327252498151875780421850471097687964382395719025",
+              "definition": "14 changes seed DM/TR,14 DX seed ADX; first ADX at28 candles."
+            },
+            "supertrend10_3": {
+              "status": "available",
+              "value": "2022.12999999999992333642645925155568859436905316172479460320",
+              "direction": "bullish",
+              "definition": "Wilder ATR10, multiplier3, close crossing retained bands; first side by close>mid."
+            }
+          }
+        },
+        "divergence": {
+          "version": "fx-aligned-divergence-v7-1",
+          "status": "AVAILABLE",
+          "events": [],
+          "momentum_weakening": {
+            "macd": false
+          },
+          "alignment_bars": 2,
+          "role": "DESCRIPTIVE",
+          "trade_permission": false
+        }
+      },
+      "market_structure": {
+        "v5_pivots": {
+          "trend": "UNKNOWN",
+          "support": null,
+          "resistance": null,
+          "rule_version": "forex-structure-2",
+          "evidence_category": "structure",
+          "break_confirmed_at": null,
+          "break_of_structure": null,
+          "change_of_character": false,
+          "last_high": null,
+          "last_low": null,
+          "confirmed_highs": 0,
+          "confirmed_lows": 0,
+          "highs": [],
+          "lows": []
+        },
+        "price_action": {
+          "version": "v2-price-action-1",
+          "parameters": {
+            "pivot_left_right": 2,
+            "range_bars": 20,
+            "vwap_bars": 20,
+            "fvg_scan_bars": 50,
+            "min_gap_atr": "0.1",
+            "sweep_atr": "0.25"
+          },
+          "atr14_sma": "0.5357142857143832",
+          "fvg": {
+            "status": "available",
+            "version": "v2-price-action-1",
+            "as_of_ms": 1800000000000,
+            "active_gaps": [],
+            "bucket": "price_structure"
+          },
+          "structure": {
+            "status": "available",
+            "version": "v2-price-action-1",
+            "as_of_ms": 1800000000000,
+            "bias": "neutral",
+            "events": [],
+            "bucket": "price_structure",
+            "last_swing_high": null,
+            "last_swing_low": null
+          },
+          "liquidity_sweep": {
+            "status": "available",
+            "version": "v2-price-action-1",
+            "as_of_ms": 1800000000000,
+            "direction": "neutral",
+            "prior_high": "2022.0",
+            "prior_low": "2019.7",
+            "extreme": null,
+            "bucket": "price_structure",
+            "confirmation": "closed_reclaim_only_requires_follow_through"
+          },
+          "vwap": {
+            "status": "unavailable",
+            "reason": "real_volume_required",
+            "version": "v2-price-action-1"
+          }
+        },
+        "zones": [],
+        "equal_levels": [],
+        "lifecycle": {
+          "version": "fx-structure-lifecycle-v7-1",
+          "events": [],
+          "range_boundaries": {
+            "high": 2022.0,
+            "low": 2019.7
+          },
+          "price_only": true,
+          "external_liquidity_verified": false
+        },
+        "heuristic_only": true,
+        "rule_version": "fx-structure-context-v6-1"
+      },
+      "candlestick_patterns": {
+        "version": "v2-pattern-research-2",
+        "status": "available",
+        "quality_status": "valid_closed_snapshot",
+        "issues": [],
+        "validation_status": "DETECTION_IMPLEMENTED",
+        "trade_permission": false,
+        "patterns": [
+          {
+            "pattern_id": "three_white_soldiers",
+            "pattern_version": "legacy-candle-adapter-1",
+            "family": "three_white_soldiers",
+            "name": "Three White Soldiers",
+            "direction": "bullish",
+            "formed_at": 1799995500000,
+            "confirmed_at": 1799996400000,
+            "timeframe": "15m",
+            "age_bars": 5,
+            "market_regime": "not_evaluated",
+            "trend_context": "flat",
+            "support_resistance_context": {
+              "status": "available",
+              "prior_low": "2019.2",
+              "prior_high": "2021.5"
+            },
+            "volatility_context": {
+              "status": "available",
+              "prior_atr14_sma": "0.400000000000035714285714285714285714285714285714285714285714"
+            },
+            "volume_confirmation": {
+              "status": "unavailable"
+            },
+            "quality_status": "valid_closed_snapshot",
+            "strength": 78,
+            "explanation": "Three consecutive strong bullish candles \u2014 sustained buying pressure.",
+            "confirmation_rule": "next_directional_closed_bar",
+            "minimum_candles": 3,
+            "first_known_at": 1799995500000,
+            "price_range": {
+              "low": 2021.0,
+              "high": 2021.6000000000001
+            },
+            "invalidation": 2021.0,
+            "invalidation_policy": "closed price beyond OHLC formation extreme; geometric heuristic",
+            "role": "DESCRIPTIVE",
+            "state": "CONFIRMED",
+            "trade_permission": false
+          },
+          {
+            "pattern_id": "three_white_soldiers",
+            "pattern_version": "legacy-candle-adapter-1",
+            "family": "three_white_soldiers",
+            "name": "Three White Soldiers",
+            "direction": "bullish",
+            "formed_at": 1799996400000,
+            "confirmed_at": 1799997300000,
+            "timeframe": "15m",
+            "age_bars": 4,
+            "market_regime": "not_evaluated",
+            "trend_context": "flat",
+            "support_resistance_context": {
+              "status": "available",
+              "prior_low": "2019.3",
+              "prior_high": "2021.6000000000001"
+            },
+            "volatility_context": {
+              "status": "available",
+              "prior_atr14_sma": "0.400000000000042857142857142857142857142857142857142857142857"
+            },
+            "volume_confirmation": {
+              "status": "unavailable"
+            },
+            "quality_status": "valid_closed_snapshot",
+            "strength": 78,
+            "explanation": "Three consecutive strong bullish candles \u2014 sustained buying pressure.",
+            "confirmation_rule": "next_directional_closed_bar",
+            "minimum_candles": 3,
+            "first_known_at": 1799996400000,
+            "price_range": {
+              "low": 2021.1,
+              "high": 2021.7
+            },
+            "invalidation": 2021.1,
+            "invalidation_policy": "closed price beyond OHLC formation extreme; geometric heuristic",
+            "role": "DESCRIPTIVE",
+            "state": "CONFIRMED",
+            "trade_permission": false
+          },
+          {
+            "pattern_id": "three_white_soldiers",
+            "pattern_version": "legacy-candle-adapter-1",
+            "family": "three_white_soldiers",
+            "name": "Three White Soldiers",
+            "direction": "bullish",
+            "formed_at": 1799997300000,
+            "confirmed_at": 1799998200000,
+            "timeframe": "15m",
+            "age_bars": 3,
+            "market_regime": "not_evaluated",
+            "trend_context": "flat",
+            "support_resistance_context": {
+              "status": "available",
+              "prior_low": "2019.3999999999999",
+              "prior_high": "2021.7"
+            },
+            "volatility_context": {
+              "status": "available",
+              "prior_atr14_sma": "0.400000000000035714285714285714285714285714285714285714285714"
+            },
+            "volume_confirmation": {
+              "status": "unavailable"
+            },
+            "quality_status": "valid_closed_snapshot",
+            "strength": 78,
+            "explanation": "Three consecutive strong bullish candles \u2014 sustained buying pressure.",
+            "confirmation_rule": "next_directional_closed_bar",
+            "minimum_candles": 3,
+            "first_known_at": 1799997300000,
+            "price_range": {
+              "low": 2021.2,
+              "high": 2021.8
+            },
+            "invalidation": 2021.2,
+            "invalidation_policy": "closed price beyond OHLC formation extreme; geometric heuristic",
+            "role": "DESCRIPTIVE",
+            "state": "CONFIRMED",
+            "trade_permission": false
+          },
+          {
+            "pattern_id": "three_white_soldiers",
+            "pattern_version": "legacy-candle-adapter-1",
+            "family": "three_white_soldiers",
+            "name": "Three White Soldiers",
+            "direction": "bullish",
+            "formed_at": 1799998200000,
+            "confirmed_at": 1799999100000,
+            "timeframe": "15m",
+            "age_bars": 2,
+            "market_regime": "not_evaluated",
+            "trend_context": "flat",
+            "support_resistance_context": {
+              "status": "available",
+              "prior_low": "2019.5",
+              "prior_high": "2021.8"
+            },
+            "volatility_context": {
+              "status": "available",
+              "prior_atr14_sma": "0.400000000000042857142857142857142857142857142857142857142857"
+            },
+            "volume_confirmation": {
+              "status": "unavailable"
+            },
+            "quality_status": "valid_closed_snapshot",
+            "strength": 78,
+            "explanation": "Three consecutive strong bullish candles \u2014 sustained buying pressure.",
+            "confirmation_rule": "next_directional_closed_bar",
+            "minimum_candles": 3,
+            "first_known_at": 1799998200000,
+            "price_range": {
+              "low": 2021.3,
+              "high": 2021.9
+            },
+            "invalidation": 2021.3,
+            "invalidation_policy": "closed price beyond OHLC formation extreme; geometric heuristic",
+            "role": "DESCRIPTIVE",
+            "state": "CONFIRMED",
+            "trade_permission": false
+          },
+          {
+            "pattern_id": "three_white_soldiers",
+            "pattern_version": "legacy-candle-adapter-1",
+            "family": "three_white_soldiers",
+            "name": "Three White Soldiers",
+            "direction": "bullish",
+            "formed_at": 1799999100000,
+            "confirmed_at": 1800000000000,
+            "timeframe": "15m",
+            "age_bars": 1,
+            "market_regime": "not_evaluated",
+            "trend_context": "flat",
+            "support_resistance_context": {
+              "status": "available",
+              "prior_low": "2019.6",
+              "prior_high": "2021.9"
+            },
+            "volatility_context": {
+              "status": "available",
+              "prior_atr14_sma": "0.400000000000042857142857142857142857142857142857142857142857"
+            },
+            "volume_confirmation": {
+              "status": "unavailable"
+            },
+            "quality_status": "valid_closed_snapshot",
+            "strength": 78,
+            "explanation": "Three consecutive strong bullish candles \u2014 sustained buying pressure.",
+            "confirmation_rule": "next_directional_closed_bar",
+            "minimum_candles": 3,
+            "first_known_at": 1799999100000,
+            "price_range": {
+              "low": 2021.3999999999999,
+              "high": 2022.0
+            },
+            "invalidation": 2021.3999999999999,
+            "invalidation_policy": "closed price beyond OHLC formation extreme; geometric heuristic",
+            "role": "DESCRIPTIVE",
+            "state": "CONFIRMED",
+            "trade_permission": false
+          },
+          {
+            "pattern_id": "three_white_soldiers",
+            "pattern_version": "legacy-candle-adapter-1",
+            "family": "three_white_soldiers",
+            "name": "Three White Soldiers",
+            "direction": "bullish",
+            "formed_at": 1800000000000,
+            "confirmed_at": null,
+            "timeframe": "15m",
+            "age_bars": 0,
+            "market_regime": "not_evaluated",
+            "trend_context": "flat",
+            "support_resistance_context": {
+              "status": "available",
+              "prior_low": "2019.7",
+              "prior_high": "2022.0"
+            },
+            "volatility_context": {
+              "status": "available",
+              "prior_atr14_sma": "0.400000000000035714285714285714285714285714285714285714285714"
+            },
+            "volume_confirmation": {
+              "status": "unavailable"
+            },
+            "quality_status": "valid_closed_snapshot",
+            "strength": 78,
+            "explanation": "Three consecutive strong bullish candles \u2014 sustained buying pressure.",
+            "confirmation_rule": "next_directional_closed_bar",
+            "minimum_candles": 3,
+            "first_known_at": 1800000000000,
+            "price_range": {
+              "low": 2021.5,
+              "high": 2024.1000000000001
+            },
+            "invalidation": 2021.5,
+            "invalidation_policy": "closed price beyond OHLC formation extreme; geometric heuristic",
+            "role": "DESCRIPTIVE",
+            "state": "CANDIDATE",
+            "trade_permission": false
+          }
+        ],
+        "timeframe": "15m",
+        "as_of_ms": 1800000000000,
+        "missing_families": [],
+        "catalog_overrides": {
+          "hikkake_modified": "modified_hikkake / fx-modified-hikkake-1 engineering variant",
+          "three_line_strike": "fx-candle-catalog-v7-1 DESCRIPTIVE",
+          "separating_lines": "fx-candle-catalog-v7-1 DESCRIPTIVE",
+          "on_neck": "fx-candle-catalog-v7-1 DESCRIPTIVE",
+          "in_neck": "fx-candle-catalog-v7-1 DESCRIPTIVE",
+          "thrusting": "fx-candle-catalog-v7-1 DESCRIPTIVE",
+          "advance_block": "fx-candle-catalog-v7-1 DESCRIPTIVE",
+          "stalled_pattern": "fx-candle-catalog-v7-1 DESCRIPTIVE",
+          "tristar": "fx-candle-catalog-v7-1 DESCRIPTIVE",
+          "breakaway": "fx-candle-catalog-v7-1 DESCRIPTIVE",
+          "three_stars_in_south": "fx-candle-catalog-v7-1 DESCRIPTIVE",
+          "unique_three_river": "fx-candle-catalog-v7-1 DESCRIPTIVE"
+        }
+      },
+      "chart_patterns": {
+        "version": "v2-chart-research-1",
+        "status": "available",
+        "issues": [],
+        "patterns": [
+          {
+            "pattern_id": "range_breakout",
+            "pattern_version": "v2-chart-research-1",
+            "kind": "closed_range_event",
+            "direction": "bullish",
+            "formed_at": 1800000000000,
+            "known_at": 1800000000000,
+            "confirmed_at": null,
+            "level": "2022.0",
+            "timeframe": "15m",
+            "trade_permission": false,
+            "explanation": "Previous20-bar range, strict tick-buffered break; next closed confirmation and at most3bar retest/failure observation.",
+            "minimum_candles": 40,
+            "first_known_at": 1800000000000,
+            "invalidation": "2022.0",
+            "invalidation_status": "observed_range_level"
+          }
+        ],
+        "trade_permission": false,
+        "knowledge_scope": "first_observed_in_supplied_window_after40bar_warmup",
+        "missing_families": [],
+        "geometric_patterns": [],
+        "geometry_catalog": {
+          "bull_flag": "DESCRIPTIVE_ENGINEERING",
+          "bear_flag": "DESCRIPTIVE_ENGINEERING",
+          "pennant": "DESCRIPTIVE_ENGINEERING",
+          "ascending_triangle": "DESCRIPTIVE_ENGINEERING",
+          "descending_triangle": "DESCRIPTIVE_ENGINEERING",
+          "symmetrical_triangle": "DESCRIPTIVE_ENGINEERING",
+          "rounding_bottom": "DESCRIPTIVE_ENGINEERING",
+          "rounding_top": "DESCRIPTIVE_ENGINEERING",
+          "rectangle": "DESCRIPTIVE_ENGINEERING",
+          "channel": "DESCRIPTIVE_ENGINEERING",
+          "rising_wedge": "DESCRIPTIVE_ENGINEERING",
+          "falling_wedge": "DESCRIPTIVE_ENGINEERING",
+          "double_top": "DESCRIPTIVE_ENGINEERING",
+          "double_bottom": "DESCRIPTIVE_ENGINEERING",
+          "head_and_shoulders": "DESCRIPTIVE_ENGINEERING",
+          "inverse_head_and_shoulders": "DESCRIPTIVE_ENGINEERING"
+        },
+        "validation_status": "PARTIAL_FAMILY_VALIDATION"
+      },
+      "confluence": {
+        "direction": "bullish",
+        "original_evidence_count": 5,
+        "deduplicated_evidence_count": 1,
+        "bullish_strength": 100.0,
+        "bearish_strength": 0.0,
+        "supporting_count": 1,
+        "opposing_count": 0,
+        "agreement_ratio": 1.0,
+        "conflict_ratio": 0.0,
+        "recency_half_life_bars": 8,
+        "evidence": [
+          {
+            "source": "v5_ema_alignment",
+            "direction": "bullish",
+            "strength": 100.0,
+            "timeframe": "M15",
+            "age_bars": 0,
+            "confirmed": true,
+            "bucket": "ohlc_price"
+          }
+        ],
+        "version": "fx-provenance-confluence-v7-1",
+        "source_engine": "trade-ai-v2-confluence",
+        "input_observation_count": 7,
+        "duplicate_events_removed": 2,
+        "input_observations": [
+          {
+            "source": "v5_ema_alignment",
+            "event_id": "M15:1800000000:price",
+            "category": "trend",
+            "direction": "bullish",
+            "strength": 100.0,
+            "confirmed": true,
+            "age_bars": 0,
+            "timeframe": "M15",
+            "known_at": 1800000000,
+            "algorithm_version": "fx-evidence-scale-v1",
+            "bucket": "ohlc_price",
+            "confirmation_at": null,
+            "related_event_id": null
+          },
+          {
+            "source": "v5_wilder_macd",
+            "event_id": "M15:1800000000:price",
+            "category": "momentum",
+            "direction": "bullish",
+            "strength": 100.0,
+            "confirmed": true,
+            "age_bars": 0,
+            "timeframe": "M15",
+            "known_at": 1800000000,
+            "algorithm_version": "fx-evidence-scale-v1",
+            "bucket": "ohlc_price",
+            "confirmation_at": null,
+            "related_event_id": null
+          },
+          {
+            "source": "v2_candle:three_white_soldiers",
+            "event_id": "M15:1799996400:price",
+            "category": "pattern",
+            "direction": "bullish",
+            "strength": 78.0,
+            "confirmed": true,
+            "age_bars": 5,
+            "timeframe": "M15",
+            "known_at": 1799996400,
+            "algorithm_version": "legacy-candle-adapter-1",
+            "bucket": "ohlc_price",
+            "confirmation_at": null,
+            "related_event_id": null
+          },
+          {
+            "source": "v2_candle:three_white_soldiers",
+            "event_id": "M15:1799997300:price",
+            "category": "pattern",
+            "direction": "bullish",
+            "strength": 78.0,
+            "confirmed": true,
+            "age_bars": 4,
+            "timeframe": "M15",
+            "known_at": 1799997300,
+            "algorithm_version": "legacy-candle-adapter-1",
+            "bucket": "ohlc_price",
+            "confirmation_at": null,
+            "related_event_id": null
+          },
+          {
+            "source": "v2_candle:three_white_soldiers",
+            "event_id": "M15:1799998200:price",
+            "category": "pattern",
+            "direction": "bullish",
+            "strength": 78.0,
+            "confirmed": true,
+            "age_bars": 3,
+            "timeframe": "M15",
+            "known_at": 1799998200,
+            "algorithm_version": "legacy-candle-adapter-1",
+            "bucket": "ohlc_price",
+            "confirmation_at": null,
+            "related_event_id": null
+          },
+          {
+            "source": "v2_candle:three_white_soldiers",
+            "event_id": "M15:1799999100:price",
+            "category": "pattern",
+            "direction": "bullish",
+            "strength": 78.0,
+            "confirmed": true,
+            "age_bars": 2,
+            "timeframe": "M15",
+            "known_at": 1799999100,
+            "algorithm_version": "legacy-candle-adapter-1",
+            "bucket": "ohlc_price",
+            "confirmation_at": null,
+            "related_event_id": null
+          },
+          {
+            "source": "v2_candle:three_white_soldiers",
+            "event_id": "M15:1800000000:price",
+            "category": "pattern",
+            "direction": "bullish",
+            "strength": 78.0,
+            "confirmed": true,
+            "age_bars": 1,
+            "timeframe": "M15",
+            "known_at": 1800000000,
+            "algorithm_version": "legacy-candle-adapter-1",
+            "bucket": "ohlc_price",
+            "confirmation_at": null,
+            "related_event_id": null
+          }
+        ],
+        "event_deduplicated_count": 5,
+        "observations": [
+          {
+            "source": "v2_candle:three_white_soldiers",
+            "event_id": "M15:1799996400:price",
+            "category": "pattern",
+            "direction": "bullish",
+            "strength": 78.0,
+            "confirmed": true,
+            "age_bars": 5,
+            "timeframe": "M15",
+            "known_at": 1799996400,
+            "algorithm_version": "legacy-candle-adapter-1",
+            "bucket": "ohlc_price",
+            "confirmation_at": null,
+            "related_event_id": null
+          },
+          {
+            "source": "v2_candle:three_white_soldiers",
+            "event_id": "M15:1799997300:price",
+            "category": "pattern",
+            "direction": "bullish",
+            "strength": 78.0,
+            "confirmed": true,
+            "age_bars": 4,
+            "timeframe": "M15",
+            "known_at": 1799997300,
+            "algorithm_version": "legacy-candle-adapter-1",
+            "bucket": "ohlc_price",
+            "confirmation_at": null,
+            "related_event_id": null
+          },
+          {
+            "source": "v2_candle:three_white_soldiers",
+            "event_id": "M15:1799998200:price",
+            "category": "pattern",
+            "direction": "bullish",
+            "strength": 78.0,
+            "confirmed": true,
+            "age_bars": 3,
+            "timeframe": "M15",
+            "known_at": 1799998200,
+            "algorithm_version": "legacy-candle-adapter-1",
+            "bucket": "ohlc_price",
+            "confirmation_at": null,
+            "related_event_id": null
+          },
+          {
+            "source": "v2_candle:three_white_soldiers",
+            "event_id": "M15:1799999100:price",
+            "category": "pattern",
+            "direction": "bullish",
+            "strength": 78.0,
+            "confirmed": true,
+            "age_bars": 2,
+            "timeframe": "M15",
+            "known_at": 1799999100,
+            "algorithm_version": "legacy-candle-adapter-1",
+            "bucket": "ohlc_price",
+            "confirmation_at": null,
+            "related_event_id": null
+          },
+          {
+            "source": "v5_ema_alignment",
+            "event_id": "M15:1800000000:price",
+            "category": "trend",
+            "direction": "bullish",
+            "strength": 100.0,
+            "confirmed": true,
+            "age_bars": 0,
+            "timeframe": "M15",
+            "known_at": 1800000000,
+            "algorithm_version": "fx-evidence-scale-v1",
+            "bucket": "ohlc_price",
+            "confirmation_at": null,
+            "related_event_id": null
+          }
+        ],
+        "rejected_events": [],
+        "rejections": [],
+        "conflict_veto": false,
+        "directional_context": [
+          "bullish"
+        ],
+        "conflicting_directions": [],
+        "success_probability": null,
+        "score_semantics": "versioned heuristic evidence strength, not calibrated probability"
+      },
+      "confirmations": [
+        {
+          "timeframe": "H4",
+          "direction": "bullish",
+          "closed_at": 1800000000,
+          "available": true,
+          "role": "higher_bias"
+        }
+      ],
+      "strategy_candidates": [
+        {
+          "strategy": "fx_trend_momentum_v6",
+          "direction": "BUY",
+          "reason": "retained V5 EMA/Wilder-RSI/MACD continuation or confirmed pullback"
+        }
+      ],
+      "strategy_conflicts": [],
+      "final_decision": "BUY_CANDIDATE",
+      "legacy_signal": "BUY",
+      "decision_reasons": [
+        "retained V5 EMA/Wilder-RSI/MACD continuation or confirmed pullback",
+        "actual V2 QC/regime/pattern/confluence/router and V5 risk passed"
+      ],
+      "entry_zone": {
+        "low": 2024.1000000000001,
+        "high": 2024.1000000000001,
+        "price_side": "ask"
+      },
+      "stop_loss": 2023.29,
+      "take_profit_1": 2025.73,
+      "take_profit_2": 2026.54,
+      "risk_reward": 2.0,
+      "lot_size": 1.23,
+      "risk_amount": 99.63,
+      "risk_policy": {
+        "decision": "PASS",
+        "reasons": [],
+        "fingerprint": "e45002df59dfab5a",
+        "sizing": {
+          "lots": 1.23,
+          "estimated_risk": 99.63,
+          "unrounded_risk": 99.63000000002125,
+          "risk_cap": 100.0,
+          "currency": "USD"
+        },
+        "records_source": "caller_supplied_manual",
+        "daily_planned_risk": 0,
+        "daily_realized_loss": 0,
+        "cost_adjusted_plan": {
+          "gross_reward_risk": 2.0123456790117706,
+          "gross_price_reward_risk": 2.01234567901177,
+          "gross_loss_at_minimum_lot": 0.8100000000001727,
+          "gross_reward_at_minimum_lot": 1.6299999999998818,
+          "net_reward_risk": 2.0123456790117706,
+          "net_reward_at_minimum_lot": 1.6299999999998818,
+          "loss_at_minimum_lot": 0.8100000000001727,
+          "currency": "USD",
+          "version": "forex-cost-netrr-v7-1",
+          "slippage_basis": "adverse stop only",
+          "commission_basis": "round_trip_per_lot"
+        }
+      },
+      "missing_capabilities": [
+        "funding",
+        "liquidations",
+        "order_flow",
+        "real_volume",
+        "verified_calendar",
+        "verified_margin",
+        "verified_swap",
+        "vwap"
+      ],
+      "warnings": [
+        "Analytical candidate; no execution permission.",
+        "Synthetic tests do not establish market profitability."
+      ],
+      "research_status": "UNVERIFIED_IN_MARKET",
+      "information": {
+        "schema_version": "forex-macro-1",
+        "data_status": "DATA_UNAVAILABLE",
+        "provider": null,
+        "events": [],
+        "event_filter_verified": false,
+        "directional_permission": false,
+        "reason": "verified macro source not configured",
+        "version": "fx-macro-revisions-v7-1",
+        "coverage_status": "UNVERIFIED",
+        "success_probability": null
+      },
+      "regime": {
+        "regime": "breakout",
+        "direction": "bullish",
+        "reason": "closed_above_previous_range",
+        "observations": 20,
+        "label": "BREAKOUT",
+        "volatility": "NORMAL",
+        "atr_ratio": 1.3392857142856534,
+        "version": "fx-regime-v6-1",
+        "source_version": "v2-regime-1",
+        "volatility_is_directional": false
+      },
+      "mtf": {
+        "source_context": {
+          "direction": "bullish",
+          "current_timeframe": "15m",
+          "current": {
+            "timeframe": "15m",
+            "direction": "bullish",
+            "executable_direction": "bullish",
+            "confidence": 0.0,
+            "gate_passed": true,
+            "tradeable": true,
+            "final_score": 0.0,
+            "available": true
+          },
+          "higher_timeframe_bias": {
+            "timeframe": "4H",
+            "direction": "bullish",
+            "confidence": 0.0,
+            "gate_passed": true,
+            "tradeable": true,
+            "final_score": 0.0
+          },
+          "higher_timeframe_alignment": {
+            "direction": "bullish",
+            "agreement_ratio": 1.0,
+            "conflict_ratio": 0.0,
+            "supporting_count": 1,
+            "opposing_count": 0,
+            "available_count": 1,
+            "evidence": [
+              {
+                "timeframe": "4H",
+                "direction": "bullish",
+                "executable_direction": "bullish",
+                "confidence": 0.0,
+                "gate_passed": true,
+                "tradeable": true
+              }
+            ]
+          },
+          "lower_timeframe_confirmation": {
+            "direction": "neutral",
+            "agreement_ratio": 0.0,
+            "conflict_ratio": 0.0,
+            "supporting_count": 0,
+            "opposing_count": 0,
+            "available_count": 0,
+            "evidence": []
+          },
+          "alignment_ratio": 1.0,
+          "conflict_ratio": 0.0,
+          "supporting_count": 2,
+          "opposing_count": 0,
+          "evidence": [
+            {
+              "source": "mtf_htf_bias",
+              "direction": "bullish",
+              "strength": 0.0,
+              "timeframe": "4H",
+              "age_bars": 0,
+              "confirmed": true,
+              "bucket": "mtf_htf"
+            }
+          ]
+        },
+        "primary_direction": "bullish",
+        "higher_bias": [
+          "bullish"
+        ],
+        "lower_trigger": [],
+        "confirmations": [
+          {
+            "timeframe": "H4",
+            "direction": "bullish",
+            "closed_at": 1800000000,
+            "available": true,
+            "role": "higher_bias"
+          }
+        ],
+        "as_of_utc": 1800000000,
+        "independent_price_vote": false,
+        "version": "fx-asof-mtf-v6-1"
+      },
+      "strategies": [
+        {
+          "strategy_id": "fx_trend_momentum_v6",
+          "version": "2",
+          "family": "fx_trend_momentum_v6",
+          "status": "CONFIRMED",
+          "direction": "BUY",
+          "reason": "retained V5 EMA/Wilder-RSI/MACD continuation or confirmed pullback",
+          "required_capabilities": [
+            "ohlc",
+            "broker_calendar"
+          ],
+          "known_at": 1800000000,
+          "invalidation": null,
+          "rule_version": "fx-price-setups-v7-1",
+          "setup_id": "53b03a2ee3e92d4457a48cfe",
+          "parameters": {
+            "version": "fx-price-params-v7-1",
+            "range_bars": 20,
+            "minimum_range_atr": 3,
+            "range_efficiency_max": 0.3,
+            "breakout_atr_buffer": 0.25,
+            "max_extension_atr": 3,
+            "max_setup_age_bars": 1
+          }
+        },
+        {
+          "strategy_id": "fx_range_reversion_v6",
+          "version": "2",
+          "family": "fx_range_reversion_v6",
+          "status": "WAIT",
+          "direction": "WAIT",
+          "reason": "regime not eligible",
+          "required_capabilities": [
+            "ohlc",
+            "broker_calendar"
+          ],
+          "known_at": 1800000000,
+          "invalidation": null,
+          "rule_version": "fx-price-setups-v7-1",
+          "setup_id": "129c7e37dda9bd9aeec8f7c4",
+          "parameters": {
+            "version": "fx-price-params-v7-1",
+            "range_bars": 20,
+            "minimum_range_atr": 3,
+            "range_efficiency_max": 0.3,
+            "breakout_atr_buffer": 0.25,
+            "max_extension_atr": 3,
+            "max_setup_age_bars": 1
+          }
+        },
+        {
+          "strategy_id": "fx_confirmed_breakout_v6",
+          "version": "2",
+          "family": "fx_confirmed_breakout_v6",
+          "status": "WAIT",
+          "direction": "WAIT",
+          "reason": "price confirmation missing",
+          "required_capabilities": [
+            "ohlc",
+            "broker_calendar"
+          ],
+          "known_at": 1800000000,
+          "invalidation": null,
+          "rule_version": "fx-price-setups-v7-1",
+          "setup_id": "11632858145bd07d0c4b68b7",
+          "parameters": {
+            "version": "fx-price-params-v7-1",
+            "range_bars": 20,
+            "minimum_range_atr": 3,
+            "range_efficiency_max": 0.3,
+            "breakout_atr_buffer": 0.25,
+            "max_extension_atr": 3,
+            "max_setup_age_bars": 1
+          }
+        },
+        {
+          "strategy_id": "fx_failed_breakout_v6",
+          "version": "2",
+          "family": "fx_failed_breakout_v6",
+          "status": "WAIT",
+          "direction": "WAIT",
+          "reason": "regime not eligible",
+          "required_capabilities": [
+            "ohlc",
+            "broker_calendar"
+          ],
+          "known_at": 1800000000,
+          "invalidation": null,
+          "rule_version": "fx-price-setups-v7-1",
+          "setup_id": "154098c6c4e8af210af50ed3",
+          "parameters": {
+            "version": "fx-price-params-v7-1",
+            "range_bars": 20,
+            "minimum_range_atr": 3,
+            "range_efficiency_max": 0.3,
+            "breakout_atr_buffer": 0.25,
+            "max_extension_atr": 3,
+            "max_setup_age_bars": 1
+          }
+        }
+      ],
+      "candidate_direction": "BUY",
+      "freshness": {
+        "quote_age_seconds": 1.0,
+        "primary_close_utc": 1800000000,
+        "candle_age_seconds": 0.0,
+        "bid": 2023.9,
+        "ask": 2024.1000000000001,
+        "spread": 0.20000000000004547,
+        "max_spread": 1
+      },
+      "routing": {
+        "status": "selected",
+        "strategy_id": "fx_trend_momentum_v6",
+        "reason": "eligible_priority",
+        "eligible_strategy_ids": [
+          "fx_trend_momentum_v6"
+        ]
+      },
+      "gross_risk_reward": 2.0123456790117706,
+      "net_risk_reward": 2.0123456790117706,
+      "broker_schedule": {
+        "authenticated": false,
+        "policy_accepted": true,
+        "source": "synthetic-fixture-only",
+        "trust": "DECLARED"
+      }
+    },
+    "SELL": {
+      "analysis_id": "3bd78c77de75ddc616c0578ed11f5cb2694457590a745d4f05983da34fccfa35",
+      "schema_version": "forex-analysis-6",
+      "engine_version": "7.0.0",
+      "source_versions": {
+        "day_trader": "fdcdd418d96d05e71453e70c1f39956dd1cfe9d5",
+        "trade_ai": "b69111608ea3c2e78609fd84a0d81dee2781c980",
+        "target_code_sha256": "36c1d28de7764b83ea0bd3e7147eb72ab73cdf59dc1fe225372f15cfbc8703be",
+        "parameters_sha256": "f32dbb7ef62534a8e044228616036c1f9f45c2386d599f9dc126b5cab715d5de",
+        "algorithms": {
+          "canonical": "forex-v5-sma-seed-wilder-rsi-sma-atr-population-bb",
+          "rsi_rolling": "v2-rolling-rsi14-1",
+          "stoch_rsi": "v2-rolling-rsi-stochastic14-3-1",
+          "extra_methods": "v2-technical-research-1",
+          "volatility": "fx-atr-ratio20-v1",
+          "divergence": "fx-aligned-divergence-v7-1"
+        },
+        "forex_strategies": "fx-price-setups-v7-1",
+        "risk": "forex-cost-netrr-v7-1"
+      },
+      "symbol": "XAUUSD",
+      "market_type": "cfd",
+      "contract_type": "cfd",
+      "broker_symbol": "XAUUSD.test",
+      "provider": "fixture-test-only",
+      "timeframe": "M15",
+      "as_of_utc": "2027-01-15T08:00:00+00:00",
+      "snapshot_id": "5f4502ccd71b124a2f519aa3a24a7b1614c82c2d6f382c0be7acbbf56fcf9dac",
+      "market_status": "OPEN",
+      "data_status": "OK",
+      "trading_eligibility": "ELIGIBLE",
+      "integration_status": "PRIVATE_INTEGRATED",
+      "private_extension": {
+        "status": "AVAILABLE",
+        "source_sha": "b69111608ea3c2e78609fd84a0d81dee2781c980",
+        "bridge_version": "in-process-v6-owned-source"
+      },
+      "trend": {
+        "direction": "bearish",
+        "ema20": 1978.859523809524,
+        "ema50": 1980.4715686274515,
+        "ema200": 1988.0300995024893
+      },
+      "momentum": {
+        "rsi14_wilder": 0.0,
+        "rsi14_rolling": 0.0,
+        "macd": -0.8595441595441571,
+        "macd_histogram": -0.1276353276352895,
+        "momentum_change": -0.1276353276352893
+      },
+      "volatility": {
+        "atr14": 0.5357142857143832,
+        "normalized_atr": 0.0002710967490078352,
+        "regime": "NORMAL"
+      },
+      "indicators": {
+        "ema9": 1978.1000000000001,
+        "ema20": 1978.859523809524,
+        "ema21": 1978.9181818181821,
+        "ema50": 1980.4715686274515,
+        "ema100": 1983.0103960396052,
+        "ema200": 1988.0300995024893,
+        "sma20": 1978.95,
+        "sma50": 1980.51,
+        "rsi14": 0.0,
+        "atr14": 0.5357142857143832,
+        "normalized_atr": 0.0002710967490078352,
+        "macd": -0.8595441595441571,
+        "macd_signal": -0.7319088319088676,
+        "macd_histogram": -0.1276353276352895,
+        "momentum_change": -0.1276353276352893,
+        "bollinger_upper": 1980.6381943016136,
+        "bollinger_lower": 1977.2618056983865,
+        "bollinger_width": 0.0017061515466418509,
+        "swing_high": 1980.3,
+        "swing_low": 1978.0,
+        "higher_high": false,
+        "higher_low": false,
+        "lower_high": true,
+        "lower_low": true,
+        "ema20_slope": -0.2904761904762836,
+        "ema20_previous": 1979.1500000000003,
+        "price_ema20_distance": -0.001396449476000266,
+        "rsi14_wilder": 0.0,
+        "rsi14_rolling": 0.0,
+        "stochastic_rsi_k": null,
+        "stochastic_rsi_d": null,
+        "previous_wilder_rsi": 0.0,
+        "research_methods": {
+          "version": "v2-technical-research-1",
+          "status": "available",
+          "issues": [],
+          "as_of_ms": 1800000000000,
+          "timeframe": "15m",
+          "trade_permission": false,
+          "methods": {
+            "roc12": {
+              "status": "available",
+              "percent": "-0.161673318850098519678674278785429192138634870913959480624500"
+            },
+            "stochastic14": {
+              "status": "available",
+              "k": "5.40540540540781592403214011805816042485848334267973737927877"
+            },
+            "donchian20_previous": {
+              "status": "available",
+              "upper": "1980.3",
+              "lower": "1978.0",
+              "definition": "Previous20 closed bars; latest bar excluded from channel."
+            },
+            "bollinger_bandwidth20": {
+              "status": "available",
+              "percent": "0.175047455229606609565678769044190100811036155537027211399985",
+              "definition": "Legacy SMA20 sample-standard-deviation bands, unrounded."
+            },
+            "adx14_wilder": {
+              "status": "available",
+              "adx": "100",
+              "plus_di": "0",
+              "minus_di": "45.3333333333309229367400327336713803013340137464933059540084",
+              "atr_wilder": "0.535714285714327252498151875780421850471097687964382395719025",
+              "definition": "14 changes seed DM/TR,14 DX seed ADX; first ADX at28 candles."
+            },
+            "supertrend10_3": {
+              "status": "available",
+              "value": "1977.87000000000007666357354074844431140563094683827520539680",
+              "direction": "bearish",
+              "definition": "Wilder ATR10, multiplier3, close crossing retained bands; first side by close>mid."
+            }
+          }
+        },
+        "divergence": {
+          "version": "fx-aligned-divergence-v7-1",
+          "status": "AVAILABLE",
+          "events": [],
+          "momentum_weakening": {
+            "macd": false
+          },
+          "alignment_bars": 2,
+          "role": "DESCRIPTIVE",
+          "trade_permission": false
+        }
+      },
+      "market_structure": {
+        "v5_pivots": {
+          "trend": "UNKNOWN",
+          "support": null,
+          "resistance": null,
+          "rule_version": "forex-structure-2",
+          "evidence_category": "structure",
+          "break_confirmed_at": null,
+          "break_of_structure": null,
+          "change_of_character": false,
+          "last_high": null,
+          "last_low": null,
+          "confirmed_highs": 0,
+          "confirmed_lows": 0,
+          "highs": [],
+          "lows": []
+        },
+        "price_action": {
+          "version": "v2-price-action-1",
+          "parameters": {
+            "pivot_left_right": 2,
+            "range_bars": 20,
+            "vwap_bars": 20,
+            "fvg_scan_bars": 50,
+            "min_gap_atr": "0.1",
+            "sweep_atr": "0.25"
+          },
+          "atr14_sma": "0.5357142857143832",
+          "fvg": {
+            "status": "available",
+            "version": "v2-price-action-1",
+            "as_of_ms": 1800000000000,
+            "active_gaps": [],
+            "bucket": "price_structure"
+          },
+          "structure": {
+            "status": "available",
+            "version": "v2-price-action-1",
+            "as_of_ms": 1800000000000,
+            "bias": "neutral",
+            "events": [],
+            "bucket": "price_structure",
+            "last_swing_high": null,
+            "last_swing_low": null
+          },
+          "liquidity_sweep": {
+            "status": "available",
+            "version": "v2-price-action-1",
+            "as_of_ms": 1800000000000,
+            "direction": "neutral",
+            "prior_high": "1980.3",
+            "prior_low": "1978.0",
+            "extreme": null,
+            "bucket": "price_structure",
+            "confirmation": "closed_reclaim_only_requires_follow_through"
+          },
+          "vwap": {
+            "status": "unavailable",
+            "reason": "real_volume_required",
+            "version": "v2-price-action-1"
+          }
+        },
+        "zones": [],
+        "equal_levels": [],
+        "lifecycle": {
+          "version": "fx-structure-lifecycle-v7-1",
+          "events": [],
+          "range_boundaries": {
+            "high": 1980.3,
+            "low": 1978.0
+          },
+          "price_only": true,
+          "external_liquidity_verified": false
+        },
+        "heuristic_only": true,
+        "rule_version": "fx-structure-context-v6-1"
+      },
+      "candlestick_patterns": {
+        "version": "v2-pattern-research-2",
+        "status": "available",
+        "quality_status": "valid_closed_snapshot",
+        "issues": [],
+        "validation_status": "DETECTION_IMPLEMENTED",
+        "trade_permission": false,
+        "patterns": [
+          {
+            "pattern_id": "three_black_crows",
+            "pattern_version": "legacy-candle-adapter-1",
+            "family": "three_black_crows",
+            "name": "Three Black Crows",
+            "direction": "bearish",
+            "formed_at": 1799995500000,
+            "confirmed_at": 1799996400000,
+            "timeframe": "15m",
+            "age_bars": 5,
+            "market_regime": "not_evaluated",
+            "trend_context": "flat",
+            "support_resistance_context": {
+              "status": "available",
+              "prior_low": "1978.5",
+              "prior_high": "1980.8"
+            },
+            "volatility_context": {
+              "status": "available",
+              "prior_atr14_sma": "0.400000000000035714285714285714285714285714285714285714285714"
+            },
+            "volume_confirmation": {
+              "status": "unavailable"
+            },
+            "quality_status": "valid_closed_snapshot",
+            "strength": 78,
+            "explanation": "Three consecutive strong bearish candles \u2014 sustained selling pressure.",
+            "confirmation_rule": "next_directional_closed_bar",
+            "minimum_candles": 3,
+            "first_known_at": 1799995500000,
+            "price_range": {
+              "low": 1978.3999999999999,
+              "high": 1979.0
+            },
+            "invalidation": 1979.0,
+            "invalidation_policy": "closed price beyond OHLC formation extreme; geometric heuristic",
+            "role": "DESCRIPTIVE",
+            "state": "CONFIRMED",
+            "trade_permission": false
+          },
+          {
+            "pattern_id": "three_black_crows",
+            "pattern_version": "legacy-candle-adapter-1",
+            "family": "three_black_crows",
+            "name": "Three Black Crows",
+            "direction": "bearish",
+            "formed_at": 1799996400000,
+            "confirmed_at": 1799997300000,
+            "timeframe": "15m",
+            "age_bars": 4,
+            "market_regime": "not_evaluated",
+            "trend_context": "flat",
+            "support_resistance_context": {
+              "status": "available",
+              "prior_low": "1978.3999999999999",
+              "prior_high": "1980.7"
+            },
+            "volatility_context": {
+              "status": "available",
+              "prior_atr14_sma": "0.400000000000042857142857142857142857142857142857142857142857"
+            },
+            "volume_confirmation": {
+              "status": "unavailable"
+            },
+            "quality_status": "valid_closed_snapshot",
+            "strength": 78,
+            "explanation": "Three consecutive strong bearish candles \u2014 sustained selling pressure.",
+            "confirmation_rule": "next_directional_closed_bar",
+            "minimum_candles": 3,
+            "first_known_at": 1799996400000,
+            "price_range": {
+              "low": 1978.3,
+              "high": 1978.9
+            },
+            "invalidation": 1978.9,
+            "invalidation_policy": "closed price beyond OHLC formation extreme; geometric heuristic",
+            "role": "DESCRIPTIVE",
+            "state": "CONFIRMED",
+            "trade_permission": false
+          },
+          {
+            "pattern_id": "three_black_crows",
+            "pattern_version": "legacy-candle-adapter-1",
+            "family": "three_black_crows",
+            "name": "Three Black Crows",
+            "direction": "bearish",
+            "formed_at": 1799997300000,
+            "confirmed_at": 1799998200000,
+            "timeframe": "15m",
+            "age_bars": 3,
+            "market_regime": "not_evaluated",
+            "trend_context": "flat",
+            "support_resistance_context": {
+              "status": "available",
+              "prior_low": "1978.3",
+              "prior_high": "1980.6000000000001"
+            },
+            "volatility_context": {
+              "status": "available",
+              "prior_atr14_sma": "0.400000000000035714285714285714285714285714285714285714285714"
+            },
+            "volume_confirmation": {
+              "status": "unavailable"
+            },
+            "quality_status": "valid_closed_snapshot",
+            "strength": 78,
+            "explanation": "Three consecutive strong bearish candles \u2014 sustained selling pressure.",
+            "confirmation_rule": "next_directional_closed_bar",
+            "minimum_candles": 3,
+            "first_known_at": 1799997300000,
+            "price_range": {
+              "low": 1978.2,
+              "high": 1978.8
+            },
+            "invalidation": 1978.8,
+            "invalidation_policy": "closed price beyond OHLC formation extreme; geometric heuristic",
+            "role": "DESCRIPTIVE",
+            "state": "CONFIRMED",
+            "trade_permission": false
+          },
+          {
+            "pattern_id": "three_black_crows",
+            "pattern_version": "legacy-candle-adapter-1",
+            "family": "three_black_crows",
+            "name": "Three Black Crows",
+            "direction": "bearish",
+            "formed_at": 1799998200000,
+            "confirmed_at": 1799999100000,
+            "timeframe": "15m",
+            "age_bars": 2,
+            "market_regime": "not_evaluated",
+            "trend_context": "flat",
+            "support_resistance_context": {
+              "status": "available",
+              "prior_low": "1978.2",
+              "prior_high": "1980.5"
+            },
+            "volatility_context": {
+              "status": "available",
+              "prior_atr14_sma": "0.400000000000042857142857142857142857142857142857142857142857"
+            },
+            "volume_confirmation": {
+              "status": "unavailable"
+            },
+            "quality_status": "valid_closed_snapshot",
+            "strength": 78,
+            "explanation": "Three consecutive strong bearish candles \u2014 sustained selling pressure.",
+            "confirmation_rule": "next_directional_closed_bar",
+            "minimum_candles": 3,
+            "first_known_at": 1799998200000,
+            "price_range": {
+              "low": 1978.1,
+              "high": 1978.7
+            },
+            "invalidation": 1978.7,
+            "invalidation_policy": "closed price beyond OHLC formation extreme; geometric heuristic",
+            "role": "DESCRIPTIVE",
+            "state": "CONFIRMED",
+            "trade_permission": false
+          },
+          {
+            "pattern_id": "three_black_crows",
+            "pattern_version": "legacy-candle-adapter-1",
+            "family": "three_black_crows",
+            "name": "Three Black Crows",
+            "direction": "bearish",
+            "formed_at": 1799999100000,
+            "confirmed_at": 1800000000000,
+            "timeframe": "15m",
+            "age_bars": 1,
+            "market_regime": "not_evaluated",
+            "trend_context": "flat",
+            "support_resistance_context": {
+              "status": "available",
+              "prior_low": "1978.1",
+              "prior_high": "1980.4"
+            },
+            "volatility_context": {
+              "status": "available",
+              "prior_atr14_sma": "0.400000000000042857142857142857142857142857142857142857142857"
+            },
+            "volume_confirmation": {
+              "status": "unavailable"
+            },
+            "quality_status": "valid_closed_snapshot",
+            "strength": 78,
+            "explanation": "Three consecutive strong bearish candles \u2014 sustained selling pressure.",
+            "confirmation_rule": "next_directional_closed_bar",
+            "minimum_candles": 3,
+            "first_known_at": 1799999100000,
+            "price_range": {
+              "low": 1978.0,
+              "high": 1978.6000000000001
+            },
+            "invalidation": 1978.6000000000001,
+            "invalidation_policy": "closed price beyond OHLC formation extreme; geometric heuristic",
+            "role": "DESCRIPTIVE",
+            "state": "CONFIRMED",
+            "trade_permission": false
+          },
+          {
+            "pattern_id": "three_black_crows",
+            "pattern_version": "legacy-candle-adapter-1",
+            "family": "three_black_crows",
+            "name": "Three Black Crows",
+            "direction": "bearish",
+            "formed_at": 1800000000000,
+            "confirmed_at": null,
+            "timeframe": "15m",
+            "age_bars": 0,
+            "market_regime": "not_evaluated",
+            "trend_context": "flat",
+            "support_resistance_context": {
+              "status": "available",
+              "prior_low": "1978.0",
+              "prior_high": "1980.3"
+            },
+            "volatility_context": {
+              "status": "available",
+              "prior_atr14_sma": "0.400000000000035714285714285714285714285714285714285714285714"
+            },
+            "volume_confirmation": {
+              "status": "unavailable"
+            },
+            "quality_status": "valid_closed_snapshot",
+            "strength": 78,
+            "explanation": "Three consecutive strong bearish candles \u2014 sustained selling pressure.",
+            "confirmation_rule": "next_directional_closed_bar",
+            "minimum_candles": 3,
+            "first_known_at": 1800000000000,
+            "price_range": {
+              "low": 1975.8999999999999,
+              "high": 1978.5
+            },
+            "invalidation": 1978.5,
+            "invalidation_policy": "closed price beyond OHLC formation extreme; geometric heuristic",
+            "role": "DESCRIPTIVE",
+            "state": "CANDIDATE",
+            "trade_permission": false
+          }
+        ],
+        "timeframe": "15m",
+        "as_of_ms": 1800000000000,
+        "missing_families": [],
+        "catalog_overrides": {
+          "hikkake_modified": "modified_hikkake / fx-modified-hikkake-1 engineering variant",
+          "three_line_strike": "fx-candle-catalog-v7-1 DESCRIPTIVE",
+          "separating_lines": "fx-candle-catalog-v7-1 DESCRIPTIVE",
+          "on_neck": "fx-candle-catalog-v7-1 DESCRIPTIVE",
+          "in_neck": "fx-candle-catalog-v7-1 DESCRIPTIVE",
+          "thrusting": "fx-candle-catalog-v7-1 DESCRIPTIVE",
+          "advance_block": "fx-candle-catalog-v7-1 DESCRIPTIVE",
+          "stalled_pattern": "fx-candle-catalog-v7-1 DESCRIPTIVE",
+          "tristar": "fx-candle-catalog-v7-1 DESCRIPTIVE",
+          "breakaway": "fx-candle-catalog-v7-1 DESCRIPTIVE",
+          "three_stars_in_south": "fx-candle-catalog-v7-1 DESCRIPTIVE",
+          "unique_three_river": "fx-candle-catalog-v7-1 DESCRIPTIVE"
+        }
+      },
+      "chart_patterns": {
+        "version": "v2-chart-research-1",
+        "status": "available",
+        "issues": [],
+        "patterns": [
+          {
+            "pattern_id": "range_breakout",
+            "pattern_version": "v2-chart-research-1",
+            "kind": "closed_range_event",
+            "direction": "bearish",
+            "formed_at": 1800000000000,
+            "known_at": 1800000000000,
+            "confirmed_at": null,
+            "level": "1978.0",
+            "timeframe": "15m",
+            "trade_permission": false,
+            "explanation": "Previous20-bar range, strict tick-buffered break; next closed confirmation and at most3bar retest/failure observation.",
+            "minimum_candles": 40,
+            "first_known_at": 1800000000000,
+            "invalidation": "1978.0",
+            "invalidation_status": "observed_range_level"
+          }
+        ],
+        "trade_permission": false,
+        "knowledge_scope": "first_observed_in_supplied_window_after40bar_warmup",
+        "missing_families": [],
+        "geometric_patterns": [],
+        "geometry_catalog": {
+          "bull_flag": "DESCRIPTIVE_ENGINEERING",
+          "bear_flag": "DESCRIPTIVE_ENGINEERING",
+          "pennant": "DESCRIPTIVE_ENGINEERING",
+          "ascending_triangle": "DESCRIPTIVE_ENGINEERING",
+          "descending_triangle": "DESCRIPTIVE_ENGINEERING",
+          "symmetrical_triangle": "DESCRIPTIVE_ENGINEERING",
+          "rounding_bottom": "DESCRIPTIVE_ENGINEERING",
+          "rounding_top": "DESCRIPTIVE_ENGINEERING",
+          "rectangle": "DESCRIPTIVE_ENGINEERING",
+          "channel": "DESCRIPTIVE_ENGINEERING",
+          "rising_wedge": "DESCRIPTIVE_ENGINEERING",
+          "falling_wedge": "DESCRIPTIVE_ENGINEERING",
+          "double_top": "DESCRIPTIVE_ENGINEERING",
+          "double_bottom": "DESCRIPTIVE_ENGINEERING",
+          "head_and_shoulders": "DESCRIPTIVE_ENGINEERING",
+          "inverse_head_and_shoulders": "DESCRIPTIVE_ENGINEERING"
+        },
+        "validation_status": "PARTIAL_FAMILY_VALIDATION"
+      },
+      "confluence": {
+        "direction": "bearish",
+        "original_evidence_count": 5,
+        "deduplicated_evidence_count": 1,
+        "bullish_strength": 0.0,
+        "bearish_strength": 100.0,
+        "supporting_count": 1,
+        "opposing_count": 0,
+        "agreement_ratio": 1.0,
+        "conflict_ratio": 0.0,
+        "recency_half_life_bars": 8,
+        "evidence": [
+          {
+            "source": "v5_ema_alignment",
+            "direction": "bearish",
+            "strength": 100.0,
+            "timeframe": "M15",
+            "age_bars": 0,
+            "confirmed": true,
+            "bucket": "ohlc_price"
+          }
+        ],
+        "version": "fx-provenance-confluence-v7-1",
+        "source_engine": "trade-ai-v2-confluence",
+        "input_observation_count": 7,
+        "duplicate_events_removed": 2,
+        "input_observations": [
+          {
+            "source": "v5_ema_alignment",
+            "event_id": "M15:1800000000:price",
+            "category": "trend",
+            "direction": "bearish",
+            "strength": 100.0,
+            "confirmed": true,
+            "age_bars": 0,
+            "timeframe": "M15",
+            "known_at": 1800000000,
+            "algorithm_version": "fx-evidence-scale-v1",
+            "bucket": "ohlc_price",
+            "confirmation_at": null,
+            "related_event_id": null
+          },
+          {
+            "source": "v5_wilder_macd",
+            "event_id": "M15:1800000000:price",
+            "category": "momentum",
+            "direction": "bearish",
+            "strength": 100.0,
+            "confirmed": true,
+            "age_bars": 0,
+            "timeframe": "M15",
+            "known_at": 1800000000,
+            "algorithm_version": "fx-evidence-scale-v1",
+            "bucket": "ohlc_price",
+            "confirmation_at": null,
+            "related_event_id": null
+          },
+          {
+            "source": "v2_candle:three_black_crows",
+            "event_id": "M15:1799996400:price",
+            "category": "pattern",
+            "direction": "bearish",
+            "strength": 78.0,
+            "confirmed": true,
+            "age_bars": 5,
+            "timeframe": "M15",
+            "known_at": 1799996400,
+            "algorithm_version": "legacy-candle-adapter-1",
+            "bucket": "ohlc_price",
+            "confirmation_at": null,
+            "related_event_id": null
+          },
+          {
+            "source": "v2_candle:three_black_crows",
+            "event_id": "M15:1799997300:price",
+            "category": "pattern",
+            "direction": "bearish",
+            "strength": 78.0,
+            "confirmed": true,
+            "age_bars": 4,
+            "timeframe": "M15",
+            "known_at": 1799997300,
+            "algorithm_version": "legacy-candle-adapter-1",
+            "bucket": "ohlc_price",
+            "confirmation_at": null,
+            "related_event_id": null
+          },
+          {
+            "source": "v2_candle:three_black_crows",
+            "event_id": "M15:1799998200:price",
+            "category": "pattern",
+            "direction": "bearish",
+            "strength": 78.0,
+            "confirmed": true,
+            "age_bars": 3,
+            "timeframe": "M15",
+            "known_at": 1799998200,
+            "algorithm_version": "legacy-candle-adapter-1",
+            "bucket": "ohlc_price",
+            "confirmation_at": null,
+            "related_event_id": null
+          },
+          {
+            "source": "v2_candle:three_black_crows",
+            "event_id": "M15:1799999100:price",
+            "category": "pattern",
+            "direction": "bearish",
+            "strength": 78.0,
+            "confirmed": true,
+            "age_bars": 2,
+            "timeframe": "M15",
+            "known_at": 1799999100,
+            "algorithm_version": "legacy-candle-adapter-1",
+            "bucket": "ohlc_price",
+            "confirmation_at": null,
+            "related_event_id": null
+          },
+          {
+            "source": "v2_candle:three_black_crows",
+            "event_id": "M15:1800000000:price",
+            "category": "pattern",
+            "direction": "bearish",
+            "strength": 78.0,
+            "confirmed": true,
+            "age_bars": 1,
+            "timeframe": "M15",
+            "known_at": 1800000000,
+            "algorithm_version": "legacy-candle-adapter-1",
+            "bucket": "ohlc_price",
+            "confirmation_at": null,
+            "related_event_id": null
+          }
+        ],
+        "event_deduplicated_count": 5,
+        "observations": [
+          {
+            "source": "v2_candle:three_black_crows",
+            "event_id": "M15:1799996400:price",
+            "category": "pattern",
+            "direction": "bearish",
+            "strength": 78.0,
+            "confirmed": true,
+            "age_bars": 5,
+            "timeframe": "M15",
+            "known_at": 1799996400,
+            "algorithm_version": "legacy-candle-adapter-1",
+            "bucket": "ohlc_price",
+            "confirmation_at": null,
+            "related_event_id": null
+          },
+          {
+            "source": "v2_candle:three_black_crows",
+            "event_id": "M15:1799997300:price",
+            "category": "pattern",
+            "direction": "bearish",
+            "strength": 78.0,
+            "confirmed": true,
+            "age_bars": 4,
+            "timeframe": "M15",
+            "known_at": 1799997300,
+            "algorithm_version": "legacy-candle-adapter-1",
+            "bucket": "ohlc_price",
+            "confirmation_at": null,
+            "related_event_id": null
+          },
+          {
+            "source": "v2_candle:three_black_crows",
+            "event_id": "M15:1799998200:price",
+            "category": "pattern",
+            "direction": "bearish",
+            "strength": 78.0,
+            "confirmed": true,
+            "age_bars": 3,
+            "timeframe": "M15",
+            "known_at": 1799998200,
+            "algorithm_version": "legacy-candle-adapter-1",
+            "bucket": "ohlc_price",
+            "confirmation_at": null,
+            "related_event_id": null
+          },
+          {
+            "source": "v2_candle:three_black_crows",
+            "event_id": "M15:1799999100:price",
+            "category": "pattern",
+            "direction": "bearish",
+            "strength": 78.0,
+            "confirmed": true,
+            "age_bars": 2,
+            "timeframe": "M15",
+            "known_at": 1799999100,
+            "algorithm_version": "legacy-candle-adapter-1",
+            "bucket": "ohlc_price",
+            "confirmation_at": null,
+            "related_event_id": null
+          },
+          {
+            "source": "v5_ema_alignment",
+            "event_id": "M15:1800000000:price",
+            "category": "trend",
+            "direction": "bearish",
+            "strength": 100.0,
+            "confirmed": true,
+            "age_bars": 0,
+            "timeframe": "M15",
+            "known_at": 1800000000,
+            "algorithm_version": "fx-evidence-scale-v1",
+            "bucket": "ohlc_price",
+            "confirmation_at": null,
+            "related_event_id": null
+          }
+        ],
+        "rejected_events": [],
+        "rejections": [],
+        "conflict_veto": false,
+        "directional_context": [
+          "bearish"
+        ],
+        "conflicting_directions": [],
+        "success_probability": null,
+        "score_semantics": "versioned heuristic evidence strength, not calibrated probability"
+      },
+      "confirmations": [
+        {
+          "timeframe": "H4",
+          "direction": "bearish",
+          "closed_at": 1800000000,
+          "available": true,
+          "role": "higher_bias"
+        }
+      ],
+      "strategy_candidates": [
+        {
+          "strategy": "fx_trend_momentum_v6",
+          "direction": "SELL",
+          "reason": "retained V5 EMA/Wilder-RSI/MACD continuation or confirmed pullback"
+        }
+      ],
+      "strategy_conflicts": [],
+      "final_decision": "SELL_CANDIDATE",
+      "legacy_signal": "SELL",
+      "decision_reasons": [
+        "retained V5 EMA/Wilder-RSI/MACD continuation or confirmed pullback",
+        "actual V2 QC/regime/pattern/confluence/router and V5 risk passed"
+      ],
+      "entry_zone": {
+        "low": 1976.1,
+        "high": 1976.1,
+        "price_side": "bid"
+      },
+      "stop_loss": 1976.91,
+      "take_profit_1": 1974.47,
+      "take_profit_2": 1973.66,
+      "risk_reward": 2.0,
+      "lot_size": 1.23,
+      "risk_amount": 99.63,
+      "risk_policy": {
+        "decision": "PASS",
+        "reasons": [],
+        "fingerprint": "8eca13151869a256",
+        "sizing": {
+          "lots": 1.23,
+          "estimated_risk": 99.63,
+          "unrounded_risk": 99.63000000002125,
+          "risk_cap": 100.0,
+          "currency": "USD"
+        },
+        "records_source": "caller_supplied_manual",
+        "daily_planned_risk": 0,
+        "daily_realized_loss": 0,
+        "cost_adjusted_plan": {
+          "gross_reward_risk": 2.0123456790117706,
+          "gross_price_reward_risk": 2.01234567901177,
+          "gross_loss_at_minimum_lot": 0.8100000000001727,
+          "gross_reward_at_minimum_lot": 1.6299999999998818,
+          "net_reward_risk": 2.0123456790117706,
+          "net_reward_at_minimum_lot": 1.6299999999998818,
+          "loss_at_minimum_lot": 0.8100000000001727,
+          "currency": "USD",
+          "version": "forex-cost-netrr-v7-1",
+          "slippage_basis": "adverse stop only",
+          "commission_basis": "round_trip_per_lot"
+        }
+      },
+      "missing_capabilities": [
+        "funding",
+        "liquidations",
+        "order_flow",
+        "real_volume",
+        "verified_calendar",
+        "verified_margin",
+        "verified_swap",
+        "vwap"
+      ],
+      "warnings": [
+        "Analytical candidate; no execution permission.",
+        "Synthetic tests do not establish market profitability."
+      ],
+      "research_status": "UNVERIFIED_IN_MARKET",
+      "information": {
+        "schema_version": "forex-macro-1",
+        "data_status": "DATA_UNAVAILABLE",
+        "provider": null,
+        "events": [],
+        "event_filter_verified": false,
+        "directional_permission": false,
+        "reason": "verified macro source not configured",
+        "version": "fx-macro-revisions-v7-1",
+        "coverage_status": "UNVERIFIED",
+        "success_probability": null
+      },
+      "regime": {
+        "regime": "breakout",
+        "direction": "bearish",
+        "reason": "closed_below_previous_range",
+        "observations": 20,
+        "label": "BREAKOUT",
+        "volatility": "NORMAL",
+        "atr_ratio": 1.3392857142856534,
+        "version": "fx-regime-v6-1",
+        "source_version": "v2-regime-1",
+        "volatility_is_directional": false
+      },
+      "mtf": {
+        "source_context": {
+          "direction": "bearish",
+          "current_timeframe": "15m",
+          "current": {
+            "timeframe": "15m",
+            "direction": "bearish",
+            "executable_direction": "bearish",
+            "confidence": 0.0,
+            "gate_passed": true,
+            "tradeable": true,
+            "final_score": 0.0,
+            "available": true
+          },
+          "higher_timeframe_bias": {
+            "timeframe": "4H",
+            "direction": "bearish",
+            "confidence": 0.0,
+            "gate_passed": true,
+            "tradeable": true,
+            "final_score": 0.0
+          },
+          "higher_timeframe_alignment": {
+            "direction": "bearish",
+            "agreement_ratio": 1.0,
+            "conflict_ratio": 0.0,
+            "supporting_count": 1,
+            "opposing_count": 0,
+            "available_count": 1,
+            "evidence": [
+              {
+                "timeframe": "4H",
+                "direction": "bearish",
+                "executable_direction": "bearish",
+                "confidence": 0.0,
+                "gate_passed": true,
+                "tradeable": true
+              }
+            ]
+          },
+          "lower_timeframe_confirmation": {
+            "direction": "neutral",
+            "agreement_ratio": 0.0,
+            "conflict_ratio": 0.0,
+            "supporting_count": 0,
+            "opposing_count": 0,
+            "available_count": 0,
+            "evidence": []
+          },
+          "alignment_ratio": 1.0,
+          "conflict_ratio": 0.0,
+          "supporting_count": 2,
+          "opposing_count": 0,
+          "evidence": [
+            {
+              "source": "mtf_htf_bias",
+              "direction": "bearish",
+              "strength": 0.0,
+              "timeframe": "4H",
+              "age_bars": 0,
+              "confirmed": true,
+              "bucket": "mtf_htf"
+            }
+          ]
+        },
+        "primary_direction": "bearish",
+        "higher_bias": [
+          "bearish"
+        ],
+        "lower_trigger": [],
+        "confirmations": [
+          {
+            "timeframe": "H4",
+            "direction": "bearish",
+            "closed_at": 1800000000,
+            "available": true,
+            "role": "higher_bias"
+          }
+        ],
+        "as_of_utc": 1800000000,
+        "independent_price_vote": false,
+        "version": "fx-asof-mtf-v6-1"
+      },
+      "strategies": [
+        {
+          "strategy_id": "fx_trend_momentum_v6",
+          "version": "2",
+          "family": "fx_trend_momentum_v6",
+          "status": "CONFIRMED",
+          "direction": "SELL",
+          "reason": "retained V5 EMA/Wilder-RSI/MACD continuation or confirmed pullback",
+          "required_capabilities": [
+            "ohlc",
+            "broker_calendar"
+          ],
+          "known_at": 1800000000,
+          "invalidation": null,
+          "rule_version": "fx-price-setups-v7-1",
+          "setup_id": "53b03a2ee3e92d4457a48cfe",
+          "parameters": {
+            "version": "fx-price-params-v7-1",
+            "range_bars": 20,
+            "minimum_range_atr": 3,
+            "range_efficiency_max": 0.3,
+            "breakout_atr_buffer": 0.25,
+            "max_extension_atr": 3,
+            "max_setup_age_bars": 1
+          }
+        },
+        {
+          "strategy_id": "fx_range_reversion_v6",
+          "version": "2",
+          "family": "fx_range_reversion_v6",
+          "status": "WAIT",
+          "direction": "WAIT",
+          "reason": "regime not eligible",
+          "required_capabilities": [
+            "ohlc",
+            "broker_calendar"
+          ],
+          "known_at": 1800000000,
+          "invalidation": null,
+          "rule_version": "fx-price-setups-v7-1",
+          "setup_id": "129c7e37dda9bd9aeec8f7c4",
+          "parameters": {
+            "version": "fx-price-params-v7-1",
+            "range_bars": 20,
+            "minimum_range_atr": 3,
+            "range_efficiency_max": 0.3,
+            "breakout_atr_buffer": 0.25,
+            "max_extension_atr": 3,
+            "max_setup_age_bars": 1
+          }
+        },
+        {
+          "strategy_id": "fx_confirmed_breakout_v6",
+          "version": "2",
+          "family": "fx_confirmed_breakout_v6",
+          "status": "WAIT",
+          "direction": "WAIT",
+          "reason": "price confirmation missing",
+          "required_capabilities": [
+            "ohlc",
+            "broker_calendar"
+          ],
+          "known_at": 1800000000,
+          "invalidation": null,
+          "rule_version": "fx-price-setups-v7-1",
+          "setup_id": "11632858145bd07d0c4b68b7",
+          "parameters": {
+            "version": "fx-price-params-v7-1",
+            "range_bars": 20,
+            "minimum_range_atr": 3,
+            "range_efficiency_max": 0.3,
+            "breakout_atr_buffer": 0.25,
+            "max_extension_atr": 3,
+            "max_setup_age_bars": 1
+          }
+        },
+        {
+          "strategy_id": "fx_failed_breakout_v6",
+          "version": "2",
+          "family": "fx_failed_breakout_v6",
+          "status": "WAIT",
+          "direction": "WAIT",
+          "reason": "regime not eligible",
+          "required_capabilities": [
+            "ohlc",
+            "broker_calendar"
+          ],
+          "known_at": 1800000000,
+          "invalidation": null,
+          "rule_version": "fx-price-setups-v7-1",
+          "setup_id": "154098c6c4e8af210af50ed3",
+          "parameters": {
+            "version": "fx-price-params-v7-1",
+            "range_bars": 20,
+            "minimum_range_atr": 3,
+            "range_efficiency_max": 0.3,
+            "breakout_atr_buffer": 0.25,
+            "max_extension_atr": 3,
+            "max_setup_age_bars": 1
+          }
+        }
+      ],
+      "candidate_direction": "SELL",
+      "freshness": {
+        "quote_age_seconds": 1.0,
+        "primary_close_utc": 1800000000,
+        "candle_age_seconds": 0.0,
+        "bid": 1976.1,
+        "ask": 1976.3,
+        "spread": 0.20000000000004547,
+        "max_spread": 1
+      },
+      "routing": {
+        "status": "selected",
+        "strategy_id": "fx_trend_momentum_v6",
+        "reason": "eligible_priority",
+        "eligible_strategy_ids": [
+          "fx_trend_momentum_v6"
+        ]
+      },
+      "gross_risk_reward": 2.0123456790117706,
+      "net_risk_reward": 2.0123456790117706,
+      "broker_schedule": {
+        "authenticated": false,
+        "policy_accepted": true,
+        "source": "synthetic-fixture-only",
+        "trust": "DECLARED"
+      }
+    },
+    "UNKNOWN_SESSION": {
+      "analysis_id": "2bc42b19cee355fea9cbf99e05432a32c1e14f60203ed094fef3836e73b28d59",
+      "schema_version": "forex-analysis-6",
+      "engine_version": "7.0.0",
+      "source_versions": {
+        "day_trader": "fdcdd418d96d05e71453e70c1f39956dd1cfe9d5",
+        "trade_ai": "b69111608ea3c2e78609fd84a0d81dee2781c980",
+        "target_code_sha256": "36c1d28de7764b83ea0bd3e7147eb72ab73cdf59dc1fe225372f15cfbc8703be",
+        "parameters_sha256": "f32dbb7ef62534a8e044228616036c1f9f45c2386d599f9dc126b5cab715d5de",
+        "algorithms": {
+          "canonical": "forex-v5-sma-seed-wilder-rsi-sma-atr-population-bb",
+          "rsi_rolling": "v2-rolling-rsi14-1",
+          "stoch_rsi": "v2-rolling-rsi-stochastic14-3-1",
+          "extra_methods": "v2-technical-research-1",
+          "volatility": "fx-atr-ratio20-v1",
+          "divergence": "fx-aligned-divergence-v7-1"
+        },
+        "forex_strategies": "fx-price-setups-v7-1",
+        "risk": "forex-cost-netrr-v7-1"
+      },
+      "symbol": "XAUUSD",
+      "market_type": "cfd",
+      "contract_type": "cfd",
+      "broker_symbol": "XAUUSD.test",
+      "provider": "fixture-test-only",
+      "timeframe": "M15",
+      "as_of_utc": "2027-01-15T08:00:00+00:00",
+      "snapshot_id": "7d651d3d4c3f6200a20e8c66af917a84915efaf5ad6896ac386fd465f231777b",
+      "market_status": "UNKNOWN",
+      "data_status": "OK",
+      "trading_eligibility": "BLOCKED",
+      "integration_status": "PRIVATE_INTEGRATED",
+      "private_extension": {
+        "status": "AVAILABLE",
+        "source_sha": "b69111608ea3c2e78609fd84a0d81dee2781c980",
+        "bridge_version": "in-process-v6-owned-source"
+      },
+      "trend": null,
+      "momentum": null,
+      "volatility": null,
+      "indicators": null,
+      "market_structure": null,
+      "candlestick_patterns": null,
+      "chart_patterns": null,
+      "confluence": null,
+      "confirmations": [],
+      "strategy_candidates": [],
+      "strategy_conflicts": [],
+      "final_decision": "NO_TRADE",
+      "legacy_signal": "WAIT",
+      "decision_reasons": [
+        "broker market hours unknown or not open"
+      ],
+      "entry_zone": null,
+      "stop_loss": null,
+      "take_profit_1": null,
+      "take_profit_2": null,
+      "risk_reward": null,
+      "lot_size": null,
+      "risk_amount": null,
+      "risk_policy": null,
+      "missing_capabilities": [
+        "funding",
+        "liquidations",
+        "order_flow",
+        "real_volume",
+        "verified_calendar",
+        "verified_margin",
+        "verified_swap",
+        "vwap"
+      ],
+      "warnings": [
+        "Analytical candidate; no execution permission.",
+        "Synthetic tests do not establish market profitability."
+      ],
+      "research_status": "UNVERIFIED_IN_MARKET",
+      "information": {
+        "schema_version": "forex-macro-1",
+        "data_status": "DATA_UNAVAILABLE",
+        "provider": null,
+        "events": [],
+        "event_filter_verified": false,
+        "directional_permission": false,
+        "reason": "verified macro source not configured",
+        "version": "fx-macro-revisions-v7-1",
+        "coverage_status": "UNVERIFIED",
+        "success_probability": null
+      },
+      "regime": null,
+      "mtf": null,
+      "strategies": [],
+      "candidate_direction": "WAIT",
+      "freshness": {
+        "quote_age_seconds": 1.0,
+        "primary_close_utc": 1800000000,
+        "candle_age_seconds": 0.0,
+        "bid": 2023.9,
+        "ask": 2024.1000000000001,
+        "spread": 0.20000000000004547,
+        "max_spread": 1
+      },
+      "routing": null,
+      "gross_risk_reward": null,
+      "net_risk_reward": null,
+      "broker_schedule": {
+        "authenticated": false,
+        "policy_accepted": false,
+        "source": "synthetic-fixture-only",
+        "trust": "UNAVAILABLE"
+      }
+    }
+  }
+}

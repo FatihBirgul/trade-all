@@ -1,0 +1,153 @@
+{
+  "account_currency": "USC",
+  "acquired_at_utc": "2026-11-05T01:00:00Z",
+  "broker": "Exness",
+  "broker_symbol": "XAUUSDc",
+  "canonical_symbol": "XAUUSD",
+  "close_only": [
+    {
+      "end_utc": "2026-11-08T23:02:00Z",
+      "start_utc": "2026-11-08T23:00:30Z"
+    },
+    {
+      "end_utc": "2026-11-09T23:02:00Z",
+      "start_utc": "2026-11-09T23:00:30Z"
+    },
+    {
+      "end_utc": "2026-11-10T23:02:00Z",
+      "start_utc": "2026-11-10T23:00:30Z"
+    },
+    {
+      "end_utc": "2026-11-11T23:02:00Z",
+      "start_utc": "2026-11-11T23:00:30Z"
+    }
+  ],
+  "completeness": {
+    "calendar": "COMPLETE",
+    "quote": "COMPLETE",
+    "timezone": "COMPLETE",
+    "trade": "COMPLETE"
+  },
+  "conflicts": [],
+  "conversion_rule": "EXPLICIT_UTC_WITH_OFFSET_REGIMES",
+  "coverage": [
+    {
+      "end_utc": "2026-11-12T00:00:00Z",
+      "start_utc": "2026-11-06T00:00:00Z"
+    }
+  ],
+  "dst_regime": [
+    {
+      "end_utc": "2026-11-12T00:00:00Z",
+      "offset_seconds": 0,
+      "start_utc": "2026-11-06T00:00:00Z"
+    }
+  ],
+  "effective_end_utc": "2026-11-12T00:00:00Z",
+  "effective_start_utc": "2026-11-06T00:00:00Z",
+  "evidence_id": "SYNTHETIC_TEST_EVIDENCE-XAUUSD",
+  "exceptional_closures": [],
+  "holidays": [],
+  "maintenance": [
+    {
+      "end_utc": "2026-11-09T23:00:30Z",
+      "start_utc": "2026-11-09T22:00:00Z"
+    },
+    {
+      "end_utc": "2026-11-10T23:00:30Z",
+      "start_utc": "2026-11-10T22:00:00Z"
+    },
+    {
+      "end_utc": "2026-11-11T23:00:30Z",
+      "start_utc": "2026-11-11T22:00:00Z"
+    }
+  ],
+  "operator_review": "PENDING",
+  "product": "Standard Cent",
+  "published_at_utc": "2026-11-05T00:00:00Z",
+  "quote_open": [
+    {
+      "end_utc": "2026-11-06T22:00:00Z",
+      "start_utc": "2026-11-06T00:00:00Z"
+    },
+    {
+      "end_utc": "2026-11-09T00:00:00Z",
+      "start_utc": "2026-11-08T23:00:30Z"
+    },
+    {
+      "end_utc": "2026-11-09T22:00:00Z",
+      "start_utc": "2026-11-09T00:00:00Z"
+    },
+    {
+      "end_utc": "2026-11-10T00:00:00Z",
+      "start_utc": "2026-11-09T23:00:30Z"
+    },
+    {
+      "end_utc": "2026-11-10T22:00:00Z",
+      "start_utc": "2026-11-10T00:00:00Z"
+    },
+    {
+      "end_utc": "2026-11-11T00:00:00Z",
+      "start_utc": "2026-11-10T23:00:30Z"
+    },
+    {
+      "end_utc": "2026-11-11T22:00:00Z",
+      "start_utc": "2026-11-11T00:00:00Z"
+    },
+    {
+      "end_utc": "2026-11-12T00:00:00Z",
+      "start_utc": "2026-11-11T23:00:30Z"
+    }
+  ],
+  "schema_version": "broker-historical-sessions-1",
+  "server": "Exness-MT5Real50",
+  "source": {
+    "kind": "SYNTHETIC_TEST_EVIDENCE",
+    "organization": "SYNTHETIC_TEST_EVIDENCE",
+    "original_file": "original.txt",
+    "original_sha256": "c6bbcc38cfbda2f73c40ec10f22a85dfdc9ebc55358cc7f1d77d003c830d68b3",
+    "reference": "SYNTHETIC_TEST_EVIDENCE: not real broker verification"
+  },
+  "source_timezone": "UTC",
+  "trade_open": [
+    {
+      "end_utc": "2026-11-06T22:00:00Z",
+      "start_utc": "2026-11-06T00:00:00Z"
+    },
+    {
+      "end_utc": "2026-11-09T00:00:00Z",
+      "start_utc": "2026-11-08T23:02:00Z"
+    },
+    {
+      "end_utc": "2026-11-09T22:00:00Z",
+      "start_utc": "2026-11-09T00:00:00Z"
+    },
+    {
+      "end_utc": "2026-11-10T00:00:00Z",
+      "start_utc": "2026-11-09T23:02:00Z"
+    },
+    {
+      "end_utc": "2026-11-10T22:00:00Z",
+      "start_utc": "2026-11-10T00:00:00Z"
+    },
+    {
+      "end_utc": "2026-11-11T00:00:00Z",
+      "start_utc": "2026-11-10T23:02:00Z"
+    },
+    {
+      "end_utc": "2026-11-11T22:00:00Z",
+      "start_utc": "2026-11-11T00:00:00Z"
+    },
+    {
+      "end_utc": "2026-11-12T00:00:00Z",
+      "start_utc": "2026-11-11T23:02:00Z"
+    }
+  ],
+  "verification_status": "FORMAT_VALIDATED",
+  "weekend_closed": [
+    {
+      "end_utc": "2026-11-08T23:00:30Z",
+      "start_utc": "2026-11-06T22:00:00Z"
+    }
+  ]
+}

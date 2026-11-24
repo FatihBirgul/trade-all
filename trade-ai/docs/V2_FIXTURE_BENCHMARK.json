@@ -1,0 +1,23 @@
+{
+  "scope": "isolated fixture only; not target i3 hardware or live network",
+  "python": "3.12.14",
+  "bars_per_timeframe": 300,
+  "timeframes": [
+    "15m",
+    "1H",
+    "4H"
+  ],
+  "analyses": 6,
+  "wall_time_ms": [
+    133.445,
+    132.268,
+    92.948,
+    92.917,
+    93.273,
+    88.938
+  ],
+  "median_ms": 93.111,
+  "direction": "bullish",
+  "real_execution": false,
+  "persistent_user_database": false
+}

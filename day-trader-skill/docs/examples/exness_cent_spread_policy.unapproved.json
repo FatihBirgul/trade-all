@@ -1,0 +1,82 @@
+{
+  "schema_version": "forex-spread-policy-1",
+  "policy_version": "exness-cent-manual-spread-1",
+  "rules": [
+    {
+      "broker_server": "Exness-MT5Real50",
+      "symbol": "XAUUSD",
+      "broker_symbol": "XAUUSDc",
+      "account_currency": "USC",
+      "maximum": null,
+      "unit": "PRICE",
+      "effective_from_utc": null,
+      "effective_to_utc": null,
+      "timeframes": [
+        "M15",
+        "H4"
+      ],
+      "approval_status": "UNAPPROVED",
+      "provenance": {
+        "kind": "OPERATOR_CONFIGURATION",
+        "reference": ""
+      }
+    },
+    {
+      "broker_server": "Exness-MT5Real50",
+      "symbol": "EURUSD",
+      "broker_symbol": "EURUSDc",
+      "account_currency": "USC",
+      "maximum": null,
+      "unit": "PRICE",
+      "effective_from_utc": null,
+      "effective_to_utc": null,
+      "timeframes": [
+        "M15",
+        "H4"
+      ],
+      "approval_status": "UNAPPROVED",
+      "provenance": {
+        "kind": "OPERATOR_CONFIGURATION",
+        "reference": ""
+      }
+    },
+    {
+      "broker_server": "Exness-MT5Real50",
+      "symbol": "GBPUSD",
+      "broker_symbol": "GBPUSDc",
+      "account_currency": "USC",
+      "maximum": null,
+      "unit": "PRICE",
+      "effective_from_utc": null,
+      "effective_to_utc": null,
+      "timeframes": [
+        "M15",
+        "H4"
+      ],
+      "approval_status": "UNAPPROVED",
+      "provenance": {
+        "kind": "OPERATOR_CONFIGURATION",
+        "reference": ""
+      }
+    },
+    {
+      "broker_server": "Exness-MT5Real50",
+      "symbol": "USDJPY",
+      "broker_symbol": "USDJPYc",
+      "account_currency": "USC",
+      "maximum": null,
+      "unit": "PRICE",
+      "effective_from_utc": null,
+      "effective_to_utc": null,
+      "timeframes": [
+        "M15",
+        "H4"
+      ],
+      "approval_status": "UNAPPROVED",
+      "provenance": {
+        "kind": "OPERATOR_CONFIGURATION",
+        "reference": ""
+      }
+    }
+  ]
+}

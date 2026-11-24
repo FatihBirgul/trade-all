@@ -1,0 +1,31 @@
+{
+  "data_mode": "fixture",
+  "note": "Paper simulation only. Costs included in realized PnL; ambiguous positions are unresolved, not wins. No backtest validation or success probability implied.",
+  "paper_only": true,
+  "portfolios": [
+    {
+      "ambiguous_positions": 0,
+      "closed_positions": 0,
+      "equity_quote": "10000.60905701",
+      "fees_quote": "0.06496299",
+      "losses": 0,
+      "portfolio_id": "AUTO",
+      "realized_pnl_quote": "0.00000000",
+      "unrealized_pnl_quote": "0.60905701",
+      "win_rate": null,
+      "wins": 0
+    },
+    {
+      "ambiguous_positions": 0,
+      "closed_positions": 1,
+      "equity_quote": "10000.41772006",
+      "fees_quote": "0.13019994",
+      "losses": 0,
+      "portfolio_id": "MANUAL",
+      "realized_pnl_quote": "0.41772006",
+      "unrealized_pnl_quote": "0.00000000",
+      "win_rate": "100.00000000",
+      "wins": 1
+    }
+  ]
+}

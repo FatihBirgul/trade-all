@@ -1,0 +1,85 @@
+name: Trade All validation
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  PYTHONUTF8: '1'
+  EXPO_NO_TELEMETRY: '1'
+jobs:
+  unified:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: trade-ai-unified
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r requirements-lock.txt
+      - run: python scripts/check_sources.py
+      - run: python scripts/run_suite.py engine
+  forex:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: day-trader-skill
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r requirements-test-py311.txt
+      - run: python -m unittest discover -s tests -q
+  backend-and-gateway:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r trade-ai/backend/requirements-v2-tests.txt './trade-ai-gateway[test]'
+      - working-directory: trade-ai/backend
+        run: |
+          python -W error::ResourceWarning tests/run_v2_offline_tests.py
+          python -m pytest -c tests/pytest-v2.ini tests/test_scenarios.py tests/test_outcomes.py::TestOutcomeEngineUnit tests/test_v2_mobile_quotes.py -q
+      - working-directory: trade-ai-gateway
+        env:
+          TRADE_AI_BACKEND_REFERENCE: ${{ github.workspace }}/trade-ai
+        run: python -m pytest -q
+  web:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        component: [trade-ai-forex-web, trade-ai-forex-web-v3-integration]
+    defaults:
+      run:
+        working-directory: ${{ matrix.component }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - if: matrix.component == 'trade-ai-forex-web-v3-integration'
+        run: npm run lint:analysis && npm test
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: trade-ai-android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run typecheck && npm run lint && npm test
+      - run: python3 -m unittest discover -s scripts/tests -q
+      - run: python3 scripts/verify-brand.py && python3 scripts/verify-startup.py
+      - run: npm run doctor:local
+      - run: npx --no-install expo export --platform android
+        env:
+          EXPO_OFFLINE: '1'

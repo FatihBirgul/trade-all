@@ -1,0 +1,39 @@
+{
+  "engine_version": "6.0.0",
+  "code_sha256": "5fda834593ee3525ebe2aadb5e88e495a238907a7eac451c3aab0da44088b211",
+  "data_kind": "synthetic",
+  "market_performance_evidence": false,
+  "measurement": "single bounded Cloud run; Python allocations, not RSS",
+  "benchmarks": {
+    "single_symbol": {
+      "seconds": 0.259286,
+      "python_peak_bytes": 1336322
+    },
+    "four_symbol_scanner": {
+      "seconds": 1.136717,
+      "python_peak_bytes": 2503105
+    },
+    "three_timeframes": {
+      "seconds": 0.318054,
+      "python_peak_bytes": 1931886
+    },
+    "true_confluence_100_observations": {
+      "seconds": 0.003435,
+      "python_peak_bytes": 149304
+    },
+    "500_bar_backtest": {
+      "seconds": 2.895092,
+      "python_peak_bytes": 1021190,
+      "closed_trades": 12
+    },
+    "2000_bar_backtest": {
+      "seconds": 21.461373,
+      "python_peak_bytes": 1768464,
+      "closed_trades": 87
+    },
+    "two_fold_oos": {
+      "seconds": 5.83655,
+      "python_peak_bytes": 1163750
+    }
+  }
+}

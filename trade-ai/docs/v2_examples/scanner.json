@@ -1,0 +1,9 @@
+{
+  "interval_seconds": 60,
+  "last_error": null,
+  "last_tick_ms": 1792584120000,
+  "lease_id": null,
+  "lease_until_ms": 0,
+  "max_analyses_per_tick": 2,
+  "paused": false
+}

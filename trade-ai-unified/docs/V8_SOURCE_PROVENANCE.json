@@ -1,0 +1,58 @@
+[
+  {
+    "path": "unified_forex/pattern_lab.py",
+    "sha256": "99ead450ea9d2401e78cb776604311448bb6d92054d6f2dfbf59c0165acfc5d6",
+    "origin": "new V8 integration/validation code in private target",
+    "source_reuse": "retained V5/V2 contracts/helpers; original SHAs recorded in source_manifest.json",
+    "market_validation": false
+  },
+  {
+    "path": "unified_forex/structure_ledger.py",
+    "sha256": "9f3f0e2c837b55d72c2bdb012e67c20631297974466bcd4800172c853e75dfce",
+    "origin": "new V8 integration/validation code in private target",
+    "source_reuse": "retained V5/V2 contracts/helpers; original SHAs recorded in source_manifest.json",
+    "market_validation": false
+  },
+  {
+    "path": "unified_forex/ingestion.py",
+    "sha256": "b9cc7973ad6d810d9dbb6edb83c9e11b68e211cf2d24201a28c22fcd10d0ed0c",
+    "origin": "new V8 integration/validation code in private target",
+    "source_reuse": "retained V5/V2 contracts/helpers; original SHAs recorded in source_manifest.json",
+    "market_validation": false
+  },
+  {
+    "path": "unified_forex/costs.py",
+    "sha256": "1f54ff24c1a16d2edc5740063bb1aced0fe2600618427ace671b4e9faffd6102",
+    "origin": "new V8 integration/validation code in private target",
+    "source_reuse": "retained V5/V2 contracts/helpers; original SHAs recorded in source_manifest.json",
+    "market_validation": false
+  },
+  {
+    "path": "unified_forex/research_control.py",
+    "sha256": "b74dc0c7c777db5fff9b5819b8a889a6426be4921452eb7e80fd75934dfbffc5",
+    "origin": "new V8 integration/validation code in private target",
+    "source_reuse": "retained V5/V2 contracts/helpers; original SHAs recorded in source_manifest.json",
+    "market_validation": false
+  },
+  {
+    "path": "unified_forex/official_calendar.py",
+    "sha256": "28fe836635724d023c2eaf8471143b79e743e96ce1937a3773d2994800863b47",
+    "origin": "new V8 integration/validation code in private target",
+    "source_reuse": "retained V5/V2 contracts/helpers; original SHAs recorded in source_manifest.json",
+    "market_validation": false
+  },
+  {
+    "path": "unified_forex/pilot.py",
+    "sha256": "c721bb27aad8ae1c653a47b34aa877892d19e52eaf0476758fdbbd5cd555bbba",
+    "origin": "new V8 integration/validation code in private target",
+    "source_reuse": "retained V5/V2 contracts/helpers; original SHAs recorded in source_manifest.json",
+    "market_validation": false
+  },
+  {
+    "path": "unified_forex/schemas.py",
+    "sha256": "72eaedcb818c028b5844ac6bbf53a290122ccfe7d82f49771a93cd3a37bb6f45",
+    "origin": "new V8 integration/validation code in private target",
+    "source_reuse": "retained V5/V2 contracts/helpers; original SHAs recorded in source_manifest.json",
+    "market_validation": false
+  }
+]

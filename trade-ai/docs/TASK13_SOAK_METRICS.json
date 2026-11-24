@@ -1,0 +1,109 @@
+{
+  "environment": {
+    "code_commit": "f3ba82e8853e71c8af0a1e5d5cd59e21342d9feb",
+    "date_utc": "2026-10-31",
+    "memory_measure": "tracemalloc Python allocations; not process RSS",
+    "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "python": "3.12.14"
+  },
+  "financial_results_equal": true,
+  "journal": {
+    "audit_seconds": 40.809228,
+    "audits": 63,
+    "cycles": 3,
+    "database_bytes": 9269248,
+    "domain_audit_seconds": 28.248603,
+    "domain_events": 5750,
+    "domain_journal": true,
+    "duplicate_responses": 225,
+    "event_append_attempts": 5798,
+    "event_append_max_ms": 2.785289,
+    "event_append_mean_ms": 0.222447,
+    "events": 935,
+    "financial_digest": "c21faf2132b60e66f3ea470d579f01ab033d625289ad780e122f1204eacc79ac",
+    "financial_http_calls": 453,
+    "financial_http_max_ms": 52.461287,
+    "financial_http_mean_ms": 13.66269,
+    "financial_mismatches": 0,
+    "fixture_only": true,
+    "incomplete_checks": 0,
+    "injected_sqlite_failures": 3,
+    "lost_ack_recoveries": 10,
+    "notifications": 722,
+    "orders": 10,
+    "peak_python_bytes": 21187028,
+    "positions": 10,
+    "query_plans": {
+      "account_journal": [
+        "SEARCH transactions USING INDEX transaction_account (portfolio=?)",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ],
+      "analysis_history": [
+        "SCAN analyses USING COVERING INDEX analysis_time"
+      ],
+      "event_tail": [
+        "SEARCH events"
+      ],
+      "source_order_journal": [
+        "SCAN transactions"
+      ]
+    },
+    "records_last_audit": 6810,
+    "restarts": 4,
+    "scenario_seconds": 57.295759,
+    "seed": 12,
+    "transactions": 50,
+    "unexpected_errors": 0,
+    "utc_days": 2
+  },
+  "legacy": {
+    "audit_seconds": 12.00313,
+    "audits": 63,
+    "cycles": 3,
+    "database_bytes": 2977792,
+    "domain_audit_seconds": 0.005109,
+    "domain_events": 0,
+    "domain_journal": false,
+    "duplicate_responses": 225,
+    "event_append_attempts": 0,
+    "event_append_max_ms": 0,
+    "event_append_mean_ms": 0,
+    "events": 935,
+    "financial_digest": "c21faf2132b60e66f3ea470d579f01ab033d625289ad780e122f1204eacc79ac",
+    "financial_http_calls": 453,
+    "financial_http_max_ms": 18.489506,
+    "financial_http_mean_ms": 6.800396,
+    "financial_mismatches": 0,
+    "fixture_only": true,
+    "incomplete_checks": 282,
+    "injected_sqlite_failures": 3,
+    "lost_ack_recoveries": 10,
+    "notifications": 722,
+    "orders": 10,
+    "peak_python_bytes": 12185552,
+    "positions": 10,
+    "query_plans": {
+      "account_journal": [
+        "SEARCH transactions USING INDEX transaction_account (portfolio=?)",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ],
+      "analysis_history": [
+        "SCAN analyses USING COVERING INDEX analysis_time"
+      ],
+      "event_tail": [
+        "SEARCH events"
+      ],
+      "source_order_journal": [
+        "SCAN transactions"
+      ]
+    },
+    "records_last_audit": 1060,
+    "restarts": 4,
+    "scenario_seconds": 21.787952,
+    "seed": 12,
+    "transactions": 50,
+    "unexpected_errors": 0,
+    "utc_days": 2
+  },
+  "measurement": "Single paired run, same binary/scenario; not a statistical or production benchmark. Append timings include rolled-back attempts; HTTP timings include ASGI and lock wait."
+}

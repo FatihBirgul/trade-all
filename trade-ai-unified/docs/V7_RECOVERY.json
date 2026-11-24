@@ -1,0 +1,1 @@
+{"start_sha":"ce01eb8933e45e8cd25af6b34418d19f0026c26c","remote_matches":true,"branch":"codex/unified-forex-engine-v6","untracked_preserved":["docs/BENCHMARK_RESULTS.json","docs/V6_OPENAPI.json","docs/V6_RESPONSE_EXAMPLES.json"],"baseline":{"v5":423,"v2":152,"host":47,"failed":0,"skipped":0},"ci_run":42144724852,"ci_jobs":4,"ci_success":4,"net_rr_version":"forex-cost-netrr-v6-2"}

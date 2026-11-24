@@ -1,0 +1,785 @@
+{
+  "collected_at_utc": "2026-11-11T13:20:32.679166+00:00",
+  "preflight": {
+    "status": "PASS",
+    "currency": "USC",
+    "balance": null
+  },
+  "policy_approval": "UNAPPROVED_NO_OPERATOR_LIMITS",
+  "symbols": {
+    "XAUUSD": {
+      "metadata": {
+        "symbol": "XAUUSD",
+        "broker_symbol": "XAUUSDc",
+        "asset_type": "metal",
+        "source": "mt5",
+        "digits": 3,
+        "market_type": "unverified",
+        "contract_type": "unverified",
+        "price_kind": "bid",
+        "trade_calc_mode": 0,
+        "trade_calc_mode_name": "FOREX",
+        "symbol_spread_points": 240,
+        "trade_mode": 4,
+        "allowed_directions": [
+          "BUY",
+          "SELL"
+        ],
+        "base_currency": "XAU",
+        "profit_currency": "USD",
+        "margin_currency": "XAU",
+        "freeze_level": 0,
+        "tick_value_profit": 0.1,
+        "tick_value_loss": 0.1,
+        "broker_server": "Exness-MT5Real50",
+        "max_spread": null,
+        "contract_size": 1.0,
+        "tick_size": 0.001,
+        "tick_value": 0.1,
+        "point": 0.001,
+        "volume_min": 0.01,
+        "volume_max": 200.0,
+        "volume_step": 0.01,
+        "stops_level": 0,
+        "trade_allowed": true,
+        "broker_hours": null,
+        "broker_hours_status": "UNVERIFIED_REAL_SESSION",
+        "account_currency": "USC",
+        "tick_value_currency": "USC",
+        "broker_contract": {
+          "status": "CURRENT_MT5_OBSERVED",
+          "observed_at_utc": "2026-11-11T13:20:32.679166+00:00",
+          "historical_status": "UNVERIFIED",
+          "market_classification": {
+            "value": "PRECIOUS_METAL_PAIR",
+            "trust": "CURRENT_MT5_OBSERVED"
+          },
+          "fields": {
+            "symbol": {
+              "value": "XAUUSD",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "broker_symbol": {
+              "value": "XAUUSDc",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "broker_server": {
+              "value": "Exness-MT5Real50",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "account_currency": {
+              "value": "USC",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "base_currency": {
+              "value": "XAU",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "profit_currency": {
+              "value": "USD",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "margin_currency": {
+              "value": "XAU",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "contract_size": {
+              "value": 1.0,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "point": {
+              "value": 0.001,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "tick_size": {
+              "value": 0.001,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "tick_value_profit": {
+              "value": 0.1,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "tick_value_loss": {
+              "value": 0.1,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "volume_min": {
+              "value": 0.01,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "volume_max": {
+              "value": 200.0,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "volume_step": {
+              "value": 0.01,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "stops_level": {
+              "value": 0,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "freeze_level": {
+              "value": 0,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "digits": {
+              "value": 3,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "trade_calc_mode_name": {
+              "value": "FOREX",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "trade_calc_mode": {
+              "value": 0,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "trade_mode": {
+              "value": 4,
+              "trust": "CURRENT_MT5_OBSERVED"
+            }
+          },
+          "missing_fields": [],
+          "conflicting_fields": []
+        },
+        "broker_contract_required": true,
+        "spread_policy_required": true,
+        "spread_policy": null
+      },
+      "quote": {
+        "symbol": "XAUUSD",
+        "bid": 4042.56,
+        "ask": 4042.8,
+        "spread": 0.24000000000023647,
+        "time": 1794403231.332,
+        "provider": "mt5",
+        "freshness": "FRESH"
+      },
+      "observed_spread": {
+        "price": 0.24,
+        "points": 240.0,
+        "symbol_spread_points": 240
+      },
+      "spread_status": {
+        "decision": "BLOCK",
+        "policy_status": "UNVERIFIED",
+        "observed": {
+          "price": 0.24,
+          "points": 240.0,
+          "symbol_spread_points": 240
+        },
+        "max_allowed_price": null,
+        "policy_version": null,
+        "reasons": [
+          "spread policy operator approval unavailable"
+        ]
+      },
+      "read_only_pnl_samples": {
+        "BUY": {
+          "lot_sample": 1,
+          "price_distance": 0.010000000000218279,
+          "broker_loss_usc": 1.0,
+          "independent_loss_range_usc": [
+            1.0000000000218279,
+            1.0000000000218279
+          ],
+          "slope_consistent": true
+        },
+        "SELL": {
+          "lot_sample": 1,
+          "price_distance": 0.010000000000218279,
+          "broker_loss_usc": 1.0,
+          "independent_loss_range_usc": [
+            1.0000000000218279,
+            1.0000000000218279
+          ],
+          "slope_consistent": true
+        }
+      }
+    },
+    "EURUSD": {
+      "metadata": {
+        "symbol": "EURUSD",
+        "broker_symbol": "EURUSDc",
+        "asset_type": "forex",
+        "source": "mt5",
+        "digits": 5,
+        "market_type": "unverified",
+        "contract_type": "unverified",
+        "price_kind": "bid",
+        "trade_calc_mode": 0,
+        "trade_calc_mode_name": "FOREX",
+        "symbol_spread_points": 8,
+        "trade_mode": 4,
+        "allowed_directions": [
+          "BUY",
+          "SELL"
+        ],
+        "base_currency": "EUR",
+        "profit_currency": "USD",
+        "margin_currency": "EUR",
+        "freeze_level": 0,
+        "tick_value_profit": 1.0,
+        "tick_value_loss": 1.0,
+        "broker_server": "Exness-MT5Real50",
+        "max_spread": null,
+        "contract_size": 1000.0,
+        "tick_size": 1e-05,
+        "tick_value": 1.0,
+        "point": 1e-05,
+        "volume_min": 0.01,
+        "volume_max": 200.0,
+        "volume_step": 0.01,
+        "stops_level": 0,
+        "trade_allowed": true,
+        "broker_hours": null,
+        "broker_hours_status": "UNVERIFIED_REAL_SESSION",
+        "account_currency": "USC",
+        "tick_value_currency": "USC",
+        "broker_contract": {
+          "status": "CURRENT_MT5_OBSERVED",
+          "observed_at_utc": "2026-11-11T13:20:32.679166+00:00",
+          "historical_status": "UNVERIFIED",
+          "market_classification": {
+            "value": "FOREX_PAIR",
+            "trust": "CURRENT_MT5_OBSERVED"
+          },
+          "fields": {
+            "symbol": {
+              "value": "EURUSD",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "broker_symbol": {
+              "value": "EURUSDc",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "broker_server": {
+              "value": "Exness-MT5Real50",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "account_currency": {
+              "value": "USC",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "base_currency": {
+              "value": "EUR",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "profit_currency": {
+              "value": "USD",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "margin_currency": {
+              "value": "EUR",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "contract_size": {
+              "value": 1000.0,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "point": {
+              "value": 1e-05,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "tick_size": {
+              "value": 1e-05,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "tick_value_profit": {
+              "value": 1.0,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "tick_value_loss": {
+              "value": 1.0,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "volume_min": {
+              "value": 0.01,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "volume_max": {
+              "value": 200.0,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "volume_step": {
+              "value": 0.01,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "stops_level": {
+              "value": 0,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "freeze_level": {
+              "value": 0,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "digits": {
+              "value": 5,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "trade_calc_mode_name": {
+              "value": "FOREX",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "trade_calc_mode": {
+              "value": 0,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "trade_mode": {
+              "value": 4,
+              "trust": "CURRENT_MT5_OBSERVED"
+            }
+          },
+          "missing_fields": [],
+          "conflicting_fields": []
+        },
+        "broker_contract_required": true,
+        "spread_policy_required": true,
+        "spread_policy": null
+      },
+      "quote": {
+        "symbol": "EURUSD",
+        "bid": 1.11204,
+        "ask": 1.11212,
+        "spread": 8.000000000008001e-05,
+        "time": 1794403231.391,
+        "provider": "mt5",
+        "freshness": "FRESH"
+      },
+      "observed_spread": {
+        "price": 8e-05,
+        "points": 8.0,
+        "symbol_spread_points": 8
+      },
+      "spread_status": {
+        "decision": "BLOCK",
+        "policy_status": "UNVERIFIED",
+        "observed": {
+          "price": 8e-05,
+          "points": 8.0,
+          "symbol_spread_points": 8
+        },
+        "max_allowed_price": null,
+        "policy_version": null,
+        "reasons": [
+          "spread policy operator approval unavailable"
+        ]
+      },
+      "read_only_pnl_samples": {
+        "BUY": {
+          "lot_sample": 1,
+          "price_distance": 9.999999999998899e-05,
+          "broker_loss_usc": 10.0,
+          "independent_loss_range_usc": [
+            9.999999999998899,
+            9.999999999998899
+          ],
+          "slope_consistent": true
+        },
+        "SELL": {
+          "lot_sample": 1,
+          "price_distance": 9.999999999998899e-05,
+          "broker_loss_usc": 10.0,
+          "independent_loss_range_usc": [
+            9.999999999998899,
+            9.999999999998899
+          ],
+          "slope_consistent": true
+        }
+      }
+    },
+    "GBPUSD": {
+      "metadata": {
+        "symbol": "GBPUSD",
+        "broker_symbol": "GBPUSDc",
+        "asset_type": "forex",
+        "source": "mt5",
+        "digits": 5,
+        "market_type": "unverified",
+        "contract_type": "unverified",
+        "price_kind": "bid",
+        "trade_calc_mode": 0,
+        "trade_calc_mode_name": "FOREX",
+        "symbol_spread_points": 10,
+        "trade_mode": 4,
+        "allowed_directions": [
+          "BUY",
+          "SELL"
+        ],
+        "base_currency": "GBP",
+        "profit_currency": "USD",
+        "margin_currency": "GBP",
+        "freeze_level": 0,
+        "tick_value_profit": 1.0,
+        "tick_value_loss": 1.0,
+        "broker_server": "Exness-MT5Real50",
+        "max_spread": null,
+        "contract_size": 1000.0,
+        "tick_size": 1e-05,
+        "tick_value": 1.0,
+        "point": 1e-05,
+        "volume_min": 0.01,
+        "volume_max": 200.0,
+        "volume_step": 0.01,
+        "stops_level": 0,
+        "trade_allowed": true,
+        "broker_hours": null,
+        "broker_hours_status": "UNVERIFIED_REAL_SESSION",
+        "account_currency": "USC",
+        "tick_value_currency": "USC",
+        "broker_contract": {
+          "status": "CURRENT_MT5_OBSERVED",
+          "observed_at_utc": "2026-11-11T13:20:32.694790+00:00",
+          "historical_status": "UNVERIFIED",
+          "market_classification": {
+            "value": "FOREX_PAIR",
+            "trust": "CURRENT_MT5_OBSERVED"
+          },
+          "fields": {
+            "symbol": {
+              "value": "GBPUSD",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "broker_symbol": {
+              "value": "GBPUSDc",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "broker_server": {
+              "value": "Exness-MT5Real50",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "account_currency": {
+              "value": "USC",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "base_currency": {
+              "value": "GBP",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "profit_currency": {
+              "value": "USD",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "margin_currency": {
+              "value": "GBP",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "contract_size": {
+              "value": 1000.0,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "point": {
+              "value": 1e-05,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "tick_size": {
+              "value": 1e-05,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "tick_value_profit": {
+              "value": 1.0,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "tick_value_loss": {
+              "value": 1.0,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "volume_min": {
+              "value": 0.01,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "volume_max": {
+              "value": 200.0,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "volume_step": {
+              "value": 0.01,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "stops_level": {
+              "value": 0,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "freeze_level": {
+              "value": 0,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "digits": {
+              "value": 5,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "trade_calc_mode_name": {
+              "value": "FOREX",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "trade_calc_mode": {
+              "value": 0,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "trade_mode": {
+              "value": 4,
+              "trust": "CURRENT_MT5_OBSERVED"
+            }
+          },
+          "missing_fields": [],
+          "conflicting_fields": []
+        },
+        "broker_contract_required": true,
+        "spread_policy_required": true,
+        "spread_policy": null
+      },
+      "quote": {
+        "symbol": "GBPUSD",
+        "bid": 1.32996,
+        "ask": 1.33006,
+        "spread": 9.999999999998899e-05,
+        "time": 1794403230.836,
+        "provider": "mt5",
+        "freshness": "FRESH"
+      },
+      "observed_spread": {
+        "price": 0.0001,
+        "points": 10.0,
+        "symbol_spread_points": 10
+      },
+      "spread_status": {
+        "decision": "BLOCK",
+        "policy_status": "UNVERIFIED",
+        "observed": {
+          "price": 0.0001,
+          "points": 10.0,
+          "symbol_spread_points": 10
+        },
+        "max_allowed_price": null,
+        "policy_version": null,
+        "reasons": [
+          "spread policy operator approval unavailable"
+        ]
+      },
+      "read_only_pnl_samples": {
+        "BUY": {
+          "lot_sample": 1,
+          "price_distance": 9.999999999998899e-05,
+          "broker_loss_usc": 10.0,
+          "independent_loss_range_usc": [
+            9.999999999998899,
+            9.999999999998899
+          ],
+          "slope_consistent": true
+        },
+        "SELL": {
+          "lot_sample": 1,
+          "price_distance": 9.999999999998899e-05,
+          "broker_loss_usc": 10.0,
+          "independent_loss_range_usc": [
+            9.999999999998899,
+            9.999999999998899
+          ],
+          "slope_consistent": true
+        }
+      }
+    },
+    "USDJPY": {
+      "metadata": {
+        "symbol": "USDJPY",
+        "broker_symbol": "USDJPYc",
+        "asset_type": "forex",
+        "source": "mt5",
+        "digits": 3,
+        "market_type": "unverified",
+        "contract_type": "unverified",
+        "price_kind": "bid",
+        "trade_calc_mode": 0,
+        "trade_calc_mode_name": "FOREX",
+        "symbol_spread_points": 10,
+        "trade_mode": 4,
+        "allowed_directions": [
+          "BUY",
+          "SELL"
+        ],
+        "base_currency": "USD",
+        "profit_currency": "JPY",
+        "margin_currency": "USD",
+        "freeze_level": 0,
+        "tick_value_profit": 0.627490352335833,
+        "tick_value_loss": 0.6275297292209219,
+        "broker_server": "Exness-MT5Real50",
+        "max_spread": null,
+        "contract_size": 1000.0,
+        "tick_size": 0.001,
+        "tick_value": 0.627490352335833,
+        "point": 0.001,
+        "volume_min": 0.01,
+        "volume_max": 200.0,
+        "volume_step": 0.01,
+        "stops_level": 0,
+        "trade_allowed": true,
+        "broker_hours": null,
+        "broker_hours_status": "UNVERIFIED_REAL_SESSION",
+        "account_currency": "USC",
+        "tick_value_currency": "USC",
+        "broker_contract": {
+          "status": "CURRENT_MT5_OBSERVED",
+          "observed_at_utc": "2026-11-11T13:20:32.694790+00:00",
+          "historical_status": "UNVERIFIED",
+          "market_classification": {
+            "value": "FOREX_PAIR",
+            "trust": "CURRENT_MT5_OBSERVED"
+          },
+          "fields": {
+            "symbol": {
+              "value": "USDJPY",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "broker_symbol": {
+              "value": "USDJPYc",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "broker_server": {
+              "value": "Exness-MT5Real50",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "account_currency": {
+              "value": "USC",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "base_currency": {
+              "value": "USD",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "profit_currency": {
+              "value": "JPY",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "margin_currency": {
+              "value": "USD",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "contract_size": {
+              "value": 1000.0,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "point": {
+              "value": 0.001,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "tick_size": {
+              "value": 0.001,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "tick_value_profit": {
+              "value": 0.627490352335833,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "tick_value_loss": {
+              "value": 0.6275297292209219,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "volume_min": {
+              "value": 0.01,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "volume_max": {
+              "value": 200.0,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "volume_step": {
+              "value": 0.01,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "stops_level": {
+              "value": 0,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "freeze_level": {
+              "value": 0,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "digits": {
+              "value": 3,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "trade_calc_mode_name": {
+              "value": "FOREX",
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "trade_calc_mode": {
+              "value": 0,
+              "trust": "CURRENT_MT5_OBSERVED"
+            },
+            "trade_mode": {
+              "value": 4,
+              "trust": "CURRENT_MT5_OBSERVED"
+            }
+          },
+          "missing_fields": [],
+          "conflicting_fields": []
+        },
+        "broker_contract_required": true,
+        "spread_policy_required": true,
+        "spread_policy": null
+      },
+      "quote": {
+        "symbol": "USDJPY",
+        "bid": 159.355,
+        "ask": 159.365,
+        "spread": 0.010000000000019327,
+        "time": 1794403231.481,
+        "provider": "mt5",
+        "freshness": "FRESH"
+      },
+      "observed_spread": {
+        "price": 0.01,
+        "points": 10.0,
+        "symbol_spread_points": 10
+      },
+      "spread_status": {
+        "decision": "BLOCK",
+        "policy_status": "UNVERIFIED",
+        "observed": {
+          "price": 0.01,
+          "points": 10.0,
+          "symbol_spread_points": 10
+        },
+        "max_allowed_price": null,
+        "policy_version": null,
+        "reasons": [
+          "spread policy operator approval unavailable"
+        ]
+      },
+      "read_only_pnl_samples": {
+        "BUY": {
+          "lot_sample": 1,
+          "price_distance": 0.009999999999990905,
+          "broker_loss_usc": 6.28,
+          "independent_loss_range_usc": [
+            6.274903523352621,
+            6.275297292203511
+          ],
+          "slope_consistent": true
+        },
+        "SELL": {
+          "lot_sample": 1,
+          "price_distance": 0.009999999999990905,
+          "broker_loss_usc": 6.28,
+          "independent_loss_range_usc": [
+            6.274903523352621,
+            6.275297292203511
+          ],
+          "slope_consistent": true
+        }
+      }
+    }
+  },
+  "account_identity_unchanged": true,
+  "account_identifier_recorded": false,
+  "real_balance_used_or_recorded": false,
+  "observation_collector_base_head": "09e5dab3bead337b3fab6a9267bbfe4fc16f3e7b",
+  "operator_limit_status": "UNAPPROVED",
+  "collector_source_sha256": {
+    "forex\\providers.py": "c487da190f18eb09f1f15692bd582c6df2715370441a84ee0edb0b73ed9bdaa5",
+    "forex\\broker_contract.py": "4e691e4781195acf399de1cf57a122b1111954521621870e8b573222df3369cf",
+    "forex\\spread_policy.py": "87d2ee089f41e9472fa16729d7e71d137659bde76ec610e1412171183a5062f4"
+  }
+}

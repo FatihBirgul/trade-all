@@ -1,0 +1,41 @@
+{
+  "evidence": "Actual exported app; controlled HTTP fixtures; not a real backend or phone test",
+  "results": [
+    {
+      "name": "demo-basic-390",
+      "width": 390,
+      "horizontalOverflow": false
+    },
+    {
+      "name": "controlled-market-basic-390",
+      "width": 390,
+      "horizontalOverflow": false
+    },
+    {
+      "name": "controlled-stale-390",
+      "width": 390,
+      "horizontalOverflow": false
+    },
+    {
+      "name": "controlled-snapshot-basic-390",
+      "width": 390,
+      "horizontalOverflow": false
+    },
+    {
+      "name": "controlled-snapshot-pro-390",
+      "width": 390,
+      "horizontalOverflow": false
+    },
+    {
+      "name": "controlled-snapshot-pro-320",
+      "width": 320,
+      "horizontalOverflow": false
+    },
+    {
+      "name": "controlled-snapshot-pro-320-text150",
+      "width": 320,
+      "horizontalOverflow": false
+    }
+  ],
+  "errors": []
+}

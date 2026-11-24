@@ -1,0 +1,139 @@
+{
+  "engine_version": "7.0.0",
+  "code_sha256": "36c1d28de7764b83ea0bd3e7147eb72ab73cdf59dc1fe225372f15cfbc8703be",
+  "data_kind": "SYNTHETIC_TEST",
+  "market_performance_evidence": false,
+  "environment": {
+    "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "python": "3.12.14"
+  },
+  "measurement": "3 sequential timing repetitions plus separate tracemalloc run; Python allocations are not process RSS or MT5 latency",
+  "benchmarks": {
+    "single_xauusd": {
+      "repetitions": 3,
+      "median_seconds": 0.0654685999998037,
+      "timings_seconds": [
+        0.06426166700020985,
+        0.0654685999998037,
+        0.06640705799964053
+      ],
+      "python_peak_bytes_separate_run": 1161887,
+      "provider_calls_per_run": {
+        "metadata": 1.0,
+        "quote": 1.0,
+        "candles": 2.0
+      }
+    },
+    "four_symbol_scanner": {
+      "repetitions": 3,
+      "median_seconds": 0.32389483000042674,
+      "timings_seconds": [
+        0.37751244399987627,
+        0.28124789699995745,
+        0.32389483000042674
+      ],
+      "python_peak_bytes_separate_run": 2517095,
+      "provider_calls": 16,
+      "cache_stats": {
+        "hits": 0,
+        "misses": 16,
+        "scope": "request_only"
+      }
+    },
+    "three_timeframes": {
+      "repetitions": 3,
+      "median_seconds": 0.1377260290000777,
+      "timings_seconds": [
+        0.1377260290000777,
+        0.15590703599991684,
+        0.12012582900024427
+      ],
+      "python_peak_bytes_separate_run": 1934049
+    },
+    "candlestick_catalogue": {
+      "repetitions": 3,
+      "median_seconds": 0.0029100440006004646,
+      "timings_seconds": [
+        0.003187260999766295,
+        0.0029100440006004646,
+        0.0029068089997963398
+      ],
+      "python_peak_bytes_separate_run": 203391
+    },
+    "chart_geometry": {
+      "repetitions": 3,
+      "median_seconds": 0.011433560000114085,
+      "timings_seconds": [
+        0.011433560000114085,
+        0.044251307000195084,
+        0.010896928999500233
+      ],
+      "python_peak_bytes_separate_run": 7752
+    },
+    "v2_confluence_100": {
+      "repetitions": 3,
+      "median_seconds": 0.0011033860000679852,
+      "timings_seconds": [
+        0.0013107989998388803,
+        0.0011033860000679852,
+        0.0010043170004792046
+      ],
+      "python_peak_bytes_separate_run": 141272
+    },
+    "500_bar_replay": {
+      "repetitions": 3,
+      "median_seconds": 1.0177948640002796,
+      "timings_seconds": [
+        1.5088167960002465,
+        1.0177948640002796,
+        0.91762954800015
+      ],
+      "python_peak_bytes_separate_run": 988031,
+      "analyses": 13,
+      "closed_trades": 12
+    },
+    "2000_bar_replay": {
+      "repetitions": 3,
+      "median_seconds": 8.320867776999876,
+      "timings_seconds": [
+        8.320867776999876,
+        8.291657781999675,
+        8.425783800000318
+      ],
+      "python_peak_bytes_separate_run": 3470828,
+      "analyses": 88,
+      "closed_trades": 87
+    },
+    "two_fold_validation_oos": {
+      "repetitions": 3,
+      "median_seconds": 1.2064563039994027,
+      "timings_seconds": [
+        1.2064563039994027,
+        1.1995523810001032,
+        1.2432001009992746
+      ],
+      "python_peak_bytes_separate_run": 1048423
+    },
+    "monte_carlo_200_draws_100_trades": {
+      "repetitions": 3,
+      "median_seconds": 0.008374465000088094,
+      "timings_seconds": [
+        0.008754499000133364,
+        0.008374465000088094,
+        0.0082505480004329
+      ],
+      "python_peak_bytes_separate_run": 20832
+    },
+    "api_analysis_testclient": {
+      "repetitions": 3,
+      "median_seconds": 0.07528358099989418,
+      "timings_seconds": [
+        0.09656148300018685,
+        0.07528358099989418,
+        0.07049221000033867
+      ],
+      "python_peak_bytes_separate_run": 1263210
+    }
+  },
+  "source_checkpoint": "a108c9dddc9208574054cb9e6933b36976fc61b8"
+}

@@ -1,0 +1,32 @@
+[
+  {
+    "path": "unified_forex/data_sides.py",
+    "origin": "V9 target-owned integration/validation code; retained V5/V2 contracts reused",
+    "sha256": "3239bfe017aa7aa9a48e9fa0c8c260bc271dd4d1515a266c87f89038b0639451",
+    "market_validation": false
+  },
+  {
+    "path": "unified_forex/research_protocol.py",
+    "origin": "V9 target-owned integration/validation code; retained V5/V2 contracts reused",
+    "sha256": "ff2f9cd031080d985fafb28bd800e9e5765e9f6f3f3a54b2293cb8b7f37134a7",
+    "market_validation": false
+  },
+  {
+    "path": "unified_forex/decision_journal.py",
+    "origin": "V9 target-owned integration/validation code; retained V5/V2 contracts reused",
+    "sha256": "d4c5a84d1927856e7794b5abeb53b8c84e2fb87a4089d28821ed06a132000033",
+    "market_validation": false
+  },
+  {
+    "path": "unified_forex/checkpoint_store.py",
+    "origin": "V9 target-owned integration/validation code; retained V5/V2 contracts reused",
+    "sha256": "cfa8f1865f6226866e42947734931c1441d8e42d926e1f57764113223e23768c",
+    "market_validation": false
+  },
+  {
+    "path": "unified_forex/pilot_validation.py",
+    "origin": "V9 target-owned integration/validation code; retained V5/V2 contracts reused",
+    "sha256": "31a743692488951bbef77e54383bb02fec8636e3dbdd55766f4911c5d31b5f06",
+    "market_validation": false
+  }
+]

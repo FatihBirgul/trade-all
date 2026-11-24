@@ -1,0 +1,230 @@
+{
+  "paired_paper_soak": {
+    "environment": {
+      "code_checkpoint": "647358fed6d7867508e2d0387e36627959b9bebd",
+      "date_utc": "2026-10-31",
+      "limitation": "Some independent unit tests ran concurrently; timing is observational, not a statistical or production benchmark.",
+      "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+      "python": "3.12.14"
+    },
+    "financial_results_equal": true,
+    "journal": {
+      "audit_seconds": 49.486434,
+      "audits": 63,
+      "cycles": 3,
+      "database_bytes": 9428992,
+      "domain_audit_seconds": 34.093156,
+      "domain_events": 5750,
+      "domain_journal": true,
+      "duplicate_responses": 225,
+      "event_append_attempts": 5798,
+      "event_append_max_ms": 10.479407,
+      "event_append_mean_ms": 0.245371,
+      "events": 935,
+      "financial_digest": "5aa6a3a7567185d05c0739931f7f05e75da75fc3936ee1fa44fecc933221b790",
+      "financial_http_calls": 453,
+      "financial_http_max_ms": 57.865396,
+      "financial_http_mean_ms": 16.277868,
+      "financial_mismatches": 0,
+      "fixture_only": true,
+      "incomplete_checks": 0,
+      "injected_sqlite_failures": 3,
+      "lost_ack_recoveries": 10,
+      "notifications": 722,
+      "orders": 10,
+      "peak_python_bytes": 21284724,
+      "positions": 10,
+      "query_plans": {
+        "account_journal": [
+          "SEARCH transactions USING INDEX transaction_account (portfolio=?)",
+          "USE TEMP B-TREE FOR ORDER BY"
+        ],
+        "analysis_history": [
+          "SCAN analyses USING COVERING INDEX analysis_time"
+        ],
+        "event_tail": [
+          "SEARCH events"
+        ],
+        "source_order_journal": [
+          "SCAN transactions"
+        ]
+      },
+      "records_last_audit": 6810,
+      "restarts": 4,
+      "scenario_seconds": 70.381063,
+      "seed": 12,
+      "transactions": 50,
+      "unexpected_errors": 0,
+      "utc_days": 2
+    },
+    "legacy": {
+      "audit_seconds": 16.30434,
+      "audits": 63,
+      "cycles": 3,
+      "database_bytes": 3145728,
+      "domain_audit_seconds": 0.006718,
+      "domain_events": 0,
+      "domain_journal": false,
+      "duplicate_responses": 225,
+      "event_append_attempts": 0,
+      "event_append_max_ms": 0,
+      "event_append_mean_ms": 0,
+      "events": 935,
+      "financial_digest": "5aa6a3a7567185d05c0739931f7f05e75da75fc3936ee1fa44fecc933221b790",
+      "financial_http_calls": 453,
+      "financial_http_max_ms": 72.870541,
+      "financial_http_mean_ms": 9.171371,
+      "financial_mismatches": 0,
+      "fixture_only": true,
+      "incomplete_checks": 282,
+      "injected_sqlite_failures": 3,
+      "lost_ack_recoveries": 10,
+      "notifications": 722,
+      "orders": 10,
+      "peak_python_bytes": 11802872,
+      "positions": 10,
+      "query_plans": {
+        "account_journal": [
+          "SEARCH transactions USING INDEX transaction_account (portfolio=?)",
+          "USE TEMP B-TREE FOR ORDER BY"
+        ],
+        "analysis_history": [
+          "SCAN analyses USING COVERING INDEX analysis_time"
+        ],
+        "event_tail": [
+          "SEARCH events"
+        ],
+        "source_order_journal": [
+          "SCAN transactions"
+        ]
+      },
+      "records_last_audit": 1060,
+      "restarts": 4,
+      "scenario_seconds": 29.194678,
+      "seed": 12,
+      "transactions": 50,
+      "unexpected_errors": 0,
+      "utc_days": 2
+    },
+    "measurement": "Single paired run, same binary/scenario; not a statistical or production benchmark. Append timings include rolled-back attempts; HTTP timings include ASGI and lock wait."
+  },
+  "public_provider_read_smoke": {
+    "analysis_smoke": {
+      "checked_at_ms": 1793467880796,
+      "market_performance_validation": false,
+      "method_statuses": {
+        "adx14_wilder": "available",
+        "bollinger_bandwidth20": "available",
+        "donchian20_previous": "available",
+        "roc12": "available",
+        "stochastic14": "available",
+        "supertrend10_3": "available"
+      },
+      "methods_status": "available",
+      "pattern_count": 11,
+      "pattern_version": "v2-pattern-research-1",
+      "patterns_status": "available",
+      "persistent_database_used": false,
+      "trade_permission": false
+    },
+    "backtest_performed": false,
+    "bars": 300,
+    "checked_at_ms": 1793467785118,
+    "data_republished": false,
+    "historical_point_in_time_rules_verified": false,
+    "issues": [],
+    "last_close_ms": 1793467740000,
+    "license_review": "NOT_COMPLETED",
+    "private_network_used": false,
+    "provider": "binance_public_spot",
+    "quality_ok": true,
+    "real_execution": false,
+    "rules_source": "binance_exchange_info",
+    "status": "AVAILABLE"
+  },
+  "research_smoke": {
+    "ambiguous_positions": 0,
+    "analyses": 1,
+    "analysis_version": "v2-product-analysis-3",
+    "audit": {
+      "checks": {
+        "CORRUPT": 0,
+        "ERROR": 0,
+        "INCOMPLETE": 0,
+        "MISMATCH": 0,
+        "PASS": 554
+      },
+      "domain": {
+        "coverage": "genesis",
+        "events": 46,
+        "scope": "chain_state_commands_and_recorded_execution_decisions",
+        "status": "PASS"
+      },
+      "findings": [],
+      "status": "PASS"
+    },
+    "checkpoints": [
+      {
+        "at_ms": 1800000000000,
+        "checks": {
+          "CORRUPT": 0,
+          "ERROR": 0,
+          "INCOMPLETE": 0,
+          "MISMATCH": 0,
+          "PASS": 213
+        },
+        "status": "PASS"
+      },
+      {
+        "at_ms": 1800000180000,
+        "checks": {
+          "CORRUPT": 0,
+          "ERROR": 0,
+          "INCOMPLETE": 0,
+          "MISMATCH": 0,
+          "PASS": 554
+        },
+        "status": "PASS"
+      }
+    ],
+    "code_commit": "2a7320c5b8ea763d0445b893167a7f633f88cdb5",
+    "configuration": {
+      "analysis_every_bars": 10,
+      "audit_every_bars": 100,
+      "end_ms": 1800000180000,
+      "max_analyses": 50,
+      "max_events": 3000,
+      "portfolio": "MANUAL",
+      "seed": 12,
+      "simulate_orders": true,
+      "start_ms": 1800000000000,
+      "strategy_ids": [
+        "confirmed_breakout_v2",
+        "failed_breakout_v2",
+        "range_mean_reversion_v2",
+        "trend_momentum_v2"
+      ],
+      "timeframe": "1m",
+      "timeframes": []
+    },
+    "data_kind": "synthetic",
+    "data_version": "test-fixture-1",
+    "dataset_digest": "78f0114cd5b3d07123ede22188d3677a9bd57d6169d144b677af35137f6e3ed3",
+    "domain_events": 46,
+    "events": 3,
+    "evidence_status": "INSUFFICIENT_EVIDENCE",
+    "fixture_only": true,
+    "integrity_status": "PASS",
+    "journal_records": 3,
+    "limitation": "Synthetic three-bar execution smoke; no market profitability, OOS or forward validation. Tracemalloc is not process RSS.",
+    "open_positions": 0,
+    "orders": 1,
+    "peak_python_bytes": 2082397,
+    "pending_orders": 0,
+    "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "python": "3.12.14",
+    "seconds": 0.4965189440008544,
+    "validation_status": "DETECTION_IMPLEMENTED",
+    "version": "v2-historical-research-1"
+  }
+}

@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.egg-info/
+local_data/
+.env
+*.sqlite*
+*.db*
+*.key
+*.pem
+*.log

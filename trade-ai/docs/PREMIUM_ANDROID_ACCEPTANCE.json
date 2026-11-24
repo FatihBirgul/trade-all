@@ -1,0 +1,591 @@
+{
+  "adaptive_alpha_safe_zone": {
+    "adaptive-foreground": {
+      "max_alpha_radius_px": 305.235,
+      "safe_circle_radius_px": 313,
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "adaptive-monochrome": {
+      "max_alpha_radius_px": 305.235,
+      "safe_circle_radius_px": 313,
+      "size": [
+        1024,
+        1024
+      ]
+    }
+  },
+  "android_checkpoint": "20543832f3fb8afb85597720387ee873913924e4",
+  "android_source": "4be11a66e3f45e0a119db3647d5c7ce40c3f58e0",
+  "api_changed": false,
+  "backend_offline_runner": {
+    "passed": 567,
+    "resource_warnings": "error",
+    "runtime_code_unchanged": true
+  },
+  "backend_pytest_v2_glob_passed": 569,
+  "backend_quote_outcome_passed": 11,
+  "baseline_backend_code": "4e5bb9bb3b5079bc7a8201a7b16b202ff6db8249",
+  "browser_checkpoint": [
+    {
+      "explicit_unknown": true,
+      "non_loopback_requests": 0,
+      "page_errors": [],
+      "theme": "dark",
+      "unsupported_controls_absent": true,
+      "viewport": "390x844"
+    },
+    {
+      "explicit_unknown": true,
+      "non_loopback_requests": 0,
+      "page_errors": [],
+      "theme": "light",
+      "unsupported_controls_absent": true,
+      "viewport": "390x844"
+    }
+  ],
+  "browser_final": {
+    "results": [
+      {
+        "explicit_unknown": true,
+        "non_loopback_requests": 0,
+        "page_errors": [],
+        "theme": "dark",
+        "unsupported_controls_absent": true,
+        "viewport": "390x844"
+      },
+      {
+        "explicit_unknown": true,
+        "non_loopback_requests": 0,
+        "page_errors": [],
+        "theme": "light",
+        "unsupported_controls_absent": true,
+        "viewport": "390x844"
+      }
+    ],
+    "route_header": "Taray\u0131c\u0131 ve F\u0131rsatlar",
+    "source": "4be11a66e3f45e0a119db3647d5c7ce40c3f58e0"
+  },
+  "clean_source_https_checkpoint": {
+    "audit_checkpoints": [
+      {
+        "checks": {
+          "CORRUPT": 0,
+          "ERROR": 0,
+          "INCOMPLETE": 0,
+          "MISMATCH": 0,
+          "PASS": 25184
+        },
+        "status": "PASS"
+      },
+      {
+        "checks": {
+          "CORRUPT": 0,
+          "ERROR": 0,
+          "INCOMPLETE": 0,
+          "MISMATCH": 0,
+          "PASS": 25184
+        },
+        "status": "PASS"
+      }
+    ],
+    "automatic_orders": 0,
+    "backend_admin_bearer_on_android": false,
+    "contract_sha256": "729f422ae44c146a71b4bcd75f2f1df1c68ad07dddd9e9ed50619a80fa8f24eb",
+    "fixture_administrator_seeded_orders": 2,
+    "fixture_clock_ms": 1793685000000,
+    "market_data": "controlled fixture; live wire contract only, never live market evidence",
+    "market_validation": "INSUFFICIENT_EVIDENCE",
+    "physical_device": "UNVERIFIED",
+    "privileged_backend_requests": 99,
+    "public_listener": false,
+    "release_gate": "PASS",
+    "results": [
+      {
+        "scenario": "pairing_scopes_tls_and_market_catalogue",
+        "status": "PASS"
+      },
+      {
+        "scenario": "analysis_saved_closed_snapshot_and_research",
+        "status": "PASS"
+      },
+      {
+        "scenario": "older_backend_missing_research_requires_update_not_generic_outage",
+        "status": "PASS"
+      },
+      {
+        "scenario": "profile_create_revision_select_analysis_and_lost_ack_retry",
+        "status": "PASS"
+      },
+      {
+        "scenario": "scanner_follow_profile_binding_and_no_auto_orders",
+        "status": "PASS"
+      },
+      {
+        "scenario": "provider_outage_wait_recovery_and_follow_lifecycle",
+        "status": "PASS"
+      },
+      {
+        "scenario": "dual_scanner_explicit_grant_worker_and_saved_opportunities",
+        "status": "PASS"
+      },
+      {
+        "scenario": "opportunity_outage_recovery_dedup_and_chain",
+        "status": "PASS"
+      },
+      {
+        "scenario": "named_profile_timeframes_and_explicit_account_activation",
+        "status": "PASS"
+      },
+      {
+        "scenario": "paper_isolation_equity_archive_pagination_and_independent_audit",
+        "status": "PASS"
+      },
+      {
+        "scenario": "notification_authorization_and_closed_paper_permissions",
+        "status": "PASS"
+      },
+      {
+        "scenario": "restart_preserves_snapshots_profiles_sessions_and_audit",
+        "status": "PASS"
+      },
+      {
+        "scenario": "renewal_lost_ack_replays_same_committed_rotation_and_revocation",
+        "status": "PASS"
+      },
+      {
+        "scenario": "invalid_gateway_response_rejected_by_actual_android_validator",
+        "status": "PASS"
+      },
+      {
+        "scenario": "backend_unavailable_is_not_fake_success",
+        "status": "PASS"
+      },
+      {
+        "scenario": "real_https_timeout_and_disconnected_gateway",
+        "status": "PASS"
+      }
+    ],
+    "source_heads": {
+      "android": {
+        "dirty": false,
+        "sha": "20543832f3fb8afb85597720387ee873913924e4"
+      },
+      "backend": {
+        "dirty": false,
+        "sha": "6d2d5c5a86f854af4cb1c7894ab23ffa4277199d"
+      },
+      "gateway": {
+        "dirty": false,
+        "sha": "d1c0e4d2263626a30e81af9e2b40d5e952cb7b76"
+      }
+    },
+    "storage": "renewal save callback in-memory; physical SecureStore unverified",
+    "tls_verified": true,
+    "transport": "real certificate-verified loopback HTTPS to production Gateway then production Backend ASGI",
+    "wire_requests": 100,
+    "wire_statuses": [
+      200,
+      422,
+      404,
+      403,
+      409,
+      401,
+      503
+    ]
+  },
+  "dependency_audit": {
+    "dependency_versions_changed": false,
+    "high_packages": [
+      "@expo/cli",
+      "node-forge",
+      "zod"
+    ],
+    "metadata": {
+      "critical": 0,
+      "high": 3,
+      "info": 0,
+      "low": 1,
+      "moderate": 42,
+      "total": 46
+    },
+    "note": "Pre-existing locked dependency graph; package lock changed only app version. No automated audit fix; exploitability and build/runtime reachability require separate review."
+  },
+  "documentation_note": "Enclosing final HEAD changes only docs beyond clean tested Backend7b99f72; runtime/API unchanged.",
+  "final_android_https_acceptance": {
+    "audit_checkpoints": [
+      {
+        "checks": {
+          "CORRUPT": 0,
+          "ERROR": 0,
+          "INCOMPLETE": 0,
+          "MISMATCH": 0,
+          "PASS": 25184
+        },
+        "status": "PASS"
+      },
+      {
+        "checks": {
+          "CORRUPT": 0,
+          "ERROR": 0,
+          "INCOMPLETE": 0,
+          "MISMATCH": 0,
+          "PASS": 25184
+        },
+        "status": "PASS"
+      }
+    ],
+    "automatic_orders": 0,
+    "backend_admin_bearer_on_android": false,
+    "contract_sha256": "729f422ae44c146a71b4bcd75f2f1df1c68ad07dddd9e9ed50619a80fa8f24eb",
+    "fixture_administrator_seeded_orders": 2,
+    "fixture_clock_ms": 1793685300000,
+    "market_data": "controlled fixture; live wire contract only, never live market evidence",
+    "market_validation": "INSUFFICIENT_EVIDENCE",
+    "physical_device": "UNVERIFIED",
+    "privileged_backend_requests": 99,
+    "public_listener": false,
+    "release_gate": "PASS",
+    "results": [
+      {
+        "scenario": "pairing_scopes_tls_and_market_catalogue",
+        "status": "PASS"
+      },
+      {
+        "scenario": "analysis_saved_closed_snapshot_and_research",
+        "status": "PASS"
+      },
+      {
+        "scenario": "older_backend_missing_research_requires_update_not_generic_outage",
+        "status": "PASS"
+      },
+      {
+        "scenario": "profile_create_revision_select_analysis_and_lost_ack_retry",
+        "status": "PASS"
+      },
+      {
+        "scenario": "scanner_follow_profile_binding_and_no_auto_orders",
+        "status": "PASS"
+      },
+      {
+        "scenario": "provider_outage_wait_recovery_and_follow_lifecycle",
+        "status": "PASS"
+      },
+      {
+        "scenario": "dual_scanner_explicit_grant_worker_and_saved_opportunities",
+        "status": "PASS"
+      },
+      {
+        "scenario": "opportunity_outage_recovery_dedup_and_chain",
+        "status": "PASS"
+      },
+      {
+        "scenario": "named_profile_timeframes_and_explicit_account_activation",
+        "status": "PASS"
+      },
+      {
+        "scenario": "paper_isolation_equity_archive_pagination_and_independent_audit",
+        "status": "PASS"
+      },
+      {
+        "scenario": "notification_authorization_and_closed_paper_permissions",
+        "status": "PASS"
+      },
+      {
+        "scenario": "restart_preserves_snapshots_profiles_sessions_and_audit",
+        "status": "PASS"
+      },
+      {
+        "scenario": "renewal_lost_ack_replays_same_committed_rotation_and_revocation",
+        "status": "PASS"
+      },
+      {
+        "scenario": "invalid_gateway_response_rejected_by_actual_android_validator",
+        "status": "PASS"
+      },
+      {
+        "scenario": "backend_unavailable_is_not_fake_success",
+        "status": "PASS"
+      },
+      {
+        "scenario": "real_https_timeout_and_disconnected_gateway",
+        "status": "PASS"
+      }
+    ],
+    "source_heads": {
+      "android": {
+        "dirty": false,
+        "sha": "4be11a66e3f45e0a119db3647d5c7ce40c3f58e0"
+      },
+      "backend": {
+        "dirty": false,
+        "sha": "7b99f729343e1144da3c1c03c36cf567a8f28e86"
+      },
+      "gateway": {
+        "dirty": false,
+        "sha": "d1c0e4d2263626a30e81af9e2b40d5e952cb7b76"
+      }
+    },
+    "storage": "renewal save callback in-memory; physical SecureStore unverified",
+    "tls_verified": true,
+    "transport": "real certificate-verified loopback HTTPS to production Gateway then production Backend ASGI",
+    "wire_requests": 100,
+    "wire_statuses": [
+      200,
+      422,
+      404,
+      403,
+      409,
+      401,
+      503
+    ]
+  },
+  "financial_source_changed": false,
+  "frontend_final": {
+    "result": "success",
+    "run": 41586572598,
+    "source": "4be11a66e3f45e0a119db3647d5c7ce40c3f58e0"
+  },
+  "gateway": "d1c0e4d2263626a30e81af9e2b40d5e952cb7b76",
+  "gateway_local": {
+    "private_checkout_skipped": 16,
+    "standalone_passed": 44,
+    "with_backend_passed": 60,
+    "with_backend_skipped": 0
+  },
+  "local_ui_tests": {
+    "android_js_export": "PASS",
+    "eslint": "PASS",
+    "jest": 213,
+    "local_expo_checks": 17,
+    "online_expo_doctor": "NOT_RUN",
+    "python_apk_brand_tests": 10,
+    "suites": 47,
+    "typescript": "PASS"
+  },
+  "native_final": {
+    "abis": [
+      "arm64-v8a"
+    ],
+    "actual_icon_matches_approved_sources": true,
+    "actual_in_app_brand_raster_matches": [
+      "res/N5.png"
+    ],
+    "actual_packaged_icon_layers": {
+      "background": [
+        {
+          "alpha_threshold": 128,
+          "opaque_alpha_iou": 1.0,
+          "packaged_asset": "res/At.webp",
+          "qualifier": "mdpi",
+          "rgba_mean_absolute_error": 0.0,
+          "size": [
+            108,
+            108
+          ]
+        },
+        {
+          "alpha_threshold": 128,
+          "opaque_alpha_iou": 1.0,
+          "packaged_asset": "res/4k.webp",
+          "qualifier": "hdpi",
+          "rgba_mean_absolute_error": 0.0,
+          "size": [
+            162,
+            162
+          ]
+        },
+        {
+          "alpha_threshold": 128,
+          "opaque_alpha_iou": 1.0,
+          "packaged_asset": "res/By.webp",
+          "qualifier": "xhdpi",
+          "rgba_mean_absolute_error": 0.0,
+          "size": [
+            216,
+            216
+          ]
+        },
+        {
+          "alpha_threshold": 128,
+          "opaque_alpha_iou": 1.0,
+          "packaged_asset": "res/BZ.webp",
+          "qualifier": "xxhdpi",
+          "rgba_mean_absolute_error": 0.0,
+          "size": [
+            324,
+            324
+          ]
+        },
+        {
+          "alpha_threshold": 128,
+          "opaque_alpha_iou": 1.0,
+          "packaged_asset": "res/gS.webp",
+          "qualifier": "xxxhdpi",
+          "rgba_mean_absolute_error": 0.0,
+          "size": [
+            432,
+            432
+          ]
+        }
+      ],
+      "foreground": [
+        {
+          "alpha_threshold": 128,
+          "opaque_alpha_iou": 0.9978632478632479,
+          "packaged_asset": "res/Nt.webp",
+          "qualifier": "mdpi",
+          "rgba_mean_absolute_error": 2.6104466735253773,
+          "size": [
+            108,
+            108
+          ]
+        },
+        {
+          "alpha_threshold": 128,
+          "opaque_alpha_iou": 1.0,
+          "packaged_asset": "res/13.webp",
+          "qualifier": "hdpi",
+          "rgba_mean_absolute_error": 1.6899196006706294,
+          "size": [
+            162,
+            162
+          ]
+        },
+        {
+          "alpha_threshold": 128,
+          "opaque_alpha_iou": 1.0,
+          "packaged_asset": "res/9Q.webp",
+          "qualifier": "xhdpi",
+          "rgba_mean_absolute_error": 1.1905274777091908,
+          "size": [
+            216,
+            216
+          ]
+        },
+        {
+          "alpha_threshold": 128,
+          "opaque_alpha_iou": 1.0,
+          "packaged_asset": "res/iE.webp",
+          "qualifier": "xxhdpi",
+          "rgba_mean_absolute_error": 1.1657545534217344,
+          "size": [
+            324,
+            324
+          ]
+        },
+        {
+          "alpha_threshold": 128,
+          "opaque_alpha_iou": 1.0,
+          "packaged_asset": "res/5c.webp",
+          "qualifier": "xxxhdpi",
+          "rgba_mean_absolute_error": 0.5853065522119342,
+          "size": [
+            432,
+            432
+          ]
+        }
+      ],
+      "monochrome": [
+        {
+          "alpha_threshold": 128,
+          "opaque_alpha_iou": 0.9978632478632479,
+          "packaged_asset": "res/_l.webp",
+          "qualifier": "mdpi",
+          "rgba_mean_absolute_error": 3.038280178326475,
+          "size": [
+            108,
+            108
+          ]
+        },
+        {
+          "alpha_threshold": 128,
+          "opaque_alpha_iou": 1.0,
+          "packaged_asset": "res/mJ.webp",
+          "qualifier": "hdpi",
+          "rgba_mean_absolute_error": 2.036694101508916,
+          "size": [
+            162,
+            162
+          ]
+        },
+        {
+          "alpha_threshold": 128,
+          "opaque_alpha_iou": 1.0,
+          "packaged_asset": "res/Yu.webp",
+          "qualifier": "xhdpi",
+          "rgba_mean_absolute_error": 1.525420096021948,
+          "size": [
+            216,
+            216
+          ]
+        },
+        {
+          "alpha_threshold": 128,
+          "opaque_alpha_iou": 1.0,
+          "packaged_asset": "res/ae.webp",
+          "qualifier": "xxhdpi",
+          "rgba_mean_absolute_error": 1.389174668495656,
+          "size": [
+            324,
+            324
+          ]
+        },
+        {
+          "alpha_threshold": 128,
+          "opaque_alpha_iou": 1.0,
+          "packaged_asset": "res/IG.webp",
+          "qualifier": "xxxhdpi",
+          "rgba_mean_absolute_error": 0.7625359010631001,
+          "size": [
+            432,
+            432
+          ]
+        }
+      ]
+    },
+    "actual_previous_certificate_matches": true,
+    "actual_previous_certificate_sha256": "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c",
+    "apk_sha256": "7eab5e92c95969f7a10d4deca2dd6a20597f5ba59c57f010adac096f156bd4d1",
+    "archive_zip_sha256": "sha256:b2112cf857b8474188834cb951a5c0b7b5477631f5c22ab23d247d954d355a13",
+    "artifact_expires_at": "2026-11-10T06:08:34Z",
+    "artifact_id": 13209320440,
+    "artifact_url": "https://github.com/FatihBirgul/trade-ai-android/actions/runs/41586565749/artifacts/13209320440",
+    "certificate_matches_reference": true,
+    "certificate_sha256": "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c",
+    "device_validation": "UNVERIFIED",
+    "embedded_bundle_sha256": "3d464d5d63f1c751b61a972d6fa2d631bd58cf9356ad7b73a7477c41cf5c9f5f",
+    "font_assets": 19,
+    "installed_update": "UNVERIFIED",
+    "min_sdk": "24",
+    "native_adaptive_launcher_graph_verified": true,
+    "native_manifest_independently_parsed": true,
+    "new_scanner_strings_verified": true,
+    "package_id": "com.fatihbirgul.tradeai",
+    "physical_device": "UNVERIFIED",
+    "reference_certificate_sha256": "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c",
+    "signature_v2_verified": true,
+    "signing": "internal development debug signing; not a production release",
+    "source_commit": "4be11a66e3f45e0a119db3647d5c7ce40c3f58e0",
+    "target_sdk": "36",
+    "update_claim": "certificate comparison only; installed device version/certificate and actual installation remain unverified",
+    "version_code": 15,
+    "version_name": "0.7.6",
+    "workflow_result": "success",
+    "workflow_run": 41586565749,
+    "zip_crc_verified": true
+  },
+  "physical_device": "UNVERIFIED",
+  "provider_live": "UNVERIFIED",
+  "push": "UNAVAILABLE_NOT_ACTIVATED",
+  "warnings": [
+    "Node punycode and url.parse deprecations",
+    "npm transitive package deprecations / allowScripts warnings",
+    "Node20 action runners forced onto Node24",
+    "Offline runner logs controlled SQLite failure injection; final result OK",
+    "Native CI: Gradle/Kotlin/Android library deprecations; actual build succeeded. See exact run logs, no warning suppression added."
+  ],
+  "windows_autostart": "UNVERIFIED_NOT_ACTIVATED"
+}

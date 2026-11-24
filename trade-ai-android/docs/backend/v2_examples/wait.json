@@ -1,0 +1,413 @@
+{
+  "age_ms": 0,
+  "analysis_id": "861535d119d6fc1da951087dff9286e03d81f23a2c1dfc52b3ddbf89c8368ae6",
+  "auto_order_id": null,
+  "conflicting_evidence": [
+    {
+      "age_bars": 0,
+      "bucket": "trend_structure",
+      "confirmed": true,
+      "direction": "bearish",
+      "source": "structure",
+      "strength": 60.0,
+      "timeframe": "1H"
+    },
+    {
+      "age_bars": 0,
+      "bucket": "volume",
+      "confirmed": true,
+      "direction": "bullish",
+      "source": "volume",
+      "strength": 30.0,
+      "timeframe": "1H"
+    }
+  ],
+  "contract_type": "spot",
+  "created_at_ms": 1792584000000,
+  "data_mode": "fixture",
+  "direction": "WAIT",
+  "expires_at_ms": 1792587600000,
+  "indicators": {
+    "atr14": 1.2236,
+    "atr_pct": 1.23,
+    "bb_lower": 98.5473,
+    "bb_middle": 99.9741,
+    "bb_upper": 101.4009,
+    "ema100": 100.0101,
+    "ema20": 100.0434,
+    "ema200": 100.0056,
+    "ema50": 100.0195,
+    "ema_warmup": {
+      "ema100": true,
+      "ema20": true,
+      "ema200": true,
+      "ema50": true
+    },
+    "macd": 0.0273,
+    "macd_hist": 0.008,
+    "macd_signal": 0.0193,
+    "price": 99.4784,
+    "rsi14": 42.6805,
+    "sma20": 99.9741,
+    "stoch_rsi_d": 36.2982,
+    "stoch_rsi_k": 0.5741,
+    "timeframe": "1H",
+    "volume": 300.0,
+    "volume_direction": 1,
+    "volume_ma20": 110.0,
+    "volume_ratio": 2.73
+  },
+  "levels": null,
+  "market": "crypto_spot",
+  "market_rules": {
+    "maximum_notional": "1000000000",
+    "maximum_quantity": "100000",
+    "minimum_notional": "1",
+    "minimum_quantity": "0.000001",
+    "price_tick": "0.0001",
+    "quantity_step": "0.000001",
+    "source": "fixture_rules_not_exchange_rules"
+  },
+  "mtf": {
+    "alignment_ratio": 0.0,
+    "conflict_ratio": 0.0,
+    "current": {
+      "available": true,
+      "confidence": 5.8,
+      "direction": "neutral",
+      "executable_direction": "neutral",
+      "final_score": -15.7,
+      "gate_passed": false,
+      "timeframe": "1H",
+      "tradeable": false
+    },
+    "current_timeframe": "1H",
+    "direction": "neutral",
+    "evidence": [],
+    "higher_timeframe_alignment": {
+      "agreement_ratio": 0.0,
+      "available_count": 1,
+      "conflict_ratio": 0.0,
+      "direction": "neutral",
+      "evidence": [
+        {
+          "confidence": 5.8,
+          "direction": "neutral",
+          "executable_direction": "neutral",
+          "gate_passed": false,
+          "timeframe": "4H",
+          "tradeable": false
+        }
+      ],
+      "opposing_count": 0,
+      "supporting_count": 0
+    },
+    "higher_timeframe_bias": {
+      "confidence": 0.0,
+      "direction": "neutral",
+      "final_score": 0.0,
+      "gate_passed": false,
+      "timeframe": null,
+      "tradeable": false
+    },
+    "lower_timeframe_confirmation": {
+      "agreement_ratio": 0.0,
+      "available_count": 1,
+      "conflict_ratio": 0.0,
+      "direction": "neutral",
+      "evidence": [
+        {
+          "confidence": 5.8,
+          "direction": "neutral",
+          "executable_direction": "neutral",
+          "gate_passed": false,
+          "timeframe": "15m",
+          "tradeable": false
+        }
+      ],
+      "opposing_count": 0,
+      "supporting_count": 0
+    },
+    "opposing_count": 0,
+    "supporting_count": 0
+  },
+  "price": "99.47842327838163",
+  "price_kind": "last",
+  "price_time_ms": 1792584000000,
+  "provider": "fixture_spot",
+  "quality": {
+    "issues": [],
+    "ok": true,
+    "timeframes": {
+      "15m": {
+        "issues": [],
+        "last_close_ms": 1792584000000,
+        "ok": true
+      },
+      "1H": {
+        "issues": [],
+        "last_close_ms": 1792584000000,
+        "ok": true
+      },
+      "4H": {
+        "issues": [],
+        "last_close_ms": 1792584000000,
+        "ok": true
+      }
+    }
+  },
+  "quote_currency": "USDT",
+  "reason": "strategy_confirmation_missing",
+  "regime": {
+    "direction": "neutral",
+    "observations": 20,
+    "reason": "low_path_efficiency",
+    "regime": "range"
+  },
+  "risk": {
+    "policy_version": "demo-spot-conservative-1",
+    "quantity": "0",
+    "reason": "strategy_confirmation_missing",
+    "status": "wait"
+  },
+  "risk_portfolio": "AUTO",
+  "router": {
+    "eligible_strategy_ids": [],
+    "reason": "strategy_confirmation_missing",
+    "status": "wait",
+    "strategy_id": null
+  },
+  "scenarios": {
+    "bearish": "No validated bearish setup is available; wait for confirmed levels.",
+    "bullish": "No validated bullish setup is available; wait for confirmed levels.",
+    "neutral": "Wait for a confirmed break or a better-defined setup; no executable trade is implied."
+  },
+  "strategy_setups": {
+    "confirmed_breakout_v2": {
+      "direction": "neutral",
+      "evidence": [],
+      "levels": null,
+      "momentum": {
+        "previous_rsi14": "52.30847266877548807116878951",
+        "rsi14_wilder": "46.58056238420967032790780034"
+      },
+      "parameters": {
+        "breakout_buffer_atr": "0.25",
+        "breakout_rsi_bounds": [
+          20,
+          45,
+          55,
+          80
+        ],
+        "minimum_bars": 250,
+        "minimum_gross_rr": "1.5",
+        "range_edge_fraction": "0.25",
+        "range_max_efficiency": "0.3",
+        "range_min_width_atr": "3",
+        "range_rsi_bounds": [
+          45,
+          55
+        ],
+        "rsi_period": 14,
+        "sweep_rsi_midpoint": 50,
+        "volume_multiple": "1.5"
+      },
+      "reason": "regime_not_eligible",
+      "required_data": [
+        "closed_ohlc",
+        "real_volume"
+      ],
+      "status": "wait",
+      "version": "1",
+      "warmup_bars": 250
+    },
+    "failed_breakout_v2": {
+      "direction": "neutral",
+      "evidence": [],
+      "levels": null,
+      "momentum": {
+        "previous_rsi14": "52.30847266877548807116878951",
+        "rsi14_wilder": "46.58056238420967032790780034"
+      },
+      "parameters": {
+        "breakout_buffer_atr": "0.25",
+        "breakout_rsi_bounds": [
+          20,
+          45,
+          55,
+          80
+        ],
+        "minimum_bars": 250,
+        "minimum_gross_rr": "1.5",
+        "range_edge_fraction": "0.25",
+        "range_max_efficiency": "0.3",
+        "range_min_width_atr": "3",
+        "range_rsi_bounds": [
+          45,
+          55
+        ],
+        "rsi_period": 14,
+        "sweep_rsi_midpoint": 50,
+        "volume_multiple": "1.5"
+      },
+      "reason": "entry_confirmation_missing",
+      "required_data": [
+        "closed_ohlc",
+        "real_volume"
+      ],
+      "requirements": [
+        "prior closed sweep/reclaim of 20-bar extreme",
+        "Wilder RSI14 recovery below / above 50",
+        "real volume >=1.5x and VWAP reversion space"
+      ],
+      "status": "wait",
+      "version": "1",
+      "warmup_bars": 250
+    },
+    "range_mean_reversion_v2": {
+      "direction": "neutral",
+      "evidence": [],
+      "levels": null,
+      "momentum": {
+        "previous_rsi14": "52.30847266877548807116878951",
+        "rsi14_wilder": "46.58056238420967032790780034"
+      },
+      "parameters": {
+        "breakout_buffer_atr": "0.25",
+        "breakout_rsi_bounds": [
+          20,
+          45,
+          55,
+          80
+        ],
+        "minimum_bars": 250,
+        "minimum_gross_rr": "1.5",
+        "range_edge_fraction": "0.25",
+        "range_max_efficiency": "0.3",
+        "range_min_width_atr": "3",
+        "range_rsi_bounds": [
+          45,
+          55
+        ],
+        "rsi_period": 14,
+        "sweep_rsi_midpoint": 50,
+        "volume_multiple": "1.5"
+      },
+      "reason": "entry_confirmation_missing",
+      "required_data": [
+        "closed_ohlc",
+        "real_volume"
+      ],
+      "requirements": [
+        "range edge rejection",
+        "Wilder RSI14 recovery below 45 / above 55",
+        "real volume >=1.5x and VWAP reversion space"
+      ],
+      "status": "wait",
+      "version": "1",
+      "warmup_bars": 250
+    },
+    "trend_momentum_v2": {
+      "direction": "neutral",
+      "evidence": [],
+      "levels": null,
+      "momentum": {
+        "previous_rsi14": "52.30847266877548807116878951",
+        "rsi14_wilder": "46.58056238420967032790780034"
+      },
+      "parameters": {
+        "breakout_buffer_atr": "0.25",
+        "breakout_rsi_bounds": [
+          20,
+          45,
+          55,
+          80
+        ],
+        "minimum_bars": 250,
+        "minimum_gross_rr": "1.5",
+        "range_edge_fraction": "0.25",
+        "range_max_efficiency": "0.3",
+        "range_min_width_atr": "3",
+        "range_rsi_bounds": [
+          45,
+          55
+        ],
+        "rsi_period": 14,
+        "sweep_rsi_midpoint": 50,
+        "volume_multiple": "1.5"
+      },
+      "reason": "regime_not_eligible",
+      "required_data": [
+        "closed_ohlc",
+        "real_volume"
+      ],
+      "status": "wait",
+      "version": "2",
+      "warmup_bars": 250
+    }
+  },
+  "supporting_evidence": [],
+  "symbol": "BTCUSDT",
+  "technical_methods": {
+    "atr14_sma": "1.223621055979104285714285714",
+    "fvg": {
+      "active_gaps": [],
+      "as_of_ms": 1792584000000,
+      "bucket": "price_structure",
+      "status": "available",
+      "version": "v2-price-action-1"
+    },
+    "liquidity_sweep": {
+      "as_of_ms": 1792584000000,
+      "bucket": "price_structure",
+      "confirmation": "closed_reclaim_only_requires_follow_through",
+      "direction": "neutral",
+      "extreme": null,
+      "prior_high": "101.49286905502532",
+      "prior_low": "98.51484856367111",
+      "status": "available",
+      "version": "v2-price-action-1"
+    },
+    "parameters": {
+      "fvg_scan_bars": 50,
+      "min_gap_atr": "0.1",
+      "pivot_left_right": 2,
+      "range_bars": 20,
+      "sweep_atr": "0.25",
+      "vwap_bars": 20
+    },
+    "structure": {
+      "as_of_ms": 1792584000000,
+      "bias": "bearish",
+      "bucket": "price_structure",
+      "events": [],
+      "last_swing_high": "101.42001422549596",
+      "last_swing_low": "98.53389001073747",
+      "status": "available",
+      "version": "v2-price-action-1"
+    },
+    "version": "v2-price-action-1",
+    "vwap": {
+      "as_of_ms": 1792584000000,
+      "basis": "rolling_typical_price",
+      "bucket": "volume",
+      "status": "available",
+      "value": "99.929064866802135",
+      "version": "v2-price-action-1",
+      "volume_kind": "real",
+      "window_bars": 20
+    }
+  },
+  "timeframe": "1H",
+  "timeframes": [
+    "15m",
+    "1H",
+    "4H"
+  ],
+  "venue": "fixture",
+  "version": "v2-product-analysis-2",
+  "warnings": [
+    "Conditional heuristic scenario; not a validated probability or trade recommendation.",
+    "News/calendar, order book, funding and liquidation feeds are unavailable."
+  ]
+}

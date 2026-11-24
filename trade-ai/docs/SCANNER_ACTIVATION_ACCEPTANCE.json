@@ -1,0 +1,128 @@
+{
+  "audit_checkpoints": [
+    {
+      "checks": {
+        "CORRUPT": 0,
+        "ERROR": 0,
+        "INCOMPLETE": 0,
+        "MISMATCH": 0,
+        "PASS": 25184
+      },
+      "status": "PASS"
+    },
+    {
+      "checks": {
+        "CORRUPT": 0,
+        "ERROR": 0,
+        "INCOMPLETE": 0,
+        "MISMATCH": 0,
+        "PASS": 25184
+      },
+      "status": "PASS"
+    }
+  ],
+  "automatic_orders": 0,
+  "backend_admin_bearer_on_android": false,
+  "contract_sha256": "729f422ae44c146a71b4bcd75f2f1df1c68ad07dddd9e9ed50619a80fa8f24eb",
+  "fixture_administrator_seeded_orders": 2,
+  "fixture_clock_ms": 1793661660000,
+  "market_data": "controlled fixture; live wire contract only, never live market evidence",
+  "market_validation": "INSUFFICIENT_EVIDENCE",
+  "physical_device": "UNVERIFIED",
+  "privileged_backend_requests": 99,
+  "public_listener": false,
+  "release_gate": "PASS",
+  "results": [
+    {
+      "scenario": "pairing_scopes_tls_and_market_catalogue",
+      "status": "PASS"
+    },
+    {
+      "scenario": "analysis_saved_closed_snapshot_and_research",
+      "status": "PASS"
+    },
+    {
+      "scenario": "older_backend_missing_research_requires_update_not_generic_outage",
+      "status": "PASS"
+    },
+    {
+      "scenario": "profile_create_revision_select_analysis_and_lost_ack_retry",
+      "status": "PASS"
+    },
+    {
+      "scenario": "scanner_follow_profile_binding_and_no_auto_orders",
+      "status": "PASS"
+    },
+    {
+      "scenario": "provider_outage_wait_recovery_and_follow_lifecycle",
+      "status": "PASS"
+    },
+    {
+      "scenario": "dual_scanner_explicit_grant_worker_and_saved_opportunities",
+      "status": "PASS"
+    },
+    {
+      "scenario": "opportunity_outage_recovery_dedup_and_chain",
+      "status": "PASS"
+    },
+    {
+      "scenario": "named_profile_timeframes_and_explicit_account_activation",
+      "status": "PASS"
+    },
+    {
+      "scenario": "paper_isolation_equity_archive_pagination_and_independent_audit",
+      "status": "PASS"
+    },
+    {
+      "scenario": "notification_authorization_and_closed_paper_permissions",
+      "status": "PASS"
+    },
+    {
+      "scenario": "restart_preserves_snapshots_profiles_sessions_and_audit",
+      "status": "PASS"
+    },
+    {
+      "scenario": "renewal_lost_ack_replays_same_committed_rotation_and_revocation",
+      "status": "PASS"
+    },
+    {
+      "scenario": "invalid_gateway_response_rejected_by_actual_android_validator",
+      "status": "PASS"
+    },
+    {
+      "scenario": "backend_unavailable_is_not_fake_success",
+      "status": "PASS"
+    },
+    {
+      "scenario": "real_https_timeout_and_disconnected_gateway",
+      "status": "PASS"
+    }
+  ],
+  "source_heads": {
+    "android": {
+      "dirty": false,
+      "sha": "d3a2e9ddccef7fe507dc43977147897a08c14ff7"
+    },
+    "backend": {
+      "dirty": false,
+      "sha": "03a4feaaf8453a0c54dc42f9c8931ae57cbe4687"
+    },
+    "gateway": {
+      "dirty": false,
+      "sha": "d1c0e4d2263626a30e81af9e2b40d5e952cb7b76"
+    }
+  },
+  "storage": "renewal save callback in-memory; physical SecureStore unverified",
+  "tls_verified": true,
+  "transport": "real certificate-verified loopback HTTPS to production Gateway then production Backend ASGI",
+  "wire_requests": 100,
+  "wire_statuses": [
+    200,
+    422,
+    404,
+    403,
+    409,
+    401,
+    503
+  ]
+}

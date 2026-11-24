@@ -1,0 +1,7 @@
+# Python 3.11 test bağımlılığı denetimi
+
+Başlangıçtaki global Python 3.11.9 ortamında FastAPI `0.162.0`, Starlette `1.10.0` vardı; test import zinciri `httpx2` aradığı için 16 yükleme hatası görülmüştü. Global servis ortamına paket kurulmadı veya mevcut paket sürümleri değiştirilmedi. Bu sürümleri V3 uygulama sözleşmesi saymıyoruz.
+
+İzole `.venv` Python 3.11.9 ile oluşturuldu. `requirements-test-py311.txt`, `requirements-api.txt` üzerine çalışan FastAPI `0.115.14`, Starlette `0.46.2`, httpx `0.28.1`, NumPy `2.2.6`, tzdata `2026.6` ve diğer çözümlenen bağımlılıkları tam sürümle pinler. İlk izole denemede tzdata olmadan 39 seans testi hata verdi; tzdata eklenince ve depo dizin testi yalnız `.venv` klasörünü dışlayınca başlangıç 475, P1 sonunda 487 test geçti. `pip check` temizdir. Bu dosya test ortamı için sürüm kilididir; wheel içerik hash'i veya servis dağıtım kilidi değildir.
+
+`tests/test_repo.py` kökte yalnız gerekli `requirements-test-py311.txt` dosyasını kabul eder ve `.venv` dizinini kendi envanter/metin taramasından hariç tutar. V5 kaynakları, `tools/` kabul listesi ve 11 skill kök kontrolü değiştirilmedi. Sistemde kurulu global Python 3.11 runner'ı başarılı ilan edilmez; başarılı sonuç yalnız izole `.venv` içindir. Kurulum: `py -3.11 -m venv .venv`, ardından `.venv\Scripts\python.exe -m pip install -r requirements-test-py311.txt` ve `.venv\Scripts\python.exe -m unittest discover -s tests -q`.

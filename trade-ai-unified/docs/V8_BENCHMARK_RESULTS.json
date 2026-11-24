@@ -1,0 +1,144 @@
+{
+  "engine_version": "8.0.0",
+  "code_sha256": "6137e41c5dc78cfb47588df6fb5f6461517df4e9b922efeaf9ecfdfd71a344c7",
+  "data_kind": "SYNTHETIC_TEST",
+  "market_performance_evidence": false,
+  "environment": {
+    "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "python": "3.12.14"
+  },
+  "measurement": "3 sequential timing repetitions plus separate tracemalloc run; Python allocations are not process RSS or MT5 latency",
+  "benchmarks": {
+    "single_xauusd": {
+      "repetitions": 3,
+      "median_seconds": 0.06697211800019431,
+      "timings_seconds": [
+        0.06717918100002862,
+        0.06697211800019431,
+        0.06588005800040264
+      ],
+      "python_peak_bytes_separate_run": 1166752,
+      "provider_calls_per_run": {
+        "metadata": 1.0,
+        "quote": 1.0,
+        "candles": 2.0
+      }
+    },
+    "four_symbol_scanner": {
+      "repetitions": 3,
+      "median_seconds": 0.36465397699976165,
+      "timings_seconds": [
+        0.36465397699976165,
+        0.3028558360001625,
+        0.3762022450009681
+      ],
+      "python_peak_bytes_separate_run": 2534341,
+      "provider_calls": 16,
+      "cache_stats": {
+        "hits": 0,
+        "misses": 16,
+        "scope": "request_only"
+      }
+    },
+    "three_timeframes": {
+      "repetitions": 3,
+      "median_seconds": 0.18346070500047063,
+      "timings_seconds": [
+        0.17542831499849854,
+        0.18346070500047063,
+        0.1955377710000903
+      ],
+      "python_peak_bytes_separate_run": 1939158
+    },
+    "candlestick_catalogue": {
+      "repetitions": 3,
+      "median_seconds": 0.0027014730003429577,
+      "timings_seconds": [
+        0.03172394300054293,
+        0.0027014730003429577,
+        0.0025215109999408014
+      ],
+      "python_peak_bytes_separate_run": 203391
+    },
+    "chart_geometry": {
+      "repetitions": 3,
+      "median_seconds": 0.011257673000727664,
+      "timings_seconds": [
+        0.011257673000727664,
+        0.04219353500047873,
+        0.009654190000219387
+      ],
+      "python_peak_bytes_separate_run": 57400
+    },
+    "v2_confluence_100": {
+      "repetitions": 3,
+      "median_seconds": 0.001308368000536575,
+      "timings_seconds": [
+        0.0013976920017739758,
+        0.001308368000536575,
+        0.0011609849989326904
+      ],
+      "python_peak_bytes_separate_run": 144472
+    },
+    "500_bar_replay": {
+      "repetitions": 3,
+      "median_seconds": 1.271572849000222,
+      "timings_seconds": [
+        1.2282213029993727,
+        1.4106227209995268,
+        1.271572849000222
+      ],
+      "python_peak_bytes_separate_run": 998392,
+      "analyses": 13,
+      "closed_trades": 12
+    },
+    "2000_bar_replay": {
+      "repetitions": 3,
+      "median_seconds": 8.85860949400012,
+      "timings_seconds": [
+        9.107822530999329,
+        8.09004703500068,
+        8.85860949400012
+      ],
+      "python_peak_bytes_separate_run": 3068139,
+      "analyses": 88,
+      "closed_trades": 87
+    },
+    "two_fold_validation_oos": {
+      "repetitions": 3,
+      "median_seconds": 1.3392774519998056,
+      "timings_seconds": [
+        1.3542448399985005,
+        1.2792271849993995,
+        1.3392774519998056
+      ],
+      "python_peak_bytes_separate_run": 1035370
+    },
+    "monte_carlo_200_draws_100_trades": {
+      "repetitions": 3,
+      "median_seconds": 0.0097718420001911,
+      "timings_seconds": [
+        0.0097718420001911,
+        0.009138906998487073,
+        0.010873945999264834
+      ],
+      "python_peak_bytes_separate_run": 20832
+    },
+    "api_analysis_testclient": {
+      "repetitions": 3,
+      "median_seconds": 0.08651535200078797,
+      "timings_seconds": [
+        0.08651535200078797,
+        0.07283514899972943,
+        0.09051222600101028
+      ],
+      "python_peak_bytes_separate_run": 1267853
+    }
+  },
+  "source_checkpoint": "d6f98af97bebba84d7d1667a3d09aff89469f1a9",
+  "current_release_code_checkpoint": "a7927c100717a8f3de535da92f2c19bcbe80fefb",
+  "scope_note": "Only unmeasured local import path rejection changed after profiling. All measured analysis/replay/API modules are byte-identical.",
+  "changed_unmeasured_modules": [
+    "unified_forex/ingestion.py"
+  ]
+}

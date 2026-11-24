@@ -1,0 +1,22 @@
+{
+  "version": "trade-ai-t-1",
+  "design": "Original vector interpretation of described concept6; original six-image sheet unavailable. Not a traced identical reproduction.",
+  "renderer": {
+    "sharp": "0.35.5"
+  },
+  "adaptive_safe_circle": {
+    "cx": 512,
+    "cy": 512,
+    "radius": 313
+  },
+  "files": {
+    "adaptive-background.png": "3e08c939e41ee3b03d395fbee17feb17eef7117138317b76f2a1314b63c6173d",
+    "adaptive-background.svg": "f4d003b9905c841db21e51dd5de6a6b47e717c65f0a9f161b7aef43444c74da5",
+    "adaptive-foreground.png": "cf990697cc1b5eedfa5e1fd2520b664dd3965749ef5a5d78b71af43e2f7a940b",
+    "adaptive-foreground.svg": "1bdc581dd7f46f13e611fefa327aa2a8c0113c6a9843e8a0b6c60a8253da710b",
+    "adaptive-monochrome.png": "6fdc48d80ecc36f7d1a1bc967163c353f25e4c58803bb991fd238be6c32ee885",
+    "adaptive-monochrome.svg": "5f7eac00e0d67d2c95319f9ce24e3b80812be12d06e677682aa27f353ddb735b",
+    "icon.png": "21699e8dfacbe11efd8abb4010ca61356e73f03daecdad72e6f743edb021de36",
+    "icon.svg": "eb9985b4753e0b36b093ccc0ccd66555edfeefba999320432d2ed92d5d343599"
+  }
+}

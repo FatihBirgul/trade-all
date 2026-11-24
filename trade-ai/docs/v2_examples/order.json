@@ -1,0 +1,32 @@
+{
+  "adverse_rate": "0.00020000",
+  "analysis_id": "bb3183fd8c699220f4b1685372c11d2961359af92962b097b014a407a7e3e2ad",
+  "created_at_ms": 1792584000000,
+  "data_mode": "fixture",
+  "execution_model": "next_closed_bar_touch_worst_edge_v1",
+  "expires_at_ms": 1792587600000,
+  "fee_rate": "0.00050000",
+  "order_id": "082633e7f179b46718488c9f51fa6eb9472b67465ebf0fd6b3b7335f7ff1c3fd",
+  "paper_only": true,
+  "participation_fraction": "0.01000000",
+  "portfolio_id": "MANUAL",
+  "quantity": "1.00000000",
+  "remaining_quantity": "1.00000000",
+  "risk": {
+    "news_filter": "not_configured_optional_in_crypto_demo_policy",
+    "policy_version": "demo-spot-conservative-1",
+    "quantity": "34.78357600",
+    "quantity_step": "0.000001",
+    "reason": "within_explicit_limits",
+    "reservation_per_unit": "130.08746000",
+    "reserved_notional_quote": "4524.90705156",
+    "reserved_risk_quote": "49.99999916",
+    "reward_risk": "1.2609324781211303271047542192478399398939796585644122271228416790728089825108177",
+    "risk_per_unit": "1.43746000",
+    "session_filter": "24x7_crypto",
+    "status": "eligible_for_paper",
+    "version": "v2-paper-risk-1"
+  },
+  "status": "pending",
+  "symbol": "BTCUSDT"
+}

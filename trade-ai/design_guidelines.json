@@ -1,0 +1,166 @@
+{
+  "app_name": "Market AI",
+  "personality": "7 Dark-First Utility",
+  "personality_one_liner": "A professional, command-center financial terminal that prioritizes rapid data scanning, stark contrast, and operational clarity over decorative softness.",
+  "color": {
+    "surface": "#090B0F",
+    "onSurface": "#F3F4F6",
+    "surfaceSecondary": "#12161E",
+    "onSurfaceSecondary": "#D1D5DB",
+    "surfaceTertiary": "#1C222F",
+    "onSurfaceTertiary": "#9CA3AF",
+    "surfaceInverse": "#FFFFFF",
+    "onSurfaceInverse": "#000000",
+    "brand": "#EAB308",
+    "brandPrimary": "#EAB308",
+    "onBrandPrimary": "#090B0F",
+    "brandSecondary": "#FDE047",
+    "onBrandSecondary": "#090B0F",
+    "brandTertiary": "#423202",
+    "onBrandTertiary": "#FDE047",
+    "success": "#00E676",
+    "onSuccess": "#000000",
+    "warning": "#F59E0B",
+    "onWarning": "#000000",
+    "error": "#FF3B30",
+    "onError": "#FFFFFF",
+    "info": "#9CA3AF",
+    "onInfo": "#090B0F",
+    "border": "#272E3F",
+    "borderStrong": "#374151",
+    "divider": "#1C222F"
+  },
+  "typography": {
+    "displayFontFamily": "Rajdhani",
+    "textFontFamily": "IBM Plex Sans",
+    "scale": { "sm": 12, "base": 14, "lg": 16, "xl": 20, "2xl": 24 }
+  },
+  "spacing": { 
+    "rule": "Dense but structured. Use generous vertical spacing between distinct modules (cards) but tight spacing within data rows to optimize for scannability.",
+    "xs": 4, 
+    "sm": 8, 
+    "md": 12, 
+    "lg": 16, 
+    "xl": 24, 
+    "2xl": 32, 
+    "3xl": 48 
+  },
+  "radius_tokens": { 
+    "sm": 6, 
+    "md": 12, 
+    "lg": 20, 
+    "pill": 999 
+  },
+  "shadow_tier": "0",
+  "navigation": "bottom_tabs",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": false,
+    "do's": ["Use solid tonal separation (surfaceSecondary, surfaceTertiary) to create depth on data-dense screens."],
+    "dont's": ["Do not use blur or glassmorphism on this app. Dark-first utility requires maximum clarity and performance, especially for live terminal data."]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "solid surfaceSecondary",
+      "android": "solid surfaceSecondary",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "none",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Home",
+      "purpose": "A command-center dashboard summarizing the selected market, quick AI analysis access, and portfolio/recent trends.",
+      "states": {
+        "loading": "Skeleton rows for market data; a subtle pulse on the main chart area.",
+        "empty": "No recent analyses - prompt to 'Upload first chart' with a brandPrimary CTA.",
+        "error": "Data fetch failed - high-contrast text 'Connection Lost' with a retry button."
+      },
+      "layout": "Header: Brand logo + User profile. Hero: Selected Market card (Asset, huge live price using display font, 24h change with semantic color, sparkline). Main CTA: Large brand-tinted card 'New AI Analysis' pinned to thumb zone or below hero. Below: 'Recent Analyses' horizontal scroll or stacked list."
+    },
+    {
+      "name": "AI_Analysis",
+      "purpose": "Focused input screen to capture or select a chart, choose asset/timeframe, and trigger AI processing.",
+      "states": {
+        "loading": "Scanning animation over the uploaded chart, analyzing patterns.",
+        "empty": "Empty state illustration of a chart placeholder with 'Upload from Gallery' or 'Take Photo'.",
+        "error": "Upload failed or invalid image - clear error toast."
+      },
+      "layout": "Top: Chart preview area (if uploaded) or empty upload zone with borderStrong dashed line. Form: Asset selector (dropdown/sheet), Timeframe segmented control (15m, 1H, 4H, 1D). Bottom: Sticky primary CTA 'Analyze Chart'."
+    },
+    {
+      "name": "Markets",
+      "purpose": "Live list of supported crypto assets providing quick glanceable price action.",
+      "states": {
+        "loading": "Sequential skeleton loaders for list items.",
+        "empty": "No markets found (should not happen, fallback to offline cached data).",
+        "error": "Failed to sync live prices - red warning banner at top."
+      },
+      "layout": "Search/Filter bar pinned at top. List of assets: Left side (Asset Logo PNG + Ticker), Right side (Live Price + 24h % badge in success/error colors). Use rigid grids and monospace alignment for all numbers."
+    },
+    {
+      "name": "News",
+      "purpose": "Feed of crypto news headlines labeled with AI sentiment.",
+      "states": {
+        "loading": "Skeleton feed.",
+        "empty": "Unavailable state: 'News Feed Temporarily Offline'.",
+        "error": "Could not fetch news."
+      },
+      "layout": "Vertical list of news cards. Each card: Title, timestamp, and a Sentiment Badge (Bullish/Bearish/Neutral) aligned right. Text density should be high."
+    },
+    {
+      "name": "History",
+      "purpose": "Archive of past user chart analyses.",
+      "states": {
+        "loading": "Loading spinner.",
+        "empty": "Abstract dark void illustration + 'No past analyses yet.'",
+        "error": "Failed to load history."
+      },
+      "layout": "List of history cards. Each card displays a thumbnail of the chart (with vertical gradient scrim), asset/timeframe, date, and the final AI conclusion badge. Standard vertical scroll."
+    },
+    {
+      "name": "Result",
+      "purpose": "The core analytical output, breaking down the AI's reasoning, targets, and scenarios with strict uncertainty disclaimers.",
+      "states": {
+        "loading": "Generating insights... progress bar.",
+        "empty": "N/A - dynamically generated.",
+        "error": "Analysis failed - return to previous."
+      },
+      "layout": "Top: Full-width Hero image of the uploaded chart with gradient scrim (top-to-bottom) and AI-drawn annotations (bounding boxes/arrows if any). Beneath chart: Asset Ticker & Timeframe. Section 1: Bullish/Bearish Score Gauge (split bar). Section 2: 'Trade Scenarios' - segmented control or stacked cards (Bullish, Bearish, Neutral) showing Entry Zone, Targets (T1, T2), Invalidation levels, and Risk/Reward ratio. Section 3: Detected Patterns (brandTertiary chips). Section 4: News Sentiment & Technical Indicators (grid). Sticky footer: 'Not Financial Advice' warning."
+    }
+  ],
+  "images": {
+    "logo_bitcoin": {
+      "url": "https://images.pexels.com/photos/5980738/pexels-photo-5980738.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Bitcoin logo png"
+    },
+    "logo_ethereum": {
+      "url": "https://images.pexels.com/photos/14911397/pexels-photo-14911397.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Ethereum logo png"
+    },
+    "logo_solana": {
+      "url": "https://images.pexels.com/photos/1036633/pexels-photo-1036633.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Solana logo png"
+    },
+    "hero_chart_abstract": {
+      "url": "https://images.unsplash.com/photo-1762279389042-9439bfb6c155?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1Mjh8MHwxfHNlYXJjaHwxfHxkYXJrJTIwZnV0dXJpc3RpYyUyMGZpbmFuY2lhbCUyMGRhdGElMjBjaGFydCUyMG5lb24lMjBhYnN0cmFjdHxlbnwwfHx8fDE3ODcwODczNTl8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Dark futuristic financial data chart"
+    },
+    "empty_state_history": {
+      "url": "https://images.pexels.com/photos/12843337/pexels-photo-12843337.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Abstract digital empty void illustration"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Strictly follow the Dark-First Utility (Personality 7) guidelines. Do not add blur, glassmorphism, or soft shadows to this app. Use solid tonal separation (surface, surfaceSecondary, surfaceTertiary) to create visual hierarchy.",
+    "Use Rajdhani for all large metrics, live prices, and key headings. Ensure all financial numbers (prices, percentages) use a monospace variant or are aligned as tabular data to avoid layout shifting on live ticks.",
+    "BANNED COLORS: All blues (including navy, azure, cobalt), purples, indigos. Adhere strictly to the defined palette of obsidian/charcoal bases with an Amber brand primary. Only use Green (success) and Red (error) for strict semantic meaning (bullish/bearish).",
+    "On the Result screen, visually delineate uncertainty. Ensure the 'Not Financial Advice' warning is sticky or heavily highlighted at the bottom of the analytical readout.",
+    "When displaying asset logos (BTC, ETH, SOL), use the provided URLs or fetch transparent PNGs if missing. Do not use generic initials for assets unless a real logo is absolutely unavailable.",
+    "Implement a strict gradient scrim pattern (transparent -> 70%+ surfaceInverse) whenever text sits over the chart images on the Result screen or History thumbnails."
+  ]
+}

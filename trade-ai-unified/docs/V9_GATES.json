@@ -1,0 +1,69 @@
+{
+  "code_checkpoint": "f1cf856d34dd3d1b0f8fbbcbc8d806ab3909b858",
+  "scope": "RC for offline engineering review; not profitability or production certification",
+  "gates": {
+    "A": {
+      "name": "Source preservation",
+      "status": "VERIFIED_OFFLINE",
+      "limitation": "Restricted to the documented source, fixtures and four CI environments."
+    },
+    "B": {
+      "name": "Code continuity",
+      "status": "VERIFIED_OFFLINE",
+      "limitation": "Restricted to the documented source, fixtures and four CI environments."
+    },
+    "C": {
+      "name": "Financial correctness",
+      "status": "VERIFIED_OFFLINE",
+      "limitation": "Independent mechanical oracles only; margin/swap/conversion archives and actual fills unverified."
+    },
+    "D": {
+      "name": "Point-in-time",
+      "status": "VERIFIED_OFFLINE",
+      "limitation": "Causal controls on declared inputs; no authenticated historical rule or release-vintage archive."
+    },
+    "E": {
+      "name": "Pattern status validity",
+      "status": "VERIFIED_OFFLINE",
+      "limitation": "Labelling gate passed; complete per-family real-market/adversarial validation remains PARTIAL/EXPERIMENTAL."
+    },
+    "F": {
+      "name": "Market structure",
+      "status": "VERIFIED_OFFLINE",
+      "limitation": "Bounded history and local unsigned checkpoint only; not authenticated provenance."
+    },
+    "G": {
+      "name": "Strategy safety",
+      "status": "VERIFIED_OFFLINE",
+      "limitation": "Restricted to the documented source, fixtures and four CI environments."
+    },
+    "H": {
+      "name": "Research separation and identity",
+      "status": "VERIFIED_OFFLINE",
+      "limitation": "Local preregistration/trial accounting; restart/global external trials not controlled."
+    },
+    "I": {
+      "name": "API compatibility",
+      "status": "VERIFIED_OFFLINE",
+      "limitation": "Restricted to the documented source, fixtures and four CI environments."
+    },
+    "J": {
+      "name": "Security boundary",
+      "status": "VERIFIED_OFFLINE",
+      "limitation": "Trusted operator local roots; Windows descriptor boundary unavailable; explicit strict mode refuses. No public-service security certification."
+    },
+    "K": {
+      "name": "CI matrix",
+      "status": "VERIFIED_OFFLINE",
+      "limitation": "Restricted to the documented source, fixtures and four CI environments."
+    },
+    "L": {
+      "name": "Real market evidence",
+      "status": "UNVERIFIED",
+      "limitation": "No real terminal pilot, licensed authenticated bid/ask/PIT archive, labelled market study or forward observations supplied."
+    }
+  },
+  "overall": "IMPLEMENTED_UNVERIFIED_IN_MARKET",
+  "complete_market_pattern_validation": "PARTIAL",
+  "verified_bid_ask_replay": false
+}

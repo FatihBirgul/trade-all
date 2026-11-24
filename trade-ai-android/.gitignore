@@ -1,0 +1,19 @@
+node_modules/
+.expo/
+dist/
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+*.p8
+android/
+ios/
+coverage/
+*.apk
+*.aab
+*.log
+
+# Local Python APK evidence checks
+__pycache__/
+*.pyc

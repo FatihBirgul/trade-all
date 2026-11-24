@@ -1,0 +1,3 @@
+# Startup/operator pins refer to exact bytes across Windows checkouts.
+attested-*.py -text
+runtime8008-preflight.py -text

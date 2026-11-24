@@ -1,0 +1,19 @@
+{
+  "ai_provider_imported": false,
+  "analysis_readback": true,
+  "bind": "127.0.0.1",
+  "chart_snapshot_readback": true,
+  "data_mode": "fixture",
+  "http_server_restart_persistence": true,
+  "idempotency": true,
+  "notifications_pending": true,
+  "observed_at_utc": "2026-10-21T04:52:43.683178+00:00",
+  "paper_fill_close_reconciliation": true,
+  "public_bind": false,
+  "real_execution": false,
+  "scanner_closed_bar_dedup": true,
+  "separate_auto_manual": true,
+  "server_stopped": true,
+  "temporary_database_only": true,
+  "v1_mongo_imported": false
+}

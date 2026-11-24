@@ -1,0 +1,8 @@
+# Documentation only: launcher does not parse this file. No real secrets here.
+# Set a private random bearer token of at least 24 characters in your process.
+V2_API_TOKEN=<set-privately-at-runtime>
+# start_v2.py takes the separate V2 database and live/fixture mode as CLI options.
+# V1 router opt-in (not needed by standalone launcher):
+V2_DB_PATH=<absolute-path-to-a-separate-v2.sqlite>
+V2_DATA_MODE=live
+# ChatGPT Plus does not supply GPT API credentials; none are required for V2.

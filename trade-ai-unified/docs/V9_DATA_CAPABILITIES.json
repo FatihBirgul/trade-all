@@ -1,0 +1,41 @@
+{
+  "version": "fx-price-sides-v9-1",
+  "types": {
+    "BID_OHLC": {
+      "analysis": true,
+      "replay": "MODELLED_SPREAD_REQUIRED"
+    },
+    "ASK_OHLC": {
+      "analysis": false,
+      "replay": "UNAVAILABLE_NO_BID"
+    },
+    "BID_ASK_OHLC": {
+      "analysis": true,
+      "replay": "DECLARED_PAIRED_SIDE_OHLC"
+    },
+    "QUOTE_TICKS": {
+      "analysis": false,
+      "replay": "UNAVAILABLE_TICK_EXECUTOR_NOT_IMPLEMENTED"
+    },
+    "MID_ONLY": {
+      "analysis": false,
+      "replay": "UNAVAILABLE_EXECUTION_SIDE_UNKNOWN"
+    },
+    "MODELLED_SPREAD": {
+      "analysis": false,
+      "replay": "ASSUMPTION_ONLY"
+    },
+    "EXECUTION_COST_ARCHIVE": {
+      "analysis": false,
+      "replay": "REQUIRES_RULE_AND_PRICE_BINDING"
+    }
+  },
+  "modes": {
+    "VERIFIED_BID_ASK_REPLAY": "UNAVAILABLE_AUTHENTICATED_PRICE_AND_PIT_RULE_EVIDENCE_REQUIRED",
+    "BID_ONLY_MODELLED_SPREAD": "AVAILABLE_DECLARED_ASSUMPTIONS",
+    "DECLARED_COST_REPLAY": "AVAILABLE_PAIRED_OHLC_WITH_DECLARED_COSTS",
+    "SYNTHETIC_MECHANICAL_TEST": "AVAILABLE_TEST_EVIDENCE_ONLY"
+  },
+  "source_authenticated": false,
+  "code_sha256": "04f874f4b085ec212686a86553fa6f840a3138d653a8ce517e8bd77ab56d7c59"
+}

@@ -1,0 +1,25 @@
+[
+  {
+    "ambiguity_seen": false,
+    "average_entry": "129.92598000",
+    "cost_basis_quote": "129.99094299",
+    "data_mode": "fixture",
+    "invalidation": "128.65",
+    "mark_price": "130.00000000",
+    "mark_time_ms": 1792584060000,
+    "opened_at_ms": 1792584000000,
+    "order_id": "082633e7f179b46718488c9f51fa6eb9472b67465ebf0fd6b3b7335f7ff1c3fd",
+    "paper_only": true,
+    "pending_closes": [],
+    "portfolio_id": "MANUAL",
+    "position_id": "082633e7f179b46718488c9f51fa6eb9472b67465ebf0fd6b3b7335f7ff1c3fd",
+    "quantity": "1.00000000",
+    "realized_pnl_quote": "0",
+    "status": "open",
+    "stop_triggered": false,
+    "symbol": "BTCUSDT",
+    "target_1": "131.9",
+    "target_2": "133.9",
+    "unrealized_pnl_quote": "0.00905701"
+  }
+]

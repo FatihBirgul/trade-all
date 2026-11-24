@@ -1,0 +1,31 @@
+{
+  "age_ms": null,
+  "analysis_id": "f0954dc909b1ace08b94227ba5cc83565530e403fe386141eaeda0e043cdcce0",
+  "auto_orders": 0,
+  "auto_paper": false,
+  "data_mode": "live",
+  "direction": "WAIT",
+  "http_status": 200,
+  "network_scope": "public spot GET only",
+  "observed_at_utc": "2026-10-21T04:55:26.059630+00:00",
+  "price_time_ms": null,
+  "provider": "binance_public_spot",
+  "quality": {
+    "issues": [
+      "provider_unavailable"
+    ],
+    "ok": false,
+    "timeframes": {}
+  },
+  "real_execution": false,
+  "reason": "provider_unavailable",
+  "roundtrip_equal": true,
+  "status": "unavailable_or_invalid",
+  "storage": "fresh temporary V2 database",
+  "timeframes": [
+    "15m",
+    "1H",
+    "4H"
+  ],
+  "venue": "binance"
+}

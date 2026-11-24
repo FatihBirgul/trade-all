@@ -1,0 +1,440 @@
+{
+  "age_ms": 120000,
+  "analysis_id": "c714e832a855d5dd77eca03851f76432f321e263fd67ff9ba4077be0f3460617",
+  "auto_order_id": null,
+  "conflicting_evidence": [],
+  "contract_type": "spot",
+  "created_at_ms": 1792584120000,
+  "data_mode": "fixture",
+  "direction": "bullish",
+  "expires_at_ms": 1792587720000,
+  "indicators": {
+    "atr14": 3.9929,
+    "atr_pct": 4.34,
+    "bb_lower": 83.4636,
+    "bb_middle": 97.259,
+    "bb_upper": 111.0544,
+    "ema100": 99.3277,
+    "ema20": 97.0172,
+    "ema200": 100.1451,
+    "ema50": 98.6569,
+    "ema_warmup": {
+      "ema100": true,
+      "ema20": true,
+      "ema200": true,
+      "ema50": true
+    },
+    "macd": -1.925,
+    "macd_hist": -0.8604,
+    "macd_signal": -1.0646,
+    "price": 92.0,
+    "rsi14": 42.1569,
+    "sma20": 97.259,
+    "stoch_rsi_d": 44.8785,
+    "stoch_rsi_k": 10.7843,
+    "timeframe": "1H",
+    "volume": 300.0,
+    "volume_direction": 1,
+    "volume_ma20": 110.0,
+    "volume_ratio": 2.73
+  },
+  "levels": {
+    "entry_high": "92.1997",
+    "entry_low": "91.8003",
+    "invalidation": "88.5017",
+    "reward_risk": "2.109329367225527312060573283",
+    "target_1": "100.0",
+    "target_2": "110.3",
+    "target_3": null
+  },
+  "market": "crypto_spot",
+  "market_rules": {
+    "maximum_notional": "1000000000",
+    "maximum_quantity": "100000",
+    "minimum_notional": "1",
+    "minimum_quantity": "0.000001",
+    "price_tick": "0.0001",
+    "quantity_step": "0.000001",
+    "source": "fixture_rules_not_exchange_rules"
+  },
+  "mtf": {
+    "alignment_ratio": 1.0,
+    "conflict_ratio": 0.0,
+    "current": {
+      "available": true,
+      "confidence": 25.7,
+      "direction": "bearish",
+      "executable_direction": "bearish",
+      "final_score": -32.9,
+      "gate_passed": true,
+      "timeframe": "1H",
+      "tradeable": true
+    },
+    "current_timeframe": "1H",
+    "direction": "bearish",
+    "evidence": [],
+    "higher_timeframe_alignment": {
+      "agreement_ratio": 0.0,
+      "available_count": 0,
+      "conflict_ratio": 0.0,
+      "direction": "neutral",
+      "evidence": [],
+      "opposing_count": 0,
+      "supporting_count": 0
+    },
+    "higher_timeframe_bias": {
+      "confidence": 0.0,
+      "direction": "neutral",
+      "final_score": 0.0,
+      "gate_passed": false,
+      "timeframe": null,
+      "tradeable": false
+    },
+    "lower_timeframe_confirmation": {
+      "agreement_ratio": 0.0,
+      "available_count": 0,
+      "conflict_ratio": 0.0,
+      "direction": "neutral",
+      "evidence": [],
+      "opposing_count": 0,
+      "supporting_count": 0
+    },
+    "opposing_count": 0,
+    "supporting_count": 0
+  },
+  "price": "92",
+  "price_kind": "last",
+  "price_time_ms": 1792584000000,
+  "provider": "fixture_spot",
+  "quality": {
+    "issues": [],
+    "ok": true,
+    "timeframes": {
+      "1H": {
+        "issues": [],
+        "last_close_ms": 1792584000000,
+        "ok": true
+      }
+    }
+  },
+  "quote_currency": "USDT",
+  "reason": "conditional_setup",
+  "regime": {
+    "direction": "neutral",
+    "observations": 20,
+    "reason": "low_path_efficiency",
+    "regime": "range"
+  },
+  "risk": {
+    "news_filter": "not_configured_optional_in_crypto_demo_policy",
+    "policy_version": "demo-spot-conservative-1",
+    "quantity": "12.97885400",
+    "quantity_step": "0.000001",
+    "reason": "within_explicit_limits",
+    "reservation_per_unit": "92.35412000",
+    "reserved_notional_quote": "1198.65063978",
+    "reserved_risk_quote": "49.99999673",
+    "reward_risk": "1.9846953343612586374279024613100336931071897664325281251784592541830849180515105",
+    "risk_per_unit": "3.85242000",
+    "session_filter": "24x7_crypto",
+    "status": "eligible_for_paper",
+    "version": "v2-paper-risk-1"
+  },
+  "risk_portfolio": "AUTO",
+  "router": {
+    "eligible_strategy_ids": [
+      "range_mean_reversion_v2"
+    ],
+    "reason": "eligible_priority",
+    "status": "selected",
+    "strategy_id": "range_mean_reversion_v2"
+  },
+  "scenarios": {
+    "bearish": "No validated bearish setup is available; wait for confirmed levels.",
+    "bullish": "If price holds above 91.8003 and clears 100, upside may extend toward 110.3. A move below 88.5017 would invalidate this bullish setup.",
+    "neutral": "Wait for a confirmed break or a better-defined setup; no executable trade is implied."
+  },
+  "strategy_setups": {
+    "confirmed_breakout_v2": {
+      "direction": "neutral",
+      "evidence": [],
+      "levels": null,
+      "momentum": {
+        "previous_rsi14": "42.26398122259893797744329948",
+        "rsi14_wilder": "43.97293488644281611367728331"
+      },
+      "parameters": {
+        "breakout_buffer_atr": "0.25",
+        "breakout_rsi_bounds": [
+          20,
+          45,
+          55,
+          80
+        ],
+        "minimum_bars": 250,
+        "minimum_gross_rr": "1.5",
+        "range_edge_fraction": "0.25",
+        "range_max_efficiency": "0.3",
+        "range_min_width_atr": "3",
+        "range_rsi_bounds": [
+          45,
+          55
+        ],
+        "rsi_period": 14,
+        "sweep_rsi_midpoint": 50,
+        "volume_multiple": "1.5"
+      },
+      "reason": "regime_not_eligible",
+      "required_data": [
+        "closed_ohlc",
+        "real_volume"
+      ],
+      "status": "wait",
+      "version": "1",
+      "warmup_bars": 250
+    },
+    "failed_breakout_v2": {
+      "direction": "neutral",
+      "evidence": [],
+      "levels": null,
+      "momentum": {
+        "previous_rsi14": "42.26398122259893797744329948",
+        "rsi14_wilder": "43.97293488644281611367728331"
+      },
+      "parameters": {
+        "breakout_buffer_atr": "0.25",
+        "breakout_rsi_bounds": [
+          20,
+          45,
+          55,
+          80
+        ],
+        "minimum_bars": 250,
+        "minimum_gross_rr": "1.5",
+        "range_edge_fraction": "0.25",
+        "range_max_efficiency": "0.3",
+        "range_min_width_atr": "3",
+        "range_rsi_bounds": [
+          45,
+          55
+        ],
+        "rsi_period": 14,
+        "sweep_rsi_midpoint": 50,
+        "volume_multiple": "1.5"
+      },
+      "reason": "entry_confirmation_missing",
+      "required_data": [
+        "closed_ohlc",
+        "real_volume"
+      ],
+      "requirements": [
+        "prior closed sweep/reclaim of 20-bar extreme",
+        "Wilder RSI14 recovery below / above 50",
+        "real volume >=1.5x and VWAP reversion space"
+      ],
+      "status": "wait",
+      "version": "1",
+      "warmup_bars": 250
+    },
+    "range_mean_reversion_v2": {
+      "confirmed_at_ms": 1792584000000,
+      "direction": "bullish",
+      "evidence": [
+        {
+          "as_of_ms": 1792584000000,
+          "bucket": "price_structure",
+          "confirmed": true,
+          "direction": "bullish",
+          "label": "range edge rejection",
+          "source": "range_mean_reversion_v2:price_structure"
+        },
+        {
+          "as_of_ms": 1792584000000,
+          "bucket": "momentum",
+          "confirmed": true,
+          "direction": "bullish",
+          "label": "Wilder RSI14 recovery below 45 / above 55",
+          "source": "range_mean_reversion_v2:momentum"
+        },
+        {
+          "as_of_ms": 1792584000000,
+          "bucket": "volume",
+          "confirmed": true,
+          "direction": "bullish",
+          "label": "real volume >=1.5x and VWAP reversion space",
+          "source": "range_mean_reversion_v2:volume"
+        }
+      ],
+      "levels": {
+        "entry_high": "92.1996428571428575",
+        "entry_low": "91.8003571428571425",
+        "invalidation": "88.5017857142857125",
+        "target_1": "100.0",
+        "target_2": "110.3"
+      },
+      "momentum": {
+        "previous_rsi14": "42.26398122259893797744329948",
+        "rsi14_wilder": "43.97293488644281611367728331"
+      },
+      "parameters": {
+        "breakout_buffer_atr": "0.25",
+        "breakout_rsi_bounds": [
+          20,
+          45,
+          55,
+          80
+        ],
+        "minimum_bars": 250,
+        "minimum_gross_rr": "1.5",
+        "range_edge_fraction": "0.25",
+        "range_max_efficiency": "0.3",
+        "range_min_width_atr": "3",
+        "range_rsi_bounds": [
+          45,
+          55
+        ],
+        "rsi_period": 14,
+        "sweep_rsi_midpoint": 50,
+        "volume_multiple": "1.5"
+      },
+      "reason": "closed_bar_confirmation",
+      "required_data": [
+        "closed_ohlc",
+        "real_volume"
+      ],
+      "requirements": [
+        "range edge rejection",
+        "Wilder RSI14 recovery below 45 / above 55",
+        "real volume >=1.5x and VWAP reversion space"
+      ],
+      "status": "confirmed",
+      "version": "1",
+      "warmup_bars": 250
+    },
+    "trend_momentum_v2": {
+      "direction": "neutral",
+      "evidence": [],
+      "levels": null,
+      "momentum": {
+        "previous_rsi14": "42.26398122259893797744329948",
+        "rsi14_wilder": "43.97293488644281611367728331"
+      },
+      "parameters": {
+        "breakout_buffer_atr": "0.25",
+        "breakout_rsi_bounds": [
+          20,
+          45,
+          55,
+          80
+        ],
+        "minimum_bars": 250,
+        "minimum_gross_rr": "1.5",
+        "range_edge_fraction": "0.25",
+        "range_max_efficiency": "0.3",
+        "range_min_width_atr": "3",
+        "range_rsi_bounds": [
+          45,
+          55
+        ],
+        "rsi_period": 14,
+        "sweep_rsi_midpoint": 50,
+        "volume_multiple": "1.5"
+      },
+      "reason": "regime_not_eligible",
+      "required_data": [
+        "closed_ohlc",
+        "real_volume"
+      ],
+      "status": "wait",
+      "version": "2",
+      "warmup_bars": 250
+    }
+  },
+  "supporting_evidence": [
+    {
+      "as_of_ms": 1792584000000,
+      "bucket": "price_structure",
+      "confirmed": true,
+      "direction": "bullish",
+      "label": "range edge rejection",
+      "source": "range_mean_reversion_v2:price_structure"
+    },
+    {
+      "as_of_ms": 1792584000000,
+      "bucket": "momentum",
+      "confirmed": true,
+      "direction": "bullish",
+      "label": "Wilder RSI14 recovery below 45 / above 55",
+      "source": "range_mean_reversion_v2:momentum"
+    },
+    {
+      "as_of_ms": 1792584000000,
+      "bucket": "volume",
+      "confirmed": true,
+      "direction": "bullish",
+      "label": "real volume >=1.5x and VWAP reversion space",
+      "source": "range_mean_reversion_v2:volume"
+    }
+  ],
+  "symbol": "BTCUSDT",
+  "technical_methods": {
+    "atr14_sma": "3.99285714285715",
+    "fvg": {
+      "active_gaps": [],
+      "as_of_ms": 1792584000000,
+      "bucket": "price_structure",
+      "status": "available",
+      "version": "v2-price-action-1"
+    },
+    "liquidity_sweep": {
+      "as_of_ms": 1792584000000,
+      "bucket": "price_structure",
+      "confirmation": "closed_reclaim_only_requires_follow_through",
+      "direction": "neutral",
+      "extreme": null,
+      "prior_high": "110.3",
+      "prior_low": "89.5",
+      "status": "available",
+      "version": "v2-price-action-1"
+    },
+    "parameters": {
+      "fvg_scan_bars": 50,
+      "min_gap_atr": "0.1",
+      "pivot_left_right": 2,
+      "range_bars": 20,
+      "sweep_atr": "0.25",
+      "vwap_bars": 20
+    },
+    "structure": {
+      "as_of_ms": 1792584000000,
+      "bias": "neutral",
+      "bucket": "price_structure",
+      "events": [],
+      "last_swing_high": "110.3",
+      "last_swing_low": "89.7",
+      "status": "available",
+      "version": "v2-price-action-1"
+    },
+    "version": "v2-price-action-1",
+    "vwap": {
+      "as_of_ms": 1792584000000,
+      "basis": "rolling_typical_price",
+      "bucket": "volume",
+      "status": "available",
+      "value": "96.78088599655962166666666668",
+      "version": "v2-price-action-1",
+      "volume_kind": "real",
+      "window_bars": 20
+    }
+  },
+  "timeframe": "1H",
+  "timeframes": [
+    "1H"
+  ],
+  "venue": "fixture",
+  "version": "v2-product-analysis-2",
+  "warnings": [
+    "Conditional heuristic scenario; not a validated probability or trade recommendation.",
+    "News/calendar, order book, funding and liquidation feeds are unavailable."
+  ]
+}

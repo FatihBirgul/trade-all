@@ -1,0 +1,145 @@
+{
+  "domain_soak": {
+    "audit_seconds": 18.033639,
+    "audits": 27,
+    "code_checkpoint": "1535a0346448e530d93bd6528fab653d820c97fe",
+    "cycles": 1,
+    "database_bytes": 7655424,
+    "domain_audit_seconds": 14.343033,
+    "domain_events": 4848,
+    "domain_journal": true,
+    "duplicate_responses": 77,
+    "event_append_attempts": 4864,
+    "event_append_max_ms": 67.320564,
+    "event_append_mean_ms": 0.221914,
+    "events": 793,
+    "financial_digest": "8927aefd513447bfe1e9165bbbbb8c3db2a5281714feb02056baf55d1d7a858a",
+    "financial_http_calls": 155,
+    "financial_http_max_ms": 35.763491,
+    "financial_http_mean_ms": 11.959389,
+    "financial_mismatches": 0,
+    "fixture_only": true,
+    "incomplete_checks": 0,
+    "injected_sqlite_failures": 1,
+    "lost_ack_recoveries": 4,
+    "notifications": 722,
+    "orders": 4,
+    "peak_python_bytes": 18978567,
+    "positions": 4,
+    "query_plans": {
+      "account_journal": [
+        "SEARCH transactions USING INDEX transaction_account (portfolio=?)",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ],
+      "analysis_history": [
+        "SCAN analyses USING COVERING INDEX analysis_time"
+      ],
+      "event_tail": [
+        "SEARCH events"
+      ],
+      "source_order_journal": [
+        "SCAN transactions"
+      ]
+    },
+    "records_last_audit": 5692,
+    "restarts": 2,
+    "seed": 12,
+    "transactions": 18,
+    "unexpected_errors": 0,
+    "utc_days": 2
+  },
+  "measurement_limitations": [
+    "Single bounded observations; not statistical or production benchmarks.",
+    "Tracemalloc measures Python allocations, not process RSS.",
+    "Public data uses unverified historical rules/license/costs; no market profitability claim."
+  ],
+  "public_capture_and_training": {
+    "bars": 360,
+    "checked_at_ms": 1793489954923,
+    "code_commit": "3b6893f",
+    "dataset_digest": "727ca77e6db8b2383e3ea2da71305e868e15b3c317804e6ba38bf8b2a65e889c",
+    "evidence_status": "INSUFFICIENT_EVIDENCE",
+    "experiment_id": "deae144624ac1f7b39ec4fe9cad86c00ec6a9b66fa09a4d7f90668847d764af6",
+    "integrity_status": "PASS",
+    "manifest_id": "8bf29e5638f496e1ae9160105b2c9fc81b05496d30fc9fc99a5866608fc2ba8b",
+    "market_performance_verified": false,
+    "oos_folds_executed": 0,
+    "private_network_used": false,
+    "provenance": {
+      "checks": [
+        {
+          "code": "dataset_hash",
+          "status": "PASS"
+        },
+        {
+          "code": "source_identity",
+          "status": "PASS"
+        },
+        {
+          "code": "capture_after_closed_window",
+          "status": "PASS"
+        },
+        {
+          "code": "license_review_missing",
+          "status": "INCOMPLETE"
+        },
+        {
+          "code": "historical_rules_missing",
+          "status": "INCOMPLETE"
+        },
+        {
+          "code": "historical_fee_spread_slippage_unverified",
+          "status": "INCOMPLETE"
+        }
+      ],
+      "limitations": [
+        "Review declarations and SHA256 references are not authenticated evidence or legal certification.",
+        "Uniform archived instrument rules only; changing rules are not silently substituted.",
+        "Simulation costs are assumptions, not a verified historical broker schedule."
+      ],
+      "manifest_id": "8bf29e5638f496e1ae9160105b2c9fc81b05496d30fc9fc99a5866608fc2ba8b",
+      "market_performance_verified": false,
+      "status": "INCOMPLETE"
+    },
+    "raw_data_published": false,
+    "real_execution": false,
+    "source": "binance_spot",
+    "status": "CAPTURE_AND_RESEARCH_COMPLETED",
+    "training_sample_counts": [
+      0
+    ],
+    "validation_status": "DETECTION_IMPLEMENTED",
+    "window_minutes": 360
+  },
+  "synthetic_walk_forward": {
+    "chart_cli_exit": 0,
+    "chart_cli_status": "available",
+    "cli_exit": 0,
+    "cli_validation_status": "OOS_EVALUATED",
+    "code_commit": "4c97f4f",
+    "continuous_equity_available": false,
+    "data_kind": "synthetic",
+    "evidence_status": "INSUFFICIENT_EVIDENCE",
+    "experiment_id": "03c2417c7f75715b46a71e82c0071a1024badd50e7585497c6d509d60b5d7b19",
+    "fixture_only": true,
+    "folds": 2,
+    "forward_validated": false,
+    "integrity_status": "PASS",
+    "measurement": "Single synthetic bounded run, tracemalloc allocations not RSS; no market performance claim.",
+    "peak_python_bytes": 2505065,
+    "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "python": "3.12.14",
+    "seconds": 10.316655595001066,
+    "selected_candidates": [
+      "fast10",
+      "fast10"
+    ],
+    "test_audit_statuses": [
+      "PASS",
+      "PASS"
+    ],
+    "test_events": 6,
+    "validation_status": "OOS_EVALUATED",
+    "version": "v2-walk-forward-1"
+  }
+}

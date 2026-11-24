@@ -1,0 +1,7 @@
+# Exness session boşluğu düzeltmesi
+
+10 Kasım 2026. Kök neden: V5 snapshot eksik mumu dakika dakika `broker_status()` ile kontrol edip yalnız `CLOSED` kabul ediyordu. Bu fonksiyon açılıştan 30 dakika önce bilgilendirici `OPENING_SOON` üretir. Önceki kod doğrulanmış kapalı dönemin son 30 dakikasındaki boşluğu yanlış reddediyordu. Ayrıca `gap % timeframe` koşulu 23:01 gibi broker açılışına hizalı mumu reddediyordu.
+
+Yeni `broker_interval_closed(start,end,hours)` yarım açık `[start,end)` aralığındaki her dakikayı yapılandırılmış broker penceresiyle karşılaştırır; bilgilendirici uyarıyı sıfırlar. Haftanın yedi günü açıkça beyan edilmelidir; belirtilmeyen gün kapalı varsayılmaz. Eksik aralığın tamamı kapalı olmalı. Açık dönemle bir dakikalık çakışma, bilinmeyen veya bozuk saat ve kısmi dakika sınırı reddedilir. Boşluktan sonraki gözlenen mum da pencere içinde başlamalıdır. `OPENING_SOON` normal karar yolunda açık kabul edilmez; manuel istek plansız `NO_TRADE` olur. CLOSED/UNKNOWN ve risk vetoları korunur.
+
+Sentetik testler 22:00, 22:20, 22:40, 22:50, 23:00/23:01 sınırı, açık dönemde eksik M15, hafta sonu, holiday override ve London DST ileri/geri geçişlerini kapsar. Bu testler Exness'in gerçek seans çizelgesini doğrulamaz. Saat politikası yapılandırılmış veya operatör beyanıdır; bağımsız broker doğrulaması yoktur. Gözlenmiş XAUUSDc 21:45-23:00 boşluğu tek başına seans kanıtı sayılmadı. Server UTC offset'i, 21:58 kapanış ve Pazar 23:01 açılışı gerçek kaynakla doğrulanana kadar evrensel kural olarak kodlanmadı.

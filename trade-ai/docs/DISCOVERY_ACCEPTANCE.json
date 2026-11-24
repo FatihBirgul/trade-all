@@ -1,0 +1,159 @@
+{
+  "audit_checkpoints": [
+    {
+      "checks": {
+        "CORRUPT": 0,
+        "ERROR": 0,
+        "INCOMPLETE": 0,
+        "MISMATCH": 0,
+        "PASS": 25128
+      },
+      "status": "PASS"
+    },
+    {
+      "checks": {
+        "CORRUPT": 0,
+        "ERROR": 0,
+        "INCOMPLETE": 0,
+        "MISMATCH": 0,
+        "PASS": 25128
+      },
+      "status": "PASS"
+    }
+  ],
+  "automatic_orders": 0,
+  "backend_admin_bearer_on_android": false,
+  "capacity_rehearsal": {
+    "audit_seconds": 0.0242,
+    "automatic_orders": 0,
+    "cycle_seconds_max": 1.2735,
+    "cycle_seconds_mean": 1.2251,
+    "cycles": 4,
+    "db_bytes": 1687552,
+    "deep_analyses": 8,
+    "eligible_universe": 3,
+    "event_chains": {
+      "AUTO": {
+        "events": 2,
+        "head_hash": "788ccccf1a54eabd94ec53fb452cd6fcdb6d7797093ef2146692b5d77259941e",
+        "signature_available": false,
+        "status": "PASS"
+      },
+      "MANUAL": {
+        "events": 2,
+        "head_hash": "1713b518182930fa220766906bee5298a5a61f5e5ed728ea5718eb94a76c189c",
+        "signature_available": false,
+        "status": "PASS"
+      }
+    },
+    "financial_audit": "PASS",
+    "financial_checks": {
+      "CORRUPT": 0,
+      "ERROR": 0,
+      "INCOMPLETE": 0,
+      "MISMATCH": 0,
+      "PASS": 432
+    },
+    "input": "controlled_fixture_not_market_capacity",
+    "live_capacity": "UNVERIFIED",
+    "peak_traced_bytes": 2686079,
+    "push_delivery": "UNVERIFIED"
+  },
+  "contract_sha256": "651a4315646dda90fe6569528767df7e719485ae35ff74a81c3a8ed71ecab28c",
+  "fixture_administrator_seeded_orders": 2,
+  "fixture_clock_ms": 1793644680000,
+  "market_data": "controlled fixture; live wire contract only, never live market evidence",
+  "market_validation": "INSUFFICIENT_EVIDENCE",
+  "physical_device": "UNVERIFIED",
+  "privileged_backend_requests": 86,
+  "public_listener": false,
+  "release_gate": "PASS",
+  "results": [
+    {
+      "scenario": "pairing_scopes_tls_and_market_catalogue",
+      "status": "PASS"
+    },
+    {
+      "scenario": "analysis_saved_closed_snapshot_and_research",
+      "status": "PASS"
+    },
+    {
+      "scenario": "older_backend_missing_research_requires_update_not_generic_outage",
+      "status": "PASS"
+    },
+    {
+      "scenario": "profile_create_revision_select_analysis_and_lost_ack_retry",
+      "status": "PASS"
+    },
+    {
+      "scenario": "scanner_follow_profile_binding_and_no_auto_orders",
+      "status": "PASS"
+    },
+    {
+      "scenario": "provider_outage_wait_recovery_and_follow_lifecycle",
+      "status": "PASS"
+    },
+    {
+      "scenario": "dual_scanner_explicit_grant_worker_and_saved_opportunities",
+      "status": "PASS"
+    },
+    {
+      "scenario": "opportunity_outage_recovery_dedup_and_chain",
+      "status": "PASS"
+    },
+    {
+      "scenario": "paper_isolation_equity_archive_pagination_and_independent_audit",
+      "status": "PASS"
+    },
+    {
+      "scenario": "notification_authorization_and_closed_paper_permissions",
+      "status": "PASS"
+    },
+    {
+      "scenario": "restart_preserves_snapshots_profiles_sessions_and_audit",
+      "status": "PASS"
+    },
+    {
+      "scenario": "renewal_lost_ack_replays_same_committed_rotation_and_revocation",
+      "status": "PASS"
+    },
+    {
+      "scenario": "invalid_gateway_response_rejected_by_actual_android_validator",
+      "status": "PASS"
+    },
+    {
+      "scenario": "backend_unavailable_is_not_fake_success",
+      "status": "PASS"
+    },
+    {
+      "scenario": "real_https_timeout_and_disconnected_gateway",
+      "status": "PASS"
+    }
+  ],
+  "source_heads": {
+    "android": {
+      "dirty": false,
+      "sha": "dce8b22028e730a342c1d89a1c8d4a2c761daf20"
+    },
+    "backend": {
+      "dirty": false,
+      "sha": "7e2bc4e54dc07c70aeeb8e69a9b8ab37b5e3a638"
+    },
+    "gateway": {
+      "dirty": false,
+      "sha": "18d8e9b125276954f78b1606caa13ce774f85fb3"
+    }
+  },
+  "storage": "renewal save callback in-memory; physical SecureStore unverified",
+  "tls_verified": true,
+  "transport": "real certificate-verified loopback HTTPS to production Gateway then production Backend ASGI",
+  "wire_requests": 87,
+  "wire_statuses": [
+    200,
+    422,
+    404,
+    403,
+    401,
+    503
+  ]
+}

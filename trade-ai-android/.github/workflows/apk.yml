@@ -1,0 +1,87 @@
+name: Internal Android APK
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/apk.yml"
+      - "assets/**"
+      - "scripts/verify-brand.py"
+      - "scripts/verify-startup.py"
+      - "plugins/**"
+      - "app/**"
+      - "src/**"
+      - "app.json"
+      - "package.json"
+      - "package-lock.json"
+      - "docs/backend/**"
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  EXPO_NO_TELEMETRY: "1"
+permissions:
+  contents: read
+jobs:
+  apk:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[apk]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: npm ci
+      - run: npm run typecheck && npm run lint && npm test
+      - run: python3 -m unittest discover -s scripts/tests -p "test_*.py" -q
+      - run: python3 scripts/verify-brand.py
+      - run: python3 scripts/verify-startup.py
+      - run: npx expo prebuild --platform android --no-install
+      - run: python3 scripts/verify-brand.py --native android
+      - run: python3 scripts/verify-startup.py --native android
+      - name: Build internal test APK (debug signing, embedded JS)
+        working-directory: android
+        run: ./gradlew :app:assembleRelease --no-daemon --max-workers=2 -PreactNativeArchitectures=arm64-v8a -Pandroid.enableMinifyInReleaseBuilds=false
+      - name: Verify and describe APK
+        shell: bash
+        run: |
+          apk="$(find android/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)"
+          test -n "$apk"
+          python3 scripts/verify-apk.py "$apk"
+          unzip -l "$apk" | grep 'index.android.bundle' > /dev/null
+          signer="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name apksigner -type f | sort -V | tail -n 1)"
+          test -x "$signer"
+          aapt="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name aapt2 -type f | sort -V | tail -n 1)"
+          test -x "$aapt"
+          python3 scripts/verify-brand.py --apk "$apk" --aapt "$aapt"
+          python3 scripts/verify-startup.py --apk "$apk" --aapt "$aapt" --output android/app/build/outputs/apk/release/STARTUP_EVIDENCE.json
+          python3 scripts/apk-evidence.py "$apk" --aapt "$aapt" --apksigner "$signer" --commit "$GITHUB_SHA" --output android/app/build/outputs/apk/release/APK_EVIDENCE.json
+          {
+            echo "Commit: $GITHUB_SHA"
+            echo "App version: $(node -p 'require("./app.json").expo.version')"
+            echo "Android versionCode: $(node -p 'require("./app.json").expo.android.versionCode')"
+            echo "Android package: $(node -p 'require("./app.json").expo.android.package')"
+            echo "Build: assembleRelease, arm64-v8a, no R8 minify, embedded Metro bundle, generated debug signing"
+            sha256sum "$apk"
+          } > android/app/build/outputs/apk/release/BUILD_INFO.txt
+          cat android/app/build/outputs/apk/release/BUILD_INFO.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trade-ai-internal-apk
+          path: |
+            android/app/build/outputs/apk/release/*.apk
+            android/app/build/outputs/apk/release/BUILD_INFO.txt
+            android/app/build/outputs/apk/release/APK_EVIDENCE.json
+            android/app/build/outputs/apk/release/STARTUP_EVIDENCE.json
+          if-no-files-found: error
+          retention-days: 7
+

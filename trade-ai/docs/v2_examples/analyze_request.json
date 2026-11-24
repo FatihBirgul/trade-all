@@ -1,0 +1,11 @@
+{
+  "data_mode": "fixture",
+  "idempotency_key": "example-analysis-request",
+  "risk_portfolio": "AUTO",
+  "symbol": "BTCUSDT",
+  "timeframe": "1H",
+  "timeframes": [
+    "15m",
+    "4H"
+  ]
+}

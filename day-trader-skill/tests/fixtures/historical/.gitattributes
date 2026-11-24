@@ -1,0 +1,3 @@
+# Evidence digests describe exact bytes, including line endings.
+original.txt -text
+synthetic.json -text
