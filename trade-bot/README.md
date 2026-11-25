@@ -166,6 +166,7 @@ sudo systemctl start tradebot
 | Haber takvimi güncel değil | Haber koruması veri alamıyor | Bot çalışır ama haber penceresi uygulanamayabilir; düzelmezse haber bildirin |
 | Yedek alınamadı | Günlük kopya yazılamadı | Çoğunlukla disk dolu; sunucuda `df -h /var/lib/tradebot` |
 | Hesap yeni işleme kapalı | Exness hesabı yeni emir kabul etmiyor (marjin vb.) | Exness hesabınızı kontrol edin |
+| Sunucu saati kaymış | Sunucu saati fiyat akışının gerisinde; analiz veriyi "bayat" sayıp işlem açmayabilir | Sunucuda `timedatectl status`; "System clock synchronized: yes" olmalı |
 
 ## Sunucuda işe yarayan komutlar
 
@@ -191,6 +192,17 @@ Yeni eşleştirme kodu:
 
 ```bash
 tradebot-pair
+```
+
+Günlük boyutunu sınırlama (isteğe bağlı, bir kez; sunucudaki bütün servislerin günlüğünü en çok 300 MB / 30 günle
+sınırlar):
+
+```bash
+sudo install -D -m 644 /opt/tradebot/trade-bot/deploy/journald-tradebot.conf /etc/systemd/journald.conf.d/tradebot.conf
+```
+
+```bash
+sudo systemctl restart systemd-journald
 ```
 
 ## Sırlar

@@ -23,6 +23,9 @@ hata senaryosu testleri ve teknik olmayan kullanıcı için Türkçe kılavuz.
 
 ## Task 1 — Mum önbelleği: boşluk onarımı
 
+> **Durum:** PR #12 ile ayrı olarak main'e alındı (kullanıcı onayıyla): `CandleStore.heal`, tarama başına en çok 4
+> onarım, borsanın da vermediği boşluk için 6 saat yeniden deneme yok. Bu fazda ek iş yok.
+
 Canlıda bazı semboller her taramada "eksik mum" ile eleniyor (PR #11 tanılaması hangi sembol/nerede gösterir).
 Önbellek yalnızca son mumdan sonrasını çeker; bir kez oluşan boşluk kalıcıdır.
 
