@@ -1,0 +1,20 @@
+# Trade Bot API — Caddy ters vekil. Bu dosya setup-https.sh tarafindan uretilir; elle duzenlemeyin.
+# Sertifika Let's Encrypt'ten kendiliginden alinir ve yenilenir. HTTP istekleri HTTPS'e yonlenir.
+# Erisim logu bilerek yoktur: /stream adresindeki token sorgu parametresi diske yazilmasin.
+{
+	admin off
+}
+
+__HOST__ {
+	encode zstd gzip
+	request_body {
+		max_size 64KB
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+	reverse_proxy 127.0.0.1:8090
+}

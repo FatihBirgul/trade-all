@@ -1,0 +1,65 @@
+name: Deploy trade bot
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'trade-bot/**'
+      - 'trade-ai-unified/**'
+      - '.github/workflows/deploy-trade-bot.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: deploy-trade-bot
+  cancel-in-progress: false
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  PYTHONUTF8: '1'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e 'trade-bot[dev]' -r trade-ai-unified/requirements-lock.txt
+      - run: python -m pytest -q trade-bot
+      - name: V9 suites (the bot imports this engine)
+        working-directory: trade-ai-unified
+        run: |
+          python scripts/check_sources.py
+          python scripts/run_suite.py engine
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Deploy over SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          if [ -z "$VPS_HOST" ] || [ -z "$VPS_USER" ] || [ -z "$VPS_SSH_KEY" ]; then
+            echo "::error::VPS_HOST, VPS_USER ve VPS_SSH_KEY secret'lari tanimli olmali (trade-bot/deploy/README.md)"
+            exit 1
+          fi
+          port="${VPS_PORT:-22}"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          if [ -n "$VPS_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            echo "::warning::VPS_KNOWN_HOSTS tanimli degil; sunucu anahtari bu calismada ssh-keyscan ile alindi"
+            ssh-keyscan -p "$port" "$VPS_HOST" > ~/.ssh/known_hosts 2>/dev/null
+          fi
+          ssh -i ~/.ssh/deploy_key -p "$port" -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$VPS_USER@$VPS_HOST" '/opt/tradebot/trade-bot/deploy/deploy.sh'
+      - name: Remove key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

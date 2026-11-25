@@ -1,0 +1,9 @@
+{"instrument": "XAUUSD", "category": "Metals", "base_currency": "XAU", "quote_currency": "USD",
+ "margin_currency": "XAU", "point_digits": 3, "exec_mode": "market", "calc_mode": "cfd_leverage",
+ "contract_size": "100", "volume_min": "0.01", "volume_max": "100", "volume_step": "0.01", "trade_mode": "enabled",
+ "trade_sessions": [
+   {"trade_mode": "enabled", "week_start_time": "Sun, 22:05:00", "week_end_time": "Mon, 20:58:00"},
+   {"trade_mode": "enabled", "week_start_time": "Mon, 22:01:00", "week_end_time": "Tue, 20:58:00"},
+   {"trade_mode": "enabled", "week_start_time": "Tue, 22:01:00", "week_end_time": "Wed, 20:58:00"},
+   {"trade_mode": "enabled", "week_start_time": "Wed, 22:01:00", "week_end_time": "Thu, 20:58:00"},
+   {"trade_mode": "enabled", "week_start_time": "Thu, 22:01:00", "week_end_time": "Fri, 20:58:00"}]}

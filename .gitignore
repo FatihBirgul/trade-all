@@ -28,3 +28,4 @@ dist/
 test-results/
 playwright-report/
 *.apk
+*.egg-info/

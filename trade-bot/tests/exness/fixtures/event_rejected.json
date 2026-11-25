@@ -1,0 +1,2 @@
+{"event_type": "transaction_event", "operation_id": "789", "status": "rejected", "error_code": 5006,
+ "error_message": "TRADING_RULE_INSUFFICIENT_MARGIN", "event_time": "2026-12-14T11:46:30+00:00", "payload": {}}

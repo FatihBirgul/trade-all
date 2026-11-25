@@ -1,0 +1,7 @@
+{"instrument": "EURUSD", "description": "Euro vs US Dollar", "international_name": "EUR/USD", "category": "Forex",
+ "base_currency": "EUR", "quote_currency": "USD", "margin_currency": "EUR", "point_digits": 5,
+ "exec_mode": "market", "calc_mode": "forex", "margin_percent": "1", "contract_size": "100000",
+ "volume_min": "0.01", "volume_max": "200", "volume_step": "0.01", "swap_long": "-6.35", "swap_short": "2.14",
+ "trade_mode": "enabled", "order_types": ["limit", "market"], "filling_modes": ["fok"],
+ "trade_sessions": [{"trade_mode": "enabled", "week_start_time": "Mon, 00:00:00", "week_end_time": "Fri, 23:59:59"}],
+ "commission_settings": {"commission_type": "per_lot_per_trade", "commission_value": {"amount": "0", "currency": "USD"}}}

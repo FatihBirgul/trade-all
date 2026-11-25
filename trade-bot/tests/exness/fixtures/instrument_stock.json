@@ -1,0 +1,2 @@
+{"instrument": "AAPL", "category": "Stocks", "base_currency": "USD", "quote_currency": "USD", "point_digits": 2,
+ "contract_size": "1", "volume_min": "1", "volume_max": "100", "volume_step": "1", "trade_mode": "enabled"}

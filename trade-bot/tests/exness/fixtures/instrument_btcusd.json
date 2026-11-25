@@ -1,0 +1,4 @@
+{"instrument": "BTCUSD", "category": "Crypto", "base_currency": "BTC", "quote_currency": "USD",
+ "margin_currency": "BTC", "point_digits": 2, "exec_mode": "market", "calc_mode": "cfd_leverage",
+ "contract_size": "1", "volume_min": "0.01", "volume_max": "20", "volume_step": "0.01", "trade_mode": "enabled",
+ "trade_sessions": [{"trade_mode": "enabled", "week_start_time": "Mon, 00:00:00", "week_end_time": "Sun, 23:59:59"}]}
