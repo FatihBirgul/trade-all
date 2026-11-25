@@ -264,3 +264,19 @@ giriş ("kovalama") sınırı.
   doğrulanır. Eşiği düşürmek "risk artar" sayılır (aynı puanla daha büyük lot).
 - **Elle işlemde risk %:** yalnızca önizlemede lot önermek içindir (0,05–2); emirde her zaman önizlenen lot gider.
   Ayardaki sınırın üstündeyse sunucu uyarır ve uyarı onay penceresinde tekrarlanır.
+
+### PR #10 bağımsız incelemesi (2026-11-25)
+
+Kritik bulgu yok: üç anahtarın 8 birleşimi, AL/SAT, rastgele fiyat yürüyüşleri ve işlem ortasında anahtar
+değişimiyle ~1,4 milyon `decide` çağrısında stopu gevşeten, kaldıran ya da yanlış tarafa koyan tek hareket çıkmadı.
+Düzeltilenler:
+- **Sürüm geri alma:** yeni sürüm ayarlara yeni alanlar yazıyor; eski sürüm bunları reddedip açılamazdı. Ayar
+  yükleme artık yalnızca TANINMAYAN alanları yok sayar (başka her bozuk değer yine hata). Not: bu koruma bu
+  sürümden itibaren geçerlidir; **bu sürümden öncesine (a25d0eb ve eskisi) geri dönmek** için `bot_settings`
+  kaydındaki `manage.*_enabled` anahtarları elle silinmelidir.
+- **Sembol listesi:** başka bir ayarı kaydetmek, sunucudaki açık listeyi "hepsi"ye çevirebiliyordu (evren tam o
+  listeye daraldığında). "Hepsi"ye çevirme artık yalnızca kullanıcı sembolleri değiştirdiyse yapılır; yeni sembol
+  açmak "risk artar" diye işaretlenir.
+- Eksik testler eklendi: SAT tarafı, 2R'nin altına geri dönüş, işlem ortasında anahtar değişimi, eski/yeni ayar kaydı.
+Bilinen, bilerek bırakılan: kısmi kapatma kapalıyken iz süren stop fiyat 2R'nin altına inince bekler (stop yerinde
+kalır); anahtar etiketlerindeki "1R/2R" sabit yazıdır (eşikler sunucuda değiştirilirse etiket güncellenmez).

@@ -176,3 +176,36 @@ def test_closed_trades_listing(repo):
     repo.close_trade("2", close_price=1.0, closed_at=60.0)
     assert [t.position_id for t in repo.closed_trades(limit=10)] == ["2", "1"]
     assert [t.position_id for t in repo.closed_trades(since=55.0)] == ["2"]
+
+
+def test_settings_written_by_older_or_newer_versions_still_load(tmp_path):
+    """Eski kayitta yeni alanlar yoktur (varsayilan: acik). Daha yeni bir surumun yazdigi taninmayan alanlar
+    (surum geri alindiginda) botu dusurmez; baska her bozuk deger yine hata verir."""
+    import pytest
+    from pydantic import ValidationError
+
+    from tradebot.config import BotSettings
+    from tradebot.store.repo import Repo
+
+    repo = Repo(tmp_path / "bot.db")
+    old = BotSettings().model_dump(mode="json")
+    for key in ("be_enabled", "partial_enabled", "trail_enabled"):
+        old["manage"].pop(key)
+    repo.set_setting("bot_settings", old)
+    loaded = repo.get_bot_settings()
+    assert loaded.manage.be_enabled and loaded.manage.partial_enabled and loaded.manage.trail_enabled
+
+    newer = BotSettings(dry_run=True).model_dump(mode="json")
+    newer["manage"]["gelecekteki_anahtar"] = False
+    newer["gelecekteki_bolum"] = {"x": 1}
+    newer["risk"]["risk_pct"] = 0.75
+    repo.set_setting("bot_settings", newer)
+    tolerant = repo.get_bot_settings()
+    assert tolerant.risk.risk_pct == 0.75 and tolerant.dry_run is True  # bilinen degerler korunur
+
+    broken = BotSettings().model_dump(mode="json")
+    broken["risk"]["risk_pct"] = 9.0  # sinir disi: sessizce duzeltilmez
+    broken["manage"]["gelecekteki_anahtar"] = False
+    repo.set_setting("bot_settings", broken)
+    with pytest.raises(ValidationError):
+        repo.get_bot_settings()

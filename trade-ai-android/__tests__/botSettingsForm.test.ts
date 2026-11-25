@@ -149,6 +149,22 @@ test("symbol selection: old → new counts, all selected is stored as null, empt
   const limited = { ...withManage(), enabled_symbols: ["XAUUSD"] };
   const reopen = planChanges(limited, { ...draftFrom(limited), symbols: [...UNIVERSE] }, UNIVERSE);
   if (!reopen.ok) throw new Error(reopen.error);
-  expect(reopen.changes[0]).toMatchObject({ from: "1", to: "Hepsi (açılan: BTCUSD, EURUSD, GBPUSD)" });
+  expect(reopen.changes[0]).toMatchObject({ from: "1", to: "Hepsi (açılan: BTCUSD, EURUSD, GBPUSD)", riskier: true });
   expect(reopen.apply({ ...withManage(), enabled_symbols: ["XAUUSD"] }).enabled_symbols).toBeNull();
+});
+
+test("an unrelated save never turns an explicit symbol list into 'all'", () => {
+  // Sunucuda açık liste [EURUSD, XAUUSD]; evren geçici olarak tam bu ikisine daralmış. Yalnızca haber penceresi değişiyor.
+  const limited = { ...withManage(), enabled_symbols: ["XAUUSD", "EURUSD"] };
+  const plan = planChanges(limited, { ...draftFrom(limited), news_window: "45" }, ["EURUSD", "XAUUSD"]);
+  if (!plan.ok) throw new Error(plan.error);
+  expect(plan.changes.map((change) => change.label)).toEqual(["Haber penceresi"]);
+  expect(plan.apply({ ...withManage(), enabled_symbols: ["XAUUSD", "EURUSD"] }).enabled_symbols).toEqual(["XAUUSD", "EURUSD"]);
+  // Yeni sembol açmak alanı genişletir: işaretlenir. Kapatmak işaretlenmez.
+  const wider = planChanges(limited, { ...draftFrom(limited), symbols: ["XAUUSD", "EURUSD", "BTCUSD"] }, UNIVERSE);
+  if (!wider.ok) throw new Error(wider.error);
+  expect(wider.changes[0]).toMatchObject({ to: "3 (açılan: BTCUSD)", riskier: true });
+  const narrower = planChanges(limited, { ...draftFrom(limited), symbols: ["XAUUSD"] }, UNIVERSE);
+  if (!narrower.ok) throw new Error(narrower.error);
+  expect(narrower.changes[0]).toMatchObject({ to: "1 (kapanan: EURUSD)", riskier: false });
 });

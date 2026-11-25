@@ -158,8 +158,11 @@ export function planChanges(current: BotSettings, draft: Draft, universe?: reado
   // Semboller: evrenin tamamı seçiliyse "hepsi" (null) yazılır; yeni eklenen semboller de açık kalır.
   let wanted = draft.symbols === null ? null : [...new Set(draft.symbols)].sort();
   if (wanted !== null && wanted.length === 0) return { ok: false, error: "En az bir sembol açık olmalı. Botu durdurmak için Panel’deki Durdur’u kullanın." };
-  if (wanted !== null && universe && universe.length > 0 && universe.every((symbol) => wanted!.includes(symbol))) wanted = null;
   const had = symbolList(current);
+  // "Hepsi"ye çevirme yalnızca kullanıcı sembolleri GERÇEKTEN değiştirdiyse yapılır: başka bir ayarı kaydetmek,
+  // sunucudaki açık listeyi (evren geçici olarak daralmış olsa bile) kendiliğinden "hepsi"ye çevirmemeli.
+  if (wanted !== null && !sameSet(wanted, had) && universe && universe.length > 0 && universe.every((symbol) => wanted!.includes(symbol)))
+    wanted = null;
   if (!sameSet(wanted, had)) {
     const all = universe ?? [];
     const before = had ?? all;
@@ -172,7 +175,8 @@ export function planChanges(current: BotSettings, draft: Draft, universe?: reado
       label: "Açık semboller",
       from: count(had),
       to: count(wanted) + (closed.length ? " (kapanan: " + names(closed) + ")" : "") + (opened.length ? " (açılan: " + names(opened) + ")" : ""),
-      riskier: false,
+      // Yeni sembol açmak (ya da listeyi "hepsi"ye çevirmek) botun işlem açabileceği alanı genişletir.
+      riskier: opened.length > 0 || (wanted === null && had !== null),
     });
     const target = wanted;
     writers.push((settings) => {
