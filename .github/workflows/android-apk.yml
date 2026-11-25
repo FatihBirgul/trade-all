@@ -43,9 +43,43 @@ jobs:
       - run: npx expo prebuild --platform android --no-install
       - run: python3 scripts/verify-brand.py --native android
       - run: python3 scripts/verify-startup.py --native android
-      - name: Build internal test APK (debug signing, embedded JS)
+      - name: Build internal test APK (embedded JS)
         working-directory: trade-ai-android/android
         run: ./gradlew :app:assembleRelease --no-daemon --max-workers=2 -PreactNativeArchitectures=arm64-v8a -Pandroid.enableMinifyInReleaseBuilds=false
+      - name: Sign with the release key (when configured)
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          apk="$(find android/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)"
+          test -n "$apk"
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            # Kalici anahtar yoksa derleme her seferinde uretilen gecici anahtarla imzali kalir: sonraki
+            # surum bunun ustune guncellenemez (once kaldirmak gerekir).
+            echo "::warning::Kalici imza anahtari (ANDROID_KEYSTORE_BASE64) tanimli degil; APK gecici anahtarla imzalandi. Bkz. trade-ai-android/README.md"
+            echo "APK_SIGNING=generated debug signing" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          if [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ]; then
+            echo "::error::ANDROID_KEYSTORE_PASSWORD ve ANDROID_KEY_ALIAS secret'lari da tanimli olmali"
+            exit 1
+          fi
+          keystore="$RUNNER_TEMP/release.keystore"
+          trap 'rm -f "$keystore"' EXIT
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d ' \r\n' | base64 -d > "$keystore"
+          signer="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name apksigner -type f | sort -V | tail -n 1)"
+          test -x "$signer"
+          export ANDROID_KEY_PASSWORD="${ANDROID_KEY_PASSWORD:-$ANDROID_KEYSTORE_PASSWORD}"
+          # Parolalar komut satirina degil ortam degiskeninden okunur; gunluge yazilmaz.
+          "$signer" sign --ks "$keystore" --ks-key-alias "$ANDROID_KEY_ALIAS" \
+            --ks-pass env:ANDROID_KEYSTORE_PASSWORD --key-pass env:ANDROID_KEY_PASSWORD "$apk"
+          "$signer" verify "$apk"
+          echo "APK_SIGNING=release key from repository secrets" >> "$GITHUB_ENV"
+          echo "APK_EVIDENCE_FLAG=--release-signed" >> "$GITHUB_ENV"
       - name: Verify and describe APK
         shell: bash
         run: |
@@ -59,13 +93,13 @@ jobs:
           test -x "$aapt"
           python3 scripts/verify-brand.py --apk "$apk" --aapt "$aapt"
           python3 scripts/verify-startup.py --apk "$apk" --aapt "$aapt" --output android/app/build/outputs/apk/release/STARTUP_EVIDENCE.json
-          python3 scripts/apk-evidence.py "$apk" --aapt "$aapt" --apksigner "$signer" --commit "$GITHUB_SHA" --output android/app/build/outputs/apk/release/APK_EVIDENCE.json
+          python3 scripts/apk-evidence.py "$apk" --aapt "$aapt" --apksigner "$signer" --commit "$GITHUB_SHA" --output android/app/build/outputs/apk/release/APK_EVIDENCE.json ${APK_EVIDENCE_FLAG:-}
           {
             echo "Commit: $GITHUB_SHA"
             echo "App version: $(node -p 'require("./app.json").expo.version')"
             echo "Android versionCode: $(node -p 'require("./app.json").expo.android.versionCode')"
             echo "Android package: $(node -p 'require("./app.json").expo.android.package')"
-            echo "Build: assembleRelease, arm64-v8a, no R8 minify, embedded Metro bundle, generated debug signing"
+            echo "Build: assembleRelease, arm64-v8a, no R8 minify, embedded Metro bundle, ${APK_SIGNING:-generated debug signing}"
             sha256sum "$apk"
           } > android/app/build/outputs/apk/release/BUILD_INFO.txt
           cat android/app/build/outputs/apk/release/BUILD_INFO.txt
