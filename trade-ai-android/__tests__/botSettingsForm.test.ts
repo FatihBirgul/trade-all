@@ -63,7 +63,7 @@ test("out of range or malformed values are rejected with the allowed range", () 
     [{ max_open_bot: "2,5" }, "Aynı anda açık bot işlemi: 1 ile 5 arasında tam sayı girin."],
     [{ total_loss_pct: "50" }, "Toplam kayıp sınırı: 10 ile 30 arasında bir sayı girin."],
     [{ news_window: "0" }, "Haber penceresi: 5 ile 120 arasında tam sayı girin."],
-    [{ min_score: "70" }, "En düşük güven puanı orta eşikten (60) büyük olamaz."],
+    [{ min_score: "70" }, "Güven eşikleri sıralı olmalı: en düşük ≤ orta ≤ yüksek."],
   ] as const) {
     expect(planChanges(settings(), { ...draftFrom(settings()), ...change })).toEqual({ ok: false, error: message });
   }
@@ -93,4 +93,78 @@ test("apply refuses to write when the server value differs from what the confirm
   other.news.enabled = false;
   expect(() => plan.apply(other)).toThrow(/sunucuda değişmiş/);
   expect(plan.apply(settings()).risk.risk_pct).toBe(0.75);
+});
+
+const withManage = (): BotSettings => ({
+  ...settings(),
+  manage: { be_enabled: true, partial_enabled: true, trail_enabled: true, be_at_r: 1 },
+});
+const UNIVERSE = ["BTCUSD", "EURUSD", "GBPUSD", "XAUUSD"];
+
+test("score thresholds must stay ordered and lowering one is flagged as riskier", () => {
+  const base = draftFrom(withManage());
+  expect(planChanges(withManage(), { ...base, mid_score: "30" })).toMatchObject({ ok: false }); // orta < en düşük (40)
+  expect(planChanges(withManage(), { ...base, high_score: "50" })).toMatchObject({ ok: false }); // yüksek < orta (60)
+  expect(planChanges(withManage(), { ...base, mid_score: "101" })).toMatchObject({ ok: false });
+  const plan = planChanges(withManage(), { ...base, mid_score: "50", high_score: "90" });
+  if (!plan.ok) throw new Error(plan.error);
+  expect(plan.changes).toEqual([
+    { label: "Orta güven eşiği (altı yarım lot)", from: "60", to: "50", riskier: true },
+    { label: "Yüksek güven eşiği (üstü tam lot)", from: "80", to: "90", riskier: false },
+  ]);
+  const saved = plan.apply(withManage());
+  expect(saved.fusion).toMatchObject({ min_score: 40, mid_score: 50, high_score: 90, weights: { mtf: 2 } });
+});
+
+test("switching a stop stage off is riskier and keeps the other manage values", () => {
+  const plan = planChanges(withManage(), { ...draftFrom(withManage()), trail_enabled: false, be_enabled: false });
+  if (!plan.ok) throw new Error(plan.error);
+  expect(plan.riskier).toBe(true);
+  expect(plan.changes.map((c) => [c.label, c.to, c.riskier])).toEqual([
+    ["Başa baş stopu (1R’de)", "Kapalı", true],
+    ["İz süren stop", "Kapalı", true],
+  ]);
+  expect(plan.apply(withManage()).manage).toEqual({ be_enabled: false, partial_enabled: true, trail_enabled: false, be_at_r: 1 });
+  // Eski sunucu (manage alanı yok): anahtarlar açık görünür, değiştirmek açık bir hatayla durur.
+  expect(draftFrom(settings()).trail_enabled).toBe(true);
+  const old = planChanges(settings(), { ...draftFrom(settings()), trail_enabled: false });
+  if (!old.ok) throw new Error(old.error);
+  expect(() => old.apply(settings())).toThrow(/desteklemiyor/);
+});
+
+test("symbol selection: old → new counts, all selected is stored as null, empty is refused", () => {
+  const base = draftFrom(withManage());
+  expect(base.symbols).toBeNull();
+  expect(planChanges(withManage(), { ...base, symbols: [] }, UNIVERSE)).toMatchObject({ ok: false });
+  expect(planChanges(withManage(), { ...base, symbols: [...UNIVERSE].reverse() }, UNIVERSE)).toMatchObject({ ok: true, changes: [] });
+  const plan = planChanges(withManage(), { ...base, symbols: ["XAUUSD", "EURUSD"] }, UNIVERSE);
+  if (!plan.ok) throw new Error(plan.error);
+  expect(plan.changes).toEqual([
+    { label: "Açık semboller", from: "Hepsi", to: "2 (kapanan: BTCUSD, GBPUSD)", riskier: false },
+  ]);
+  expect(plan.apply(withManage()).enabled_symbols).toEqual(["EURUSD", "XAUUSD"]);
+  // Sunucudaki liste bu arada değişmişse yazılmaz.
+  expect(() => plan.apply({ ...withManage(), enabled_symbols: ["BTCUSD"] })).toThrow(/sunucuda değişmiş/);
+
+  const limited = { ...withManage(), enabled_symbols: ["XAUUSD"] };
+  const reopen = planChanges(limited, { ...draftFrom(limited), symbols: [...UNIVERSE] }, UNIVERSE);
+  if (!reopen.ok) throw new Error(reopen.error);
+  expect(reopen.changes[0]).toMatchObject({ from: "1", to: "Hepsi (açılan: BTCUSD, EURUSD, GBPUSD)", riskier: true });
+  expect(reopen.apply({ ...withManage(), enabled_symbols: ["XAUUSD"] }).enabled_symbols).toBeNull();
+});
+
+test("an unrelated save never turns an explicit symbol list into 'all'", () => {
+  // Sunucuda açık liste [EURUSD, XAUUSD]; evren geçici olarak tam bu ikisine daralmış. Yalnızca haber penceresi değişiyor.
+  const limited = { ...withManage(), enabled_symbols: ["XAUUSD", "EURUSD"] };
+  const plan = planChanges(limited, { ...draftFrom(limited), news_window: "45" }, ["EURUSD", "XAUUSD"]);
+  if (!plan.ok) throw new Error(plan.error);
+  expect(plan.changes.map((change) => change.label)).toEqual(["Haber penceresi"]);
+  expect(plan.apply({ ...withManage(), enabled_symbols: ["XAUUSD", "EURUSD"] }).enabled_symbols).toEqual(["XAUUSD", "EURUSD"]);
+  // Yeni sembol açmak alanı genişletir: işaretlenir. Kapatmak işaretlenmez.
+  const wider = planChanges(limited, { ...draftFrom(limited), symbols: ["XAUUSD", "EURUSD", "BTCUSD"] }, UNIVERSE);
+  if (!wider.ok) throw new Error(wider.error);
+  expect(wider.changes[0]).toMatchObject({ to: "3 (açılan: BTCUSD)", riskier: true });
+  const narrower = planChanges(limited, { ...draftFrom(limited), symbols: ["XAUUSD"] }, UNIVERSE);
+  if (!narrower.ok) throw new Error(narrower.error);
+  expect(narrower.changes[0]).toMatchObject({ to: "1 (kapanan: EURUSD)", riskier: false });
 });

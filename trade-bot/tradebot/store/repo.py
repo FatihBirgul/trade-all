@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import time
 from collections.abc import Callable, Iterable
@@ -11,8 +12,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
+from pydantic import ValidationError
+
 from ..config import BotSettings
 from .db import connect, transaction
+
+log = logging.getLogger(__name__)
 
 Origin = Literal["bot", "manual"]
 _TRADE_BOOLS = ("user_sl_override", "manage", "be_done", "partial_done")
@@ -322,7 +327,23 @@ class Repo:
 
     def get_bot_settings(self) -> BotSettings:
         raw = self.get_setting("bot_settings")
-        return BotSettings.model_validate(raw) if raw is not None else BotSettings()
+        if raw is None:
+            return BotSettings()
+        try:
+            return BotSettings.model_validate(raw)
+        except ValidationError as exc:
+            # Daha yeni bir surumun yazdigi, bu surumun tanimadigi alanlar (surum geri alindiginda olur) botu
+            # dusurmemeli: yalnizca TANINMAYAN alanlar atilir. Baska her dogrulama hatasi aynen yukselir.
+            extras = [error["loc"] for error in exc.errors() if error["type"] == "extra_forbidden"]
+            if not extras or len(extras) != len(exc.errors()):
+                raise
+            for path in extras:
+                node = raw
+                for key in path[:-1]:
+                    node = node[key]
+                node.pop(path[-1], None)
+            log.warning("ayarlarda taninmayan alanlar yok sayildi: %s", [".".join(map(str, p)) for p in extras])
+            return BotSettings.model_validate(raw)
 
     def set_bot_settings(self, settings: BotSettings) -> None:
         self.set_setting("bot_settings", settings.model_dump(mode="json"))

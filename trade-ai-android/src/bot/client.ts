@@ -16,6 +16,7 @@ import type {
   ReportPeriod,
   StrategyMode,
   TradePreview,
+  PreviewRequest,
   TradeRequest,
   TradeResult,
 } from "./types";
@@ -252,7 +253,7 @@ export function createBotApi(config: BotConfig | null, transport: Transport = fe
       listShape<BotSymbol>(await request<unknown>("/symbols"), "symbols", (entry) =>
         typeof entry.symbol === "string" && typeof entry.open === "boolean" && typeof entry.volume_min === "number",
       ),
-    previewTrade: async (trade: TradeRequest & { risk_pct?: number }) => {
+    previewTrade: async (trade: PreviewRequest) => {
       const value = await request<TradePreview>("/trades/preview", "POST", trade);
       if (typeof value.lots !== "number" || typeof value.loss !== "number" || !Array.isArray(value.warnings))
         throw new BotError("INVALID_RESPONSE");

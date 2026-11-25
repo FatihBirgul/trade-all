@@ -2,12 +2,12 @@ import React, { useState } from "react";
 import { Alert, Switch, View } from "react-native";
 import { router } from "expo-router";
 import { BotInput, BotPage, Disconnected } from "../../src/bot/BotPage";
-import { MODE_LABEL, NUMBER_FIELDS, draftFrom, planChanges, strategyName, type Draft } from "../../src/bot/settingsForm";
+import { MODE_LABEL, NUMBER_FIELDS, TOGGLES, draftFrom, planChanges, strategyName, type Draft } from "../../src/bot/settingsForm";
 import { useBot } from "../../src/bot/state";
 import { useResource } from "../../src/resource";
 import type { BotSettings, BotStrategy, StrategyMode } from "../../src/bot/types";
 import { useTheme } from "../../src/theme";
-import { Button, Card, Failure, Heading, Label, Loading, ScreenHeader } from "../../src/ui";
+import { Button, Card, Choices, Failure, Heading, Label, Loading, ScreenHeader } from "../../src/ui";
 
 export default function SettingsBot() {
   const bot = useBot();
@@ -19,9 +19,10 @@ export default function SettingsBot() {
   const [notice, setNotice] = useState<{ text: string; bad: boolean } | null>(null);
   const ready = bot.phase === "ready";
   const api = bot.api;
-  const query = useResource(() => Promise.all([api.settings(), api.strategies()]), "settings:" + (bot.config?.origin ?? ""));
+  const query = useResource(() => Promise.all([api.settings(), api.strategies(), api.symbols()]), "settings:" + (bot.config?.origin ?? ""));
   const settings: BotSettings | null = query.data?.[0] ?? null;
   const strategies: BotStrategy[] = query.data?.[1] ?? [];
+  const universe: string[] = (query.data?.[2] ?? []).map((row) => row.symbol);
   const error = query.error ?? "";
   const load = query.reload;
   const draft: Draft | null = settings ? { ...draftFrom(settings), ...edits } : null;
@@ -49,7 +50,7 @@ export default function SettingsBot() {
   function save() {
     if (!settings || !draft) return;
     if (outdated) return setNotice({ text: "Ayarlar güncel değil; önce yeniden yükleyin.", bad: true });
-    const plan = planChanges(settings, draft);
+    const plan = planChanges(settings, draft, universe);
     if (!plan.ok) return setNotice({ text: plan.error, bad: true });
     if (plan.changes.length === 0) return setNotice({ text: "Değişiklik yok.", bad: false });
     const lines = plan.changes.map((c) => c.label + ": " + c.from + " → " + c.to + (c.riskier ? "  ⚠ risk artar" : ""));
@@ -127,17 +128,34 @@ export default function SettingsBot() {
                     />
                   </View>
                 ))}
-                {(
-                  [
-                    ["news_enabled", "Haber penceresi koruması"],
-                    ["fusion_enabled", "Güven puanı"],
-                  ] as const
-                ).map(([key, label]) => (
+                {TOGGLES.map(({ key, label }) => (
                   <View key={key} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 48 }}>
                     <Label>{label}</Label>
                     <Switch accessibilityLabel={label} value={draft[key]} disabled={busy} onValueChange={(value) => setField({ [key]: value })} />
                   </View>
                 ))}
+                <Label muted style={{ fontSize: 12 }}>
+                  Stop aşamalarını kapatmak yalnızca kârı koruyan adımı atlar; işlemin ilk zarar durdurma seviyesi her zaman yerinde kalır.
+                </Label>
+                {universe.length > 0 ? (
+                  <>
+                    <Heading>Botun işlem açacağı semboller</Heading>
+                    <Label muted style={{ fontSize: 12 }}>
+                      {draft.symbols === null ? "Hepsi açık (" + universe.length + ")" : draft.symbols.length + " / " + universe.length + " açık"}
+                      . Kapatılan sembolde yeni işlem açılmaz; açık işlemler yönetilmeye devam eder.
+                    </Label>
+                    <Choices
+                      values={universe}
+                      value={draft.symbols ?? universe}
+                      disabledValues={busy ? universe : []}
+                      onChange={(symbol) => {
+                        const now = draft.symbols ?? universe;
+                        setField({ symbols: now.includes(symbol) ? now.filter((item) => item !== symbol) : [...now, symbol] });
+                      }}
+                    />
+                    <Button title="Hepsini aç" onPress={() => setField({ symbols: null })} disabled={busy || draft.symbols === null} secondary />
+                  </>
+                ) : null}
                 <Button title="Kaydet" onPress={save} disabled={busy || outdated} />
                 {notice ? <Label style={{ color: notice.bad ? colors.red : colors.muted }}>{notice.text}</Label> : null}
                 <Label muted style={{ fontSize: 12 }}>

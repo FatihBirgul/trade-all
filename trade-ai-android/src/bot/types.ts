@@ -101,6 +101,9 @@ export type BotSettings = {
   risk: { risk_pct: number; max_open_bot: number; daily_loss_pct: number; total_loss_pct: number; [key: string]: unknown };
   news: { enabled: boolean; window_minutes: number };
   fusion: { enabled: boolean; min_score: number; mid_score: number; high_score: number; [key: string]: unknown };
+  // Kademeli stop aşamaları; eski sunucuda anahtarlar yoktur (hepsi açık sayılır).
+  manage?: { be_enabled?: boolean; partial_enabled?: boolean; trail_enabled?: boolean; [key: string]: unknown };
+  enabled_symbols?: string[] | null; // null = hepsi
   dry_run: boolean;
   strategy_modes: Record<string, StrategyMode>;
   [key: string]: unknown;
@@ -125,6 +128,8 @@ export type TradeRequest = {
   tp_distance?: number;
   lots?: number;
 };
+// Önizleme isteği: lot verilmezse `risk_pct` (yoksa ayardaki risk) ile lot önerilir. Emirde risk_pct gönderilmez.
+export type PreviewRequest = TradeRequest & { risk_pct?: number };
 export type TradePreview = {
   symbol: string;
   side: "BUY" | "SELL";

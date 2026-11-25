@@ -1,5 +1,5 @@
 import * as SecureStore from "expo-secure-store";
-import type { TradePreview, TradeRequest, TradeResult } from "./types";
+import type { PreviewRequest, TradePreview, TradeRequest, TradeResult } from "./types";
 
 // Sonucu bilinmeyen elle emir. Ekran kapanıp açılsa da (ya da uygulama öldürülse de) hatırlanır: kullanıcı
 // sonucu öğrenmeden ikinci bir emir gönderemez.
@@ -7,6 +7,8 @@ export type PendingTrade = { id: string; trade: TradeRequest; at: number };
 
 const KEY = "tradebot_pending_manual_trade";
 export const PREVIEW_MAX_AGE_MS = 60_000;
+export const RISK_PCT_MIN = 0.05; // sunucudaki ManualPreview.risk_pct sınırlarıyla aynı
+export const RISK_PCT_MAX = 2;
 
 export async function loadPending(): Promise<PendingTrade | null> {
   try {
@@ -31,13 +33,14 @@ export async function clearPending(): Promise<void> {
 }
 
 // Önizleme yalnızca kendi isteği için geçerlidir: başka sembol/yön/mesafe için gelen yanıt kullanılmaz.
-export function sameRequest(a: TradeRequest, b: TradeRequest): boolean {
+export function sameRequest(a: PreviewRequest, b: PreviewRequest): boolean {
   return (
     a.symbol === b.symbol &&
     a.side === b.side &&
     a.sl_distance === b.sl_distance &&
     (a.tp_distance ?? null) === (b.tp_distance ?? null) &&
-    (a.lots ?? null) === (b.lots ?? null)
+    (a.lots ?? null) === (b.lots ?? null) &&
+    (a.risk_pct ?? null) === (b.risk_pct ?? null)
   );
 }
 export function previewMatches(preview: TradePreview, trade: TradeRequest): boolean {
