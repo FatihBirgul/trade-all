@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+from importlib import metadata
 import logging
 import re
 import time
@@ -184,9 +185,12 @@ class Bot:
         await self._refresh_news()
         self.started = True
         universe = self.catalog.universe(self.repo.get_bot_settings().enabled_symbols)
-        await self._record("info", "bot_started", f"Bot başladı: {len(universe)} sembol izleniyor",
-                           {"universe": len(universe), "catalog_errors": len(catalog_errors),
-                            "dry_run": self.repo.get_bot_settings().dry_run})
+        dry_run = self.repo.get_bot_settings().dry_run
+        await self._record("info", "bot_started",
+                           f"Bot başladı (sürüm {_version()}, {'deneme' if dry_run else 'CANLI'} modu): "
+                           f"{len(universe)} sembol izleniyor",
+                           {"universe": len(universe), "catalog_errors": len(catalog_errors), "dry_run": dry_run,
+                            "version": _version()})
 
     def _set_account(self, state: AccountState | None) -> None:
         if state is None or self._details is None:
@@ -1162,6 +1166,13 @@ class Bot:
             self._every(RECONCILE_INTERVAL, self.reconcile_now, "mutabakat"),
             self._every(MAINTENANCE_INTERVAL, self.maintenance, "bakim"),
         )
+
+
+def _version() -> str:
+    try:
+        return metadata.version("tradebot")
+    except metadata.PackageNotFoundError:
+        return "?"
 
 
 _SKIP = {"halted": "bot durduruldu (toplam kayıp sınırı)", "stopped": "kullanıcı durdurdu",
