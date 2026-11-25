@@ -2,6 +2,7 @@
 from __future__ import annotations
 import importlib.util
 import math
+import re
 from pathlib import Path
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_FLOOR
@@ -23,6 +24,11 @@ timemachine = legacy('trader-timemachine', 'timemachine.py')
 
 TIMEFRAMES = {'M5': 300, 'M15': 900, 'M30': 1800, 'H1': 3600, 'H4': 14400, 'D1': 86400}
 SYMBOLS = ('XAUUSD', 'EURUSD', 'GBPUSD', 'USDJPY')
+_SYMBOL_PATTERN = re.compile(r'[A-Z0-9]{3,12}')
+
+def is_supported_symbol(symbol):
+    """Any canonical broker symbol; SYMBOLS stays as the legacy four-symbol catalogue."""
+    return isinstance(symbol, str) and _SYMBOL_PATTERN.fullmatch(symbol) is not None
 
 class DataError(ValueError):
     pass
@@ -238,7 +244,7 @@ def build_plan(symbol,timeframe,direction,metrics,quote,meta,timestamp,reasons,i
             'timestamp':timestamp,'reasons':reasons}
 
 def analyze(provider, symbol, timeframe='M15', balance=None, risk_pct=1.0, now=None, confirmation_timeframes=None):
-    if symbol not in SYMBOLS: raise DataError('unsupported symbol')
+    if not is_supported_symbol(symbol): raise DataError('unsupported symbol')
     if timeframe not in TIMEFRAMES: raise DataError('invalid timeframe')
     now = now or datetime.now(timezone.utc).timestamp()
     base={'symbol':symbol,'timeframe':timeframe,'provider':provider.name,'timestamp':datetime.fromtimestamp(now,timezone.utc).isoformat(), 'signal':'WAIT','plan':None,'reasons':[]}

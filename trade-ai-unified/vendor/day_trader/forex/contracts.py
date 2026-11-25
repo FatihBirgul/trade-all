@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 
-from .core import DataError, SYMBOLS, TIMEFRAMES, finite, validate_bars
+from .core import DataError, SYMBOLS, TIMEFRAMES, finite, validate_bars, is_supported_symbol
 from .sessions import broker_status
 
 SCHEMA_VERSION = 'forex-snapshot-1'
@@ -98,7 +98,7 @@ def _bars(rows, timeframe, as_of, metadata, symbol, provider_name):
 
 
 def capture(provider, symbol, timeframe, as_of, confirmations=('H4',), *, allow_zero_spread=False):
-    if symbol not in SYMBOLS or timeframe not in TIMEFRAMES:
+    if not is_supported_symbol(symbol) or timeframe not in TIMEFRAMES:
         raise DataError('unsupported symbol or timeframe')
     if not confirmations or len(confirmations) > 3 or len(set(confirmations)) != len(confirmations):
         raise DataError('invalid confirmation timeframes')

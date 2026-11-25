@@ -1181,11 +1181,11 @@
     "original_sha256": "f5a06260705bbb8f06ca5d9007af0b47519c4b978a20095e747467fefd931e8e",
     "license": "MIT; Jake Schincariol copyright retained in vendor/day_trader/LICENSE",
     "modifications": [
-      "Explicit simulation-only zero-spread option; default strict quote rule unchanged"
+      "Explicit simulation-only zero-spread option; default strict quote rule unchanged; V10 canonical broker-symbol predicate replaces the four-symbol whitelist in capture"
     ],
     "test_provenance": "423 source tests retained verbatim",
     "status": "ADAPTED",
-    "destination_sha256": "4efeaf5962b1f074b0fdb530292da37ae5fef7d5e6e4033f47587371f7627004",
+    "destination_sha256": "a310b410cf91d22433483b5428fc451763ee8f79d7e045635cda9836267af206",
     "integration_status": "ADAPTED_AND_REGRESSION_TESTED"
   },
   {
@@ -1197,11 +1197,11 @@
     "original_sha256": "8ff1e16e4a4d71f0584a1af7525f13ed3f4cb4753ee080523164a115f188154c",
     "license": "MIT; Jake Schincariol copyright retained in vendor/day_trader/LICENSE",
     "modifications": [
-      "Cache shared indicators, retain ATR plan; V7 account-currency gross/net RR and asymmetric profit/loss tick risk with independent oracles"
+      "Cache shared indicators, retain ATR plan; V7 account-currency gross/net RR and asymmetric profit/loss tick risk with independent oracles; V10 canonical broker-symbol predicate replaces the four-symbol whitelist in analyze"
     ],
     "test_provenance": "423 source tests retained verbatim",
     "status": "ADAPTED",
-    "destination_sha256": "e45b216a6921892bdc4423df0dfa178e2896564dd4d71670cfec1035d3fb8aa5",
+    "destination_sha256": "335a7a7a469bb13fe0e5996ab75604bf475e057ec657f244361d08530fef6719",
     "integration_status": "ADAPTED_AND_REGRESSION_TESTED"
   },
   {
