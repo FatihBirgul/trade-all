@@ -37,6 +37,8 @@ class ManualTrade(Strict):
     sl_distance: float = Field(gt=0)  # fiyat cinsinden; SL zorunlu
     tp_distance: float | None = Field(default=None, gt=0)
     lots: float | None = Field(default=None, gt=0)  # verilmezse risk yuzdesine gore hesaplanir
+    # Uygulamanin urettigi tekil kimlik: ayni istek (zaman asimi sonrasi) tekrarlanirsa ikinci emir acilmaz.
+    client_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9._~-]{8,64}$")
 
 
 class ResumeRequest(Strict):

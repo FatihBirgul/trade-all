@@ -2,6 +2,7 @@
 
     python -m tradebot         botu (ve kontrol API'sini) calistirir
     python -m tradebot pair    uygulama icin tek kullanimlik eslestirme kodu uretir
+    python -m tradebot revoke  tum cihaz token'larini iptal eder (yeniden eslestirme gerekir)
 """
 
 from __future__ import annotations
@@ -34,6 +35,11 @@ def main(argv: list[str] | None = None) -> int:
             from .runtime import create_pair_code
 
             print(create_pair_code(load_settings()))
+            return 0
+        if argv[:1] == ["revoke"]:
+            from .runtime import revoke_tokens
+
+            print(f"{revoke_tokens(load_settings())} token iptal edildi")
             return 0
         if argv:
             print(__doc__)

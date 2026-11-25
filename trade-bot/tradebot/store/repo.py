@@ -127,6 +127,30 @@ class Repo:
             "UPDATE trades SET closed_at = ?, close_price = ?, volume = 0 WHERE position_id = ? AND closed_at IS NULL",
             (closed_at if closed_at is not None else self._clock(), close_price, str(position_id)))
 
+    def update_trade(self, position_id: str, **changes: Any) -> bool:
+        """Yalnizca verilen alanlari, yalnizca islem hala aciksa gunceller.
+
+        Bellekteki eski bir `Trade` nesnesini geri yazmak yerine kullanilir: araya giren bir olay
+        islemi kapatmis ya da degistirmis olabilir.
+        """
+        unknown = set(changes) - set(_TRADE_COLUMNS)
+        if unknown or not changes:
+            raise ValueError("gecersiz islem alani: " + ", ".join(sorted(unknown)))
+        for name in _TRADE_BOOLS:
+            if name in changes:
+                changes[name] = int(bool(changes[name]))
+        assignments = ", ".join(f"{name} = ?" for name in changes)
+        cursor = self.conn.execute(
+            f"UPDATE trades SET {assignments} WHERE position_id = ? AND closed_at IS NULL",
+            [*changes.values(), str(position_id)])
+        return cursor.rowcount == 1
+
+    def reopen_trade(self, position_id: str, volume: float) -> None:
+        """Yanlislikla kapatilmis sayilan (broker'da hala acik) islemi yeniden acar."""
+        self.conn.execute(
+            "UPDATE trades SET closed_at = NULL, close_price = NULL, volume = ? WHERE position_id = ?",
+            (float(volume), str(position_id)))
+
     def add_realized(self, position_id: str, deal_id: str, at: float, pnl: float) -> bool:
         """Kapanis deal'ini bir kez kaydeder; yeni kayitsa True."""
         trade = self.get_trade(position_id)
@@ -310,6 +334,9 @@ class Repo:
 
     def has_token(self, token_hash: str) -> bool:
         return self.conn.execute("SELECT 1 FROM api_tokens WHERE token_hash = ?", (token_hash,)).fetchone() is not None
+
+    def clear_tokens(self) -> int:
+        return self.conn.execute("DELETE FROM api_tokens").rowcount
 
     def add_pair_code(self, code_hash: str, expires_at: float) -> None:
         self.conn.execute("INSERT OR REPLACE INTO pair_codes (code_hash, expires_at, used) VALUES (?, ?, 0)",

@@ -9,6 +9,7 @@ class FakeStream:
     def __init__(self, fake, path, on_message, name):
         self.path, self.name = path, name
         self.connected = True
+        self.connections = 1
         self.subscriptions: list[dict] = []
         self._down_for = 0.0
         self._on_message = on_message
@@ -35,6 +36,7 @@ class FakeStream:
 
     def come_up(self):
         self.connected, self._down_for = True, 0.0
+        self.connections += 1
 
     async def run(self):
         await asyncio.Event().wait()

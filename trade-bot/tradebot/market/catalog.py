@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 
 from ..exness import schema
-from ..exness.errors import ExnessError
+
+from ..exness.errors import ExnessAuthError, ExnessError, ExnessRateLimited
 from ..exness.schema import Instrument
 
 log = logging.getLogger(__name__)
@@ -37,6 +39,8 @@ class InstrumentCatalog:
             try:
                 raw = await self._client.get(schema.instrument_path(account_id, name))
                 self.update(schema.parse_instrument(raw))
+            except (ExnessRateLimited, ExnessAuthError):
+                raise  # limit ya da kimlik hatasinda kalan enstrumanlar icin istek gondermeye devam etme
             except (ExnessError, ValueError) as exc:
                 errors[name] = f"{type(exc).__name__}: {exc}"
         if errors:
@@ -50,6 +54,10 @@ class InstrumentCatalog:
             log.warning("katalog: %s icin ikinci broker adi yok sayildi (%s)", instrument.symbol,
                         instrument.broker_symbol)
             return
+        if current is not None and (instrument.tick_size <= 0 or instrument.contract_size <= 0):
+            # Eksik bir guncelleme (or. kismi olay yuku) bilinen sozlesme bilgisini silmesin:
+            # acik pozisyonun yonetimi ve kapatilmasi bu bilgilere bagli. Yalnizca isleme kapat.
+            instrument = dataclasses.replace(current, tradable=False)
         self._by_symbol[instrument.symbol] = instrument
         self._by_broker[instrument.broker_symbol] = instrument
 

@@ -51,9 +51,7 @@ def test_min_lot_over_risk_returns_none_without_notification():
                       enabled_strategies=None, now=NOW)
     assert result.candidate is None and result.decision == "NO_TRADE"
     assert "minimum lot exceeds risk budget" in " ".join(result.reasons)
-    # Adaptorun bildirim gonderebilecegi bir bagimliligi yoktur: yalnizca sonuc doner ve loglanir.
-    import inspect
-    assert "notif" not in inspect.signature(evaluate).parameters.__repr__().lower()
+    # Bildirim uretilmedigi servis dongusu duzeyinde dogrulanir: test_non_candidates_do_not_notify.
 
 
 def test_cent_account_sizes_in_cent_currency():

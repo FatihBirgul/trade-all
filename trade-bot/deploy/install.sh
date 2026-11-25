@@ -69,10 +69,10 @@ install -o root -g root -m 644 "$APP_DIR/trade-bot/deploy/tradebot.service" /etc
 systemctl daemon-reload
 systemctl enable tradebot >/dev/null
 
-echo "==> Dagitim kullanicisi icin sudo izni (yalnizca servis yonetimi)"
+echo "==> Dagitim kullanicisi icin sudo izni (yalnizca uc sabit komut; joker yok)"
 SUDOERS=/etc/sudoers.d/tradebot-deploy
 cat >"$SUDOERS.tmp" <<SUDO
-$DEPLOY_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart tradebot, /usr/bin/systemctl is-active tradebot, /usr/bin/systemctl status tradebot --no-pager, /usr/bin/journalctl -u tradebot *
+$DEPLOY_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart tradebot, /usr/bin/systemctl is-active tradebot, /usr/bin/journalctl -u tradebot -n 40 --no-pager
 SUDO
 visudo -cf "$SUDOERS.tmp" >/dev/null
 install -o root -g root -m 440 "$SUDOERS.tmp" "$SUDOERS"

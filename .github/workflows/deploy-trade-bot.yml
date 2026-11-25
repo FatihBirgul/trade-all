@@ -25,6 +25,11 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -e 'trade-bot[dev]' -r trade-ai-unified/requirements-lock.txt
       - run: python -m pytest -q trade-bot
+      - name: V9 suites (the bot imports this engine)
+        working-directory: trade-ai-unified
+        run: |
+          python scripts/check_sources.py
+          python scripts/run_suite.py engine
   deploy:
     needs: test
     runs-on: ubuntu-latest

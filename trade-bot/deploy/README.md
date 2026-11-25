@@ -123,6 +123,14 @@ Betik sonunda çıktı klasörünün ve zip dosyasının yolunu yazar. Çıktıd
 sudo -u tradebot bash -c 'set -a; . /etc/tradebot/tradebot.env; set +a; cd /opt/tradebot/trade-bot && /opt/tradebot/.venv/bin/python -m tradebot pair'
 ```
 
+## Telefon kaybolursa: tüm cihazların erişimini iptal etme
+
+```bash
+sudo -u tradebot bash -c 'set -a; . /etc/tradebot/tradebot.env; set +a; cd /opt/tradebot/trade-bot && /opt/tradebot/.venv/bin/python -m tradebot revoke'
+```
+
+Sonra yeni bir eşleştirme kodu üretip cihazı yeniden eşleştirin.
+
 ## Sık görülen sorunlar
 
 | Belirti | Bakılacak yer |

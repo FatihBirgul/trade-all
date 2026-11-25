@@ -18,6 +18,7 @@ from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 from .config import BotSettings, Settings
 from .execution.executor import Executor
 from .execution.reconcile import reconcile
+from .store.repo import Trade
 from .exness import schema
 from .exness.errors import ExnessAuthError, ExnessError, ExnessRateLimited, ExnessUnavailable
 from .exness.schema import Account, AccountState, Instrument
@@ -43,6 +44,10 @@ RESOLVE_INTERVAL = 10.0
 STREAM_ALERT_AFTER = 60.0
 QUOTE_MAX_AGE = 60.0
 EQUITY_SAMPLE_INTERVAL = 300.0
+RECONCILE_INTERVAL = 300.0  # olay kacirilmis olabilir: broker durumu duzenli olarak yeniden okunur
+AUTH_BACKOFF = 300.0  # kimlik reddinden sonra yonetim istekleri bu kadar sure durur
+STOP_GRACE = 5.0  # dolumdan sonra SL/TP emrinin gorulmesi icin taninan sure
+STOP_RECHECK = 30.0
 TICK_CHUNK = 20
 
 
@@ -79,7 +84,8 @@ class Bot:
         self.candles = CandleStore(repo.conn, client, self.catalog, clock=clock)
         self.account: Account | None = None
         self.provider = ExnessV9Provider(self.catalog, self.candles, self.quotes, lambda: self.account)
-        self.executor = Executor(client, repo, notifier, self.catalog, clock=clock)
+        self.executor = Executor(client, repo, notifier, self.catalog, clock=clock,
+                                 on_auth_error=self._auth_error)
         self.streams: list = []
         self.started = False
         self._details: dict | None = None
@@ -89,6 +95,12 @@ class Bot:
         self._daily_blocked = False
         self._last_equity_sample = 0.0
         self._limits = schema.Limits()
+        self._events_stream = None
+        self._event_connections = 0
+        self._auth_alerted = False
+        self._auth_blocked_until = 0.0
+        self._stop_checked: dict[str, float] = {}
+        self._dry_logged: dict[str, str] = {}
 
     # ------------------------------------------------------------------ kayit ve bildirim
     async def _record(self, level: str, kind: str, message: str, data: dict | None = None, *,
@@ -164,6 +176,8 @@ class Bot:
                                   schema.subscribe_events("events-account", "account_state"),
                                   schema.subscribe_events("events-instruments", "instruments", ["all"])])
         self._tick_stream = ticks
+        self._events_stream = events
+        self._event_connections = getattr(events, "connections", 0)
         self.streams = [ticks, events]
 
     def streams_up(self) -> bool:
@@ -185,8 +199,7 @@ class Bot:
         elif kind == "snapshot":
             # Her (yeniden) baglanmada gelir: kacirilan olaylar icin durum buradan toparlanir.
             self._set_account(data.account)
-            report = await reconcile(self.client, self.repo, self.catalog, clock=self._clock, snapshot=data)
-            await self.executor.publish(report)
+            await self.executor.reconcile(snapshot=data)
         elif kind == "account":
             self._set_account(data)
         elif kind == "instrument":
@@ -224,6 +237,10 @@ class Bot:
 
     async def _check_limits(self, settings: BotSettings) -> None:
         state = self.repo.bot_state()
+        if state.start_capital is None and self.account is not None:
+            # Acilista hesap okunamadiysa taban ilk firsatta kurulur; yoksa bot hic islem acamaz.
+            self.repo.set_bot_state(start_capital=self.account.equity, start_at=self._clock())
+            state = self.repo.bot_state()
         capital = state.start_capital
         if not capital or capital <= 0:
             return
@@ -260,16 +277,42 @@ class Bot:
                 derived = abs(instrument.commission_value) * 2 * bounds[1]
         return max(settings.commission_per_lot, derived)
 
+    async def _refresh_open_candles(self, already: set[str]) -> None:
+        """Iz suren stop icin acik islemlerin M15 mumlari, tarama yapilmasa da guncel kalmali."""
+        for trade in self.repo.open_trades():
+            if trade.symbol in already:
+                continue
+            already.add(trade.symbol)
+            try:
+                self.catalog.get(trade.symbol)
+                await self.candles.get(trade.symbol, "M15", 64)
+            except (ExnessError, ValueError, KeyError):
+                continue
+
     async def _skip(self, summary: ScanSummary, reason: str) -> ScanSummary:
         summary.skipped = reason
+        if reason != "stream_down":
+            await self._refresh_open_candles(set())
         await self._record("info", "scan_skipped", f"Tarama yapılmadı: {_SKIP.get(reason, reason)}", {"reason": reason})
         return summary
 
     async def _auth_error(self, exc: ExnessError) -> None:
+        """Kimlik reddi: tek olay + tek bildirim; duzelene kadar yonetim istekleri de durur (dongu yok)."""
+        self._auth_blocked_until = self._clock() + AUTH_BACKOFF
+        if self._auth_alerted:
+            log.error("kimlik dogrulamasi hala reddediliyor: %s", exc)
+            return
+        self._auth_alerted = True
         await self._record(
             "error", "auth_error",
             f"Exness kimlik doğrulaması reddedildi: {exc}. Sunucu saatini (NTP) ve API anahtarını kontrol edin.",
             {"code": exc.code}, notify=True, title="API erişimi reddedildi")
+
+    async def _auth_ok(self) -> None:
+        if self._auth_alerted:
+            self._auth_alerted = False
+            self._auth_blocked_until = 0.0
+            await self._record("info", "auth_restored", "Exness kimlik doğrulaması yeniden çalışıyor.")
 
     async def on_bar_close(self, tf: str = "M15") -> ScanSummary:
         now = self._clock()
@@ -313,6 +356,7 @@ class Bot:
                 log.warning("mumlar alinamadi %s: %s", symbol, exc)
                 continue
             scanned.add(symbol)
+            await self._auth_ok()
             result = evaluate(self.provider, symbol, equity=self.account.equity, risk_pct=settings.risk.risk_pct,
                               commission_per_lot=self._commission(instrument, settings),
                               enabled_strategies=settings.enabled_strategies, now=now)
@@ -325,13 +369,7 @@ class Bot:
             summary.candidates += 1
             await self._consider(result.candidate, instrument, settings, summary)
 
-        for trade in self.repo.open_trades():  # iz suren stop icin acik islemlerin M15 mumlari guncel kalsin
-            if trade.symbol not in scanned:
-                try:
-                    self.catalog.get(trade.symbol)
-                    await self.candles.get(trade.symbol, "M15", 64)
-                except (ExnessError, ValueError, KeyError):
-                    continue
+        await self._refresh_open_candles(scanned)
         await self._record(
             "info", "scan",
             f"Tarama: {summary.scanned} sembol, {summary.candidates} aday, {summary.opened} emir"
@@ -354,7 +392,13 @@ class Bot:
             return  # ayni mum ikinci kez tarandi
         state = self.repo.bot_state()
         today, total = self.bot_pnl(state)
-        verdict = check_entry(candidate, open_bot=self.repo.open_trades("bot"), bot_pnl_today=today,
+        # Islem satiri ancak dolum olayiyla olusur. Ayni taramada gonderilmis ama henuz dolmamis
+        # emirler de acik sayilir; yoksa tek mumda birden cok aday limitleri asar.
+        in_flight = [Trade(position_id="pending:" + o["idempotency_key"], origin="bot",
+                           symbol=o["payload"].get("symbol") or "", side=o["payload"].get("side") or "BUY",
+                           volume=0.0, entry=o["payload"].get("entry") or 0.0)
+                     for o in self.executor.pending_opens("bot")]
+        verdict = check_entry(candidate, open_bot=self.repo.open_trades("bot") + in_flight, bot_pnl_today=today,
                               bot_pnl_total=total, start_capital=state.start_capital,
                               halted=state.halted or state.stopped, settings=settings.risk,
                               instruments=self.catalog.as_mapping())
@@ -373,7 +417,12 @@ class Bot:
             await self._record("info", "signal", "[dry-run] " + text, data)  # kaydet, emir gonderme
             return
         await self._record("info", "signal", text, data)
-        key = await self.executor.open(candidate, "bot")
+        try:
+            key = await self.executor.open(candidate, "bot")
+        except ValueError as exc:  # istek kurulamadi (or. hacim sinir disi): bu adayi birak, taramaya devam
+            await self._record("warning", "signal_invalid", f"{candidate.symbol} emri kurulamadı: {exc}",
+                               {"symbol": candidate.symbol})
+            return
         order = self.repo.get_order(key)
         if order is not None and order["state"] != "REJECTED":
             summary.opened += 1
@@ -395,11 +444,53 @@ class Bot:
                 cost += commission / (instrument.contract_size * bounds[0])
         return cost
 
+    async def _guard_stop(self, trade: Trade, quote: dict, now: float) -> bool:
+        """Broker'da onaylanmis SL'i olmayan pozisyonu yakalar. True: bu turda baska islem yapma.
+
+        Her bot pozisyonunun broker tarafinda SL'i olmalidir. Dolum olayi SL/TP emrini tasimadiysa ya
+        da emir sonradan iptal edildiyse once broker'dan dogrulanir; gercekten yoksa stop yeniden
+        kurulur, fiyat stop seviyesini coktan gectiyse pozisyon kapatilir.
+        """
+        if trade.sl is not None and trade.sltp_order_id:
+            return False
+        if now - trade.opened_at < STOP_GRACE or now - self._stop_checked.get(trade.position_id, 0.0) < STOP_RECHECK:
+            return True
+        self._stop_checked[trade.position_id] = now
+        await self.executor.reconcile()  # goruntu SL/TP emirlerini de getirir
+        fresh = self.repo.get_trade(trade.position_id)
+        if fresh is None or not fresh.is_open or (fresh.sl is not None and fresh.sltp_order_id):
+            return True
+        data = {"position_id": fresh.position_id, "symbol": fresh.symbol}
+        risk = fresh.initial_risk_r_price
+        if not risk:
+            await self._record("error", "sl_missing",
+                               f"{fresh.symbol} {fresh.side}: broker'da stop yok ve seviye bilinmiyor. "
+                               "Uygulamadan SL koyun ya da pozisyonu kapatın.", data, notify=True, title="Stop eksik")
+            return True
+        buy = fresh.side == "BUY"
+        level = fresh.entry - risk if buy else fresh.entry + risk
+        price = quote["bid"] if buy else quote["ask"]
+        if (price <= level) if buy else (price >= level):
+            await self.executor.close(fresh.position_id, user=True)
+            await self._record("error", "sl_missing",
+                               f"{fresh.symbol} {fresh.side}: broker'da stop yoktu ve fiyat stop seviyesini geçti; "
+                               "pozisyon kapatılıyor.", data, notify=True, title="Stop eksik")
+        else:
+            await self.executor.modify(fresh.position_id, sl=level, tp=fresh.tp2)
+            await self._record("error", "sl_missing",
+                               f"{fresh.symbol} {fresh.side}: broker'da stop bulunamadı; {level:g} seviyesine "
+                               "yeniden kuruluyor.", {**data, "sl": level}, notify=True, title="Stop eksik")
+        return True
+
     async def manage_tick(self) -> None:
         settings = self.repo.get_bot_settings()
         now = self._clock()
-        for trade in self.repo.open_trades():
-            if not trade.manage:
+        if now < self._auth_blocked_until:
+            return  # kimlik reddi suruyor: reddedilecek istekleri gonderme
+        for listed in self.repo.open_trades():
+            # Onceki pozisyonun istegi beklenirken bu islem bir olayla degismis ya da kapanmis olabilir.
+            trade = self.repo.get_trade(listed.position_id)
+            if trade is None or not trade.is_open:
                 continue
             try:
                 instrument = self.catalog.get(trade.symbol)
@@ -408,33 +499,40 @@ class Bot:
             quote = self.quotes.quote(trade.symbol)
             if quote is None or now - quote["time"] > QUOTE_MAX_AGE:
                 continue  # bayat fiyatla stop tasima
+            if (trade.origin == "bot" or trade.manage) and await self._guard_stop(trade, quote, now):
+                continue
+            if not trade.manage:
+                continue
             if not trade.partial_done and trade.initial_volume and trade.volume < trade.initial_volume - 1e-9:
                 trade.partial_done = True  # kismi kapama gerceklesmis (olay ya da mutabakat hacmi guncelledi)
-                self.repo.upsert_trade(trade)
+                self.repo.update_trade(trade.position_id, partial_done=True)
             actions = decide(trade, bid=quote["bid"], ask=quote["ask"], atr_m15=self._atr(trade.symbol),
                              cost_per_unit=self._cost_per_unit(instrument, settings), instrument=instrument,
                              settings=settings.manage)
+            if settings.dry_run:
+                # Dry-run: bot hicbir emir gondermez; ne yapacagi yalnizca loglanir.
+                described = repr(actions)
+                if actions and self._dry_logged.get(trade.position_id) != described:
+                    self._dry_logged[trade.position_id] = described
+                    log.info("[dry-run] %s %s icin gonderilmeyen yonetim adimi: %s", trade.symbol, trade.side, described)
+                continue
             for action in actions:
                 if isinstance(action, NoOp):
                     if action.reason == "partial_skipped":
-                        trade.partial_done = True
-                        self.repo.upsert_trade(trade)
+                        self.repo.update_trade(trade.position_id, partial_done=True)
                     continue
                 if isinstance(action, MoveSL):
-                    key = await self.executor.modify(trade.position_id, sl=action.price)
-                    if key is not None and action.stage == "breakeven":
-                        fresh = self.repo.get_trade(trade.position_id)
-                        if fresh is not None and not fresh.be_done:
-                            fresh.be_done = True
-                            self.repo.upsert_trade(fresh)
-                            await self._record(
-                                "info", "sl_breakeven",
-                                f"{trade.symbol} {trade.side}: SL girişe çekiliyor ({action.price:g})",
-                                {"position_id": trade.position_id, "symbol": trade.symbol, "sl": action.price},
-                                notify=True, title="SL girişe çekildi")
+                    # Basa bas isareti ve bildirimi, broker degisikligi onaylayinca yurutucu tarafindan yapilir.
+                    await self.executor.modify(trade.position_id, sl=action.price, stage=action.stage)
                 elif isinstance(action, PartialClose):
                     await self.executor.close(trade.position_id, volume=action.volume)
                 break  # pozisyon basina bir seferde tek istek; sonucu gelince devam edilir
+
+    async def reconcile_now(self) -> None:
+        """Broker durumunu REST ile yeniden okur (kacirilan olaylar icin)."""
+        report = await self.executor.reconcile()
+        if report is not None:
+            self._set_account(report.account)
 
     # ------------------------------------------------------------------ kalp atisi
     async def heartbeat(self) -> None:
@@ -453,6 +551,11 @@ class Bot:
             self._connection_alerted = False
             await self._record("info", "connection_restored", "Exness bağlantısı geri geldi.")
         await self._check_limits(self.repo.get_bot_settings())
+        connections = getattr(self._events_stream, "connections", 0)
+        if connections != self._event_connections:
+            # Olay akisi yeniden baglandi: arada kacirilan olaylar icin durumu broker'dan toparla.
+            self._event_connections = connections
+            await self.reconcile_now()
         if self._tick_stream is not None:
             missing = [s for s in self._tick_symbols() if s not in self._subscribed]
             if missing:
@@ -532,6 +635,7 @@ class Bot:
             self._every(MANAGE_INTERVAL, self.manage_tick, "yonetim"),
             self._every(HEARTBEAT_INTERVAL, self.heartbeat, "kalp atisi"),
             self._every(RESOLVE_INTERVAL, self.executor.resolve_unknown, "emir cozumleme"),
+            self._every(RECONCILE_INTERVAL, self.reconcile_now, "mutabakat"),
         )
 
 

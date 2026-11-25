@@ -124,6 +124,7 @@ async def test_rejection_records_event_and_notifies(tmp_path):
     event = w.repo.events()[-1]
     assert event["kind"] == "order_rejected" and event["level"] == "error"
     assert event["data"]["code"] == 5006 and event["data"]["symbol"] == "EURUSD"
+    assert event["data"]["order_kind"] == "open" and "kind" not in event["data"]
     assert w.notifier.kinds() == ["order_rejected"]
     assert w.repo.open_trades() == []
     await w.executor.open(candidate(), "bot")
@@ -225,7 +226,7 @@ async def test_external_position_and_external_sl_change(tmp_path):
     position_id = await w.fake.external_open("XAUUSD", "SELL", 0.02, sl=2010.0, tp=1980.0)
     trade = w.repo.get_trade(position_id)
     assert (trade.origin, trade.symbol, trade.side, trade.sl, trade.tp2) == ("manual", "XAUUSD", "SELL", 2010.0, 1980.0)
-    assert trade.setup_id is None and trade.manage is True and trade.user_sl_override is False
+    assert trade.setup_id is None and trade.manage is False and trade.user_sl_override is False  # disaridan acildi
     assert trade.initial_risk_r_price == pytest.approx(10.0)
 
     await w.executor.open(candidate(), "bot")

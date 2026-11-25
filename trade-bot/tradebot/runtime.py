@@ -57,3 +57,13 @@ def create_pair_code(settings: Settings) -> str:
         return auth.create_pair_code(repo, now=time.time())
     finally:
         repo.close()
+
+
+def revoke_tokens(settings: Settings) -> int:
+    """Tum cihaz token'larini siler (telefon kaybolursa). Cihazlar yeniden eslestirilmelidir."""
+    repo = Repo(settings.db_path)
+    try:
+        repo.clear_pair_codes()
+        return repo.clear_tokens()
+    finally:
+        repo.close()

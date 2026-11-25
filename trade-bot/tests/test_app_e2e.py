@@ -238,7 +238,7 @@ async def test_status_snapshot(tmp_path):
     _, trade = await open_one(app)
     await app.fake.set_price("XAUUSD", trade.entry + 1.0, trade.entry + 1.2)
     status = app.bot.status()
-    assert status["equity"] == pytest.approx(10_000.0, abs=1) or status["equity"] > 0
+    assert status["balance"] == 10_000.0 and status["currency"] == "USD"
     assert status["open_bot"] == 1 and status["open_manual"] == 0
     assert status["pnl_today"]["bot"] == pytest.approx(1.0 * trade.volume * 100, abs=0.01)
     assert status["stream_connected"] is True and status["halted"] is False

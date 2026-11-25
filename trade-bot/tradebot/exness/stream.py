@@ -34,6 +34,7 @@ class Stream:
         self.path = path
         self.name = name or path.rsplit("/", 1)[-1]
         self.connected = False
+        self.connections = 0  # basarili baglanti sayisi; artisi yeniden baglanmayi gosterir
         self.last_message_at: float | None = None
         self.disconnected_since: float | None = None
         self._on_message = on_message
@@ -84,6 +85,7 @@ class Stream:
                         await self._sleep(self.subscription_delay)
                     await socket.send(json.dumps(message))
                 self.connected = True
+                self.connections += 1
                 self.disconnected_since = None
                 log.info("akis baglandi: %s", self.name)
                 async for raw in socket:

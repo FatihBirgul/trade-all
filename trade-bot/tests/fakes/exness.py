@@ -68,6 +68,9 @@ class FakeExness:
         self.lose_next_ack = False  # istek islenir ama yanit kaybolur
         self.reject_next: tuple[int, str] | None = None  # bir sonraki operasyon asenkron reddedilir
         self.account_status = "active"
+        self.mid_request = None  # async cagri: istek kaydedildikten sonra, yanit donmeden once calisir
+        self.omit_sltp_in_event = False  # dolum olayinda SL/TP emri gelmesin (broker'da yine vardir)
+        self.drop_sltp_on_open = False  # broker SL/TP emrini hic olusturmasin
 
     # ------------------------------------------------------------------ yardimcilar
     def _id(self) -> str:
@@ -160,14 +163,24 @@ class FakeExness:
     async def aclose(self) -> None:
         pass
 
-    def _before(self, method, path, payload, key):
+    async def _before(self, method, path, payload, key):
         self.requests.append((method, path, copy.deepcopy(payload), key))
         if self.fail_next is not None:
             error, self.fail_next = self.fail_next, None
             raise error
 
+    async def _after(self, result):
+        """Gercek agda oldugu gibi: yanit yoldayken baska olaylar islenebilir."""
+        if self.mid_request is not None:
+            hook, self.mid_request = self.mid_request, None
+            await hook()
+        return result
+
     async def get(self, path: str) -> dict:
-        self._before("GET", path, None, "")
+        await self._before("GET", path, None, "")
+        return await self._after(self._get(path))
+
+    def _get(self, path: str) -> dict:
         url = urlsplit(path)
         query = dict(parse_qsl(url.query))
         parts = url.path.strip("/").split("/")
@@ -217,25 +230,26 @@ class FakeExness:
                 "account_state": self._state()}
 
     async def post(self, path: str, payload: dict, idempotency_key: str) -> dict:
-        self._before("POST", path, payload, idempotency_key)
+        await self._before("POST", path, payload, idempotency_key)
         kind = "open" if path.endswith("/positions") else "sltp_create"
-        return self._accept(kind, {"body": copy.deepcopy(payload)}, idempotency_key)
+        return await self._after(self._accept(kind, {"body": copy.deepcopy(payload)}, idempotency_key))
 
     async def patch(self, path: str, payload: dict, idempotency_key: str) -> dict:
-        self._before("PATCH", path, payload, idempotency_key)
+        await self._before("PATCH", path, payload, idempotency_key)
         order_id = urlsplit(path).path.split("/")[-1]
         if order_id not in self.orders or self.orders[order_id]["state"] != "placed":
             raise ExnessRejected("REQUEST_ORDER_NOT_FOUND", code=3012, status=400)
-        return self._accept("sltp_modify", {"order_id": order_id, "body": copy.deepcopy(payload)}, idempotency_key)
+        return await self._after(
+            self._accept("sltp_modify", {"order_id": order_id, "body": copy.deepcopy(payload)}, idempotency_key))
 
     async def delete(self, path: str, idempotency_key: str) -> dict:
-        self._before("DELETE", path, None, idempotency_key)
+        await self._before("DELETE", path, None, idempotency_key)
         url = urlsplit(path)
         position_id = url.path.split("/")[-1]
         if position_id not in self.positions or self.positions[position_id]["state"] != "open":
             raise ExnessRejected("REQUEST_POSITION_NOT_FOUND", code=3013, status=400)
         volume = dict(parse_qsl(url.query)).get("volume")
-        return self._accept("close", {"position_id": position_id, "volume": volume}, idempotency_key)
+        return await self._after(self._accept("close", {"position_id": position_id, "volume": volume}, idempotency_key))
 
     def _accept(self, kind: str, data: dict, key: str) -> dict:
         fingerprint = repr((kind, data))
@@ -301,7 +315,7 @@ class FakeExness:
                 "price": position["open_price"], "create_time": now}
         self.deals.append(deal)
         orders = [market]
-        if sl is not None or tp is not None:
+        if (sl is not None or tp is not None) and not self.drop_sltp_on_open:
             sltp = {"order_id": self._id(), "position_id": position_id, "order_type": "sltp", "state": "placed",
                     "create_time": now}
             if sl is not None:
@@ -309,7 +323,8 @@ class FakeExness:
             if tp is not None:
                 sltp["take_profit_price"] = tp
             self.orders[sltp["order_id"]] = sltp
-            orders.append(sltp)
+            if not self.omit_sltp_in_event:
+                orders.append(sltp)
         operation["status"] = "confirmed"
         self._emit(operation, {"orders": copy.deepcopy(orders), "positions": [copy.deepcopy(position)],
                                "deals": [copy.deepcopy(deal)]})

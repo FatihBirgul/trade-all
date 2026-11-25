@@ -87,9 +87,7 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
             if key is None:
                 raise HTTPException(status_code=409, detail="pozisyonda sonucu beklenen başka bir istek var")
         if body.manage is not None:
-            trade = _open_trade(position_id)
-            trade.manage = body.manage
-            repo.upsert_trade(trade)
+            repo.update_trade(position_id, manage=body.manage)  # hedefli guncelleme: baska alanlara dokunmaz
         return {"order": key, "manage": _open_trade(position_id).manage}
 
     @private.post("/positions/{position_id}/close")
@@ -99,7 +97,7 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
             raise HTTPException(status_code=422, detail="hacim açık pozisyondan büyük")
         key = await bot.executor.close(position_id, volume=body.volume, user=True)
         if key is None:
-            raise HTTPException(status_code=409, detail="pozisyonda sonucu beklenen başka bir istek var")
+            raise HTTPException(status_code=409, detail="bu pozisyon için sonucu beklenen bir kapama isteği var")
         return {"order": key}
 
     # ------------------------------------------------------------------ elle islem
@@ -138,7 +136,8 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
         if lots < instrument.volume_min - 1e-12:
             raise HTTPException(status_code=422, detail="en küçük lot risk sınırını aşıyor")
         try:
-            key = await bot.executor.open_manual(body.symbol, body.side, lots, sl=sl, tp=tp, price=entry)
+            key = await bot.executor.open_manual(body.symbol, body.side, lots, sl=sl, tp=tp, price=entry,
+                                                 client_id=body.client_id)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from None
         order = repo.get_order(key)
@@ -170,12 +169,15 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
         if body.confirm != CLOSE_ALL_PHRASE:
             raise HTTPException(status_code=409, detail=f'onay için confirm="{CLOSE_ALL_PHRASE}" gönderilmeli')
         repo.set_bot_state(stopped=True)  # kapatirken yeni islem acilmasin
-        requested = 0
+        requested, skipped = 0, []
         for trade in repo.open_trades():
             if await bot.executor.close(trade.position_id, user=True) is not None:
                 requested += 1
-        repo.add_event("warning", "close_all", f"Tüm pozisyonlar için kapama istendi ({requested})")
-        return {"requested": requested, "stopped": True}
+            else:
+                skipped.append(trade.position_id)  # zaten bekleyen bir kapama istegi var
+        repo.add_event("warning", "close_all", f"Tüm pozisyonlar için kapama istendi ({requested})",
+                       {"requested": requested, "skipped": skipped})
+        return {"requested": requested, "skipped": skipped, "stopped": True}
 
     # ------------------------------------------------------------------ ayarlar
     @private.get("/settings")

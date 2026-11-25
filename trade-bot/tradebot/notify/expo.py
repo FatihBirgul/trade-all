@@ -6,6 +6,7 @@ Ayni olay (tur + sembol + pozisyon) 10 dakika icinde yalnizca bir kez bildirilir
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -26,6 +27,8 @@ MAX_DATA_BYTES = 2500  # Expo yuk siniri ~4 KB; baslik ve govdeye yer kalsin
 def _safe_data(kind: str, data: dict | None) -> dict:
     result: dict = {"kind": kind}
     for key, value in (data or {}).items():
+        if key == "kind":
+            continue  # olay turu ezilmesin
         if isinstance(value, (str, int, float, bool)) or value is None:
             candidate = {**result, str(key): value}
             if len(json.dumps(candidate)) <= MAX_DATA_BYTES:
@@ -40,12 +43,20 @@ class ExpoNotifier:
         self._clock = clock
         self._dedup = dedup_seconds
         self._sent: dict[tuple, float] = {}
+        self._tasks: set[asyncio.Task] = set()
         self._http = httpx.AsyncClient(transport=transport, timeout=10.0)
 
     async def aclose(self) -> None:
+        await self.drain()
         await self._http.aclose()
 
+    async def drain(self) -> None:
+        """Yoldaki gonderimlerin bitmesini bekler (kapanis ve testler icin)."""
+        while self._tasks:
+            await asyncio.gather(*list(self._tasks), return_exceptions=True)
+
     async def send(self, kind: str, title: str, body: str, data: dict | None = None) -> None:
+        """Gonderimi arka plana birakir: yavas bir push istegi olay islemeyi ve stop yonetimini bekletmez."""
         now = self._clock()
         key = (kind, (data or {}).get("symbol"), (data or {}).get("position_id"))
         last = self._sent.get(key)
@@ -54,7 +65,13 @@ class ExpoNotifier:
         tokens = self._repo.devices()
         if not tokens:
             return
-        payload = _safe_data(kind, data)
+        self._sent[key] = now  # ayni olay gonderim surerken ikinci kez kuyruga girmesin
+        task = asyncio.create_task(self._deliver(key, now, tokens, kind, title, body, _safe_data(kind, data)))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+    async def _deliver(self, key: tuple, now: float, tokens: list[str], kind: str, title: str, body: str,
+                       payload: dict) -> None:
         delivered = False
         for start in range(0, len(tokens), BATCH):
             batch = tokens[start:start + BATCH]
@@ -73,8 +90,9 @@ class ExpoNotifier:
                 details = result.get("details") if isinstance(result, dict) else None
                 if isinstance(details, dict) and details.get("error") == "DeviceNotRegistered":
                     self._repo.remove_device(token)  # uygulama kaldirilmis ya da token yenilenmis
-        if delivered:
-            self._sent[key] = now
+        if not delivered:
+            self._sent.pop(key, None)  # basarisiz gonderim bastirma sayilmaz
+        else:
             if len(self._sent) > 2000:
                 cutoff = now - self._dedup
                 self._sent = {k: v for k, v in self._sent.items() if v >= cutoff}
