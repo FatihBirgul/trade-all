@@ -3,6 +3,30 @@
 Bu adımlar **bir kez** yapılır. Sonrasında `main` dalına yapılan her push, testler geçerse botu
 sunucuda kendiliğinden günceller ve yeniden başlatır.
 
+## Hızlı kurulum: tek komut
+
+Sunucuya `root` olarak bağlanın, aşağıdaki satırı yapıştırıp Enter'a basın:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/FatihBirgul/trade-all/main/trade-bot/deploy/bootstrap.sh)
+```
+
+Betik sırayla şunları yapar:
+
+1. Kurulumu yapar (aşağıdaki 1. adımın aynısı).
+2. Dört Exness değerini tek tek sorar. Yapıştırdığınız değer güvenlik için ekranda görünmez; yapıştırıp Enter'a basın. Değerler `/etc/tradebot/tradebot.env` dosyasına yazılır (yalnızca servis okuyabilir).
+3. Dağıtım için SSH anahtarı üretir.
+4. GitHub'a eklemeniz gereken dört secret'ı (`VPS_HOST`, `VPS_USER`, `VPS_KNOWN_HOSTS`, `VPS_SSH_KEY`) ekrana yazar. Özel anahtar en sonda, ayrı bir blokta gösterilir; onu yalnızca GitHub Secret olarak yapıştırın.
+5. Salt-okuma API keşfini çalıştırır ve sonucu `/root/tradebot-kesif.zip` olarak kaydeder.
+6. Botu **dry-run** kipinde başlatır (gerçek emir göndermez).
+
+Betiği yeniden çalıştırmak güvenlidir; daha önce girdiğiniz değerleri korur.
+
+Aşağıdaki bölümler aynı adımların elle yapılışını anlatır; tek komutu kullandıysanız yalnızca 4. bölümdeki
+GitHub Secrets ekranına ihtiyacınız var.
+
+---
+
 Komutlardaki `SUNUCU_IP` yerine Contabo sunucunuzun IP adresini yazın.
 
 ## 1. Sunucuda kurulum betiğini çalıştırın
