@@ -1181,11 +1181,12 @@
     "original_sha256": "f5a06260705bbb8f06ca5d9007af0b47519c4b978a20095e747467fefd931e8e",
     "license": "MIT; Jake Schincariol copyright retained in vendor/day_trader/LICENSE",
     "modifications": [
-      "Explicit simulation-only zero-spread option; default strict quote rule unchanged; V10 canonical broker-symbol predicate replaces the four-symbol whitelist in capture"
+      "Explicit simulation-only zero-spread option; default strict quote rule unchanged; V10 canonical broker-symbol predicate replaces the four-symbol whitelist in capture",
+      "Candle gap validation treats OPENING_SOON like CLOSED (weekend gaps under real broker hours); trade gates unchanged"
     ],
     "test_provenance": "423 source tests retained verbatim",
     "status": "ADAPTED",
-    "destination_sha256": "a310b410cf91d22433483b5428fc451763ee8f79d7e045635cda9836267af206",
+    "destination_sha256": "04ba6c376e203a54b6b6ef64c1dddeeee13aefa87b25c54a873362cdc28d7a13",
     "integration_status": "ADAPTED_AND_REGRESSION_TESTED"
   },
   {

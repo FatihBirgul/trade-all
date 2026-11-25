@@ -85,10 +85,13 @@ def _bars(rows, timeframe, as_of, metadata, symbol, provider_name):
                 raise DataError('missing candle without verified broker hours')
             # Missing observations are allowed only when the explicit broker
             # schedule says CLOSED for the entire missing interval (minute grid).
+            # OPENING_SOON is the closed market's last minutes before the open: no
+            # candle can exist there either. Without it every H1 series spanning a
+            # weekend was rejected (trade bot live dry-run, 2026-11-25).
             for missing in range(result[-1]['close_time_utc'], t, 60):
                 status = broker_status(datetime.fromtimestamp(missing, timezone.utc), '',
                                        metadata.get('trade_allowed'), metadata.get('broker_hours'))
-                if status['status'] != 'CLOSED':
+                if status['status'] not in ('CLOSED','OPENING_SOON'):
                     raise DataError('missing candle during open or unknown broker hours')
         result.append(bar)
     validate_bars(result, timeframe, as_of)

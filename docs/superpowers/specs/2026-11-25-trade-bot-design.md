@@ -254,7 +254,9 @@ Her strateji ve modül uygulamadan açılıp kapatılabilir.
 - Exness API şemalarının tam eşlemesi (SL/TP değiştirme, kısmi kapama, enstrüman alanları, mum zaman dilimleri),
   keşif betiği çıktısına göre.
 - V9 modüllerinin tam olarak hangi giriş noktalarından çağrılacağı (`engine.py` / `services.py`).
-  Kural: V9'un kapı ve risk mantığı değiştirilmez, sadece veri ve broker kaynağı uyarlanır.
+  Kural (2026-11-25'te kullanıcı kararıyla güncellendi): V9 geliştirilebilir; motorda eksikler var ve giderilecek.
+  Ancak risk/maliyet kapılarını (net R/R ≥ 1.5, SL zorunluluğu, lot/risk sınırları) GEVŞETEN değişiklikler
+  test + bağımsız inceleme + kullanıcı onayı ister. Diğer V9 değişiklikleri testle birlikte normal akıştan geçer.
 - SQLite şeması, API uç noktalarının ayrıntıları, uygulama içi görsel tasarım.
 
 ## 12. Bilinen riskler
