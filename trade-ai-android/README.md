@@ -9,6 +9,38 @@
 
 Bağlantı anahtarı yalnızca telefonun güvenli deposunda tutulur. Deneme modunda bot emir göndermez; uygulamadan verdiğiniz kapatma ve SL/TP emirleri her zaman gerçek hesapta yapılır. Uygulama kapalıyken bildirim için Firebase yapılandırması (`google-services.json`) ve Expo proje kimliği gerekir; henüz yok.
 
+## İmzalı APK (kalıcı anahtar)
+
+APK iş akışı (`.github/workflows/android-apk.yml`) imza Secret'ları tanımlıysa APK'yı kalıcı anahtarınızla imzalar.
+Tanımlı değilse APK, React Native şablonunun **herkesçe bilinen test anahtarıyla** imzalanır ve iş akışı bunu uyarı
+olarak yazar. Bu sürümler birbirinin üstüne güncellenir, ama anahtar gizli olmadığı için aynı anahtarla imzalanmış
+başka bir APK da uygulamanın üstüne kurulabilir: yalnızca deneme içindir, gerçek parayla kullanmadan önce kalıcı
+anahtara geçin. Kalıcı anahtara ilk geçişte eski uygulamayı bir kez kaldırmanız gerekir; kaldırınca telefondaki
+bağlantı anahtarı da silinir, sunucuda `sudo tradebot-pair` ile yeniden eşleştirirsiniz.
+
+Anahtar deposunu bir kez, kendi bilgisayarınızda üretin (parolayı siz belirlersiniz; dosyayı ve parolayı saklayın —
+kaybolursa uygulama bir daha güncellenemez):
+
+```bash
+keytool -genkeypair -v -keystore tradebot-release.keystore -alias tradebot -keyalg RSA -keysize 2048 -validity 10000
+```
+
+```bash
+base64 -w0 tradebot-release.keystore
+```
+
+(macOS: `base64 -i tradebot-release.keystore`; Windows PowerShell:
+`[Convert]::ToBase64String([IO.File]::ReadAllBytes("tradebot-release.keystore"))`.)
+
+| Secret | Değer |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | ikinci komutun çıktısı |
+| `ANDROID_KEYSTORE_PASSWORD` | anahtar deposu parolası |
+| `ANDROID_KEY_ALIAS` | `tradebot` |
+| `ANDROID_KEY_PASSWORD` | anahtar parolası (depo parolasıyla aynıysa bu Secret'ı hiç tanımlamayın) |
+
+Anahtar deposu ve parolalar repoya, sohbete ya da uygulamaya yazılmaz.
+
 Eski kripto analiz ekranları kod olarak duruyor ama sekme çubuğunda gösterilmiyor. Aşağıdaki bölümler o eski uygulamaya aittir.
 
 ---

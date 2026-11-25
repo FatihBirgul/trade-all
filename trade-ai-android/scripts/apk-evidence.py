@@ -13,7 +13,7 @@ def digest(stream):
     for chunk in iter(lambda:stream.read(1024*1024),b''):h.update(chunk)
     return h.hexdigest()
 
-def inspect(apk,config,badging,signature,commit):
+def inspect(apk,config,badging,signature,commit,release_signed=False):
     if not re.fullmatch('[a-f0-9]{40}',commit):raise ValueError('Exact source SHA required')
     package=re.search(r"^package: name='([^']+)' versionCode='([0-9]+)' versionName='([^']*)'",badging,re.M)
     if package is None:raise ValueError('Native package metadata missing')
@@ -34,17 +34,17 @@ def inspect(apk,config,badging,signature,commit):
         'abis':abis,'signature_v2_verified':True,'certificate_sha256':certificates[0],
         'reference_certificate_sha256':REFERENCE_CERT,'certificate_matches_reference':certificates[0]==REFERENCE_CERT,
         'embedded_bundle_sha256':bundle_hash,'zip_crc_verified':True,'device_validation':'UNVERIFIED',
-        'signing':'internal development debug signing; not a production release',
+        'signing':('release key supplied through repository secrets' if release_signed else 'internal development debug signing; not a production release'),
         'update_claim':'certificate comparison only; installed device version/certificate and actual installation remain unverified'}
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('apk',type=Path);p.add_argument('--aapt',required=True);p.add_argument('--apksigner',required=True);p.add_argument('--commit',required=True);p.add_argument('--output',type=Path,required=True)
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('apk',type=Path);p.add_argument('--aapt',required=True);p.add_argument('--apksigner',required=True);p.add_argument('--commit',required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--release-signed',action='store_true')
     a=p.parse_args();head=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
     if head!=a.commit:raise ValueError('Checkout does not match declared source commit')
     badging=subprocess.check_output([a.aapt,'dump','badging',str(a.apk)],text=True)
     signature=subprocess.check_output([a.apksigner,'verify','--verbose','--print-certs',str(a.apk)],text=True)
     print(signature)
-    report=inspect(a.apk,json.loads(Path('app.json').read_text())['expo'],badging,signature,a.commit)
+    report=inspect(a.apk,json.loads(Path('app.json').read_text())['expo'],badging,signature,a.commit,a.release_signed)
     a.output.write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
     print(json.dumps(report,indent=2,sort_keys=True))
 if __name__=='__main__':main()

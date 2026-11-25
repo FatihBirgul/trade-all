@@ -4,20 +4,26 @@ from __future__ import annotations
 
 import asyncio
 import math
+import re
 from decimal import ROUND_FLOOR, Decimal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 
 from ..app import QUOTE_MAX_AGE, Bot
 from ..config import BotSettings, strategy_mode
-from ..signals import scorecard, v9
+from ..signals import custom, scorecard, v9
+from ..signals.shadow import ShadowBook
 from . import auth
-from .models import (CloseAllRequest, CloseRequest, DeviceRequest, ManualTrade, PairRequest, PositionPatch,
+from .models import (CloseAllRequest, CloseRequest, DeviceRequest, ManualPreview, ManualTrade, PairRequest, PositionPatch,
                      ResumeRequest, StrategyModeRequest)
 
 MAX_LEVEL_DISTANCE = 0.5  # kullanici SL/TP seviyesi fiyattan en cok bu oranda uzak olabilir
 CLOSE_ALL_PHRASE = "CLOSE-ALL"
 HEARTBEAT_STALE = 120.0
+CLIENT_ID = re.compile(r"[A-Za-z0-9._~-]{8,64}")  # models.ManualTrade.client_id ile ayni
+MANUAL_VOID_KEY = "manual_void_ids"  # sonucu sorulup kaydi bulunmayan (gecersiz kilinan) elle emir kimlikleri
+MANUAL_VOID_KEEP = 200
+LIVE_MIN_SHADOW_TRADES = 20  # yeni strateji canliya alinmadan once en az bu kadar sonuclanmis golge islem
 
 
 def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
@@ -137,6 +143,109 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
         return {"order": key}
 
     # ------------------------------------------------------------------ elle islem
+    def _manual_plan(body, instrument, *, preview: bool = False) -> dict:
+        """Elle islemin giris/stop/hedef/lot plani. Onizleme ve gercek emir AYNI hesabi kullanir:
+        kullanicinin onayladigi sayilar gonderilecek emrin sayilaridir (fiyat degisimi disinda)."""
+        quote = bot.quotes.quote(body.symbol)
+        if quote is None or clock() - quote["time"] > QUOTE_MAX_AGE:
+            raise HTTPException(status_code=409, detail="güncel fiyat yok")
+        sign = 1.0 if body.side == "BUY" else -1.0
+        entry = quote["ask"] if body.side == "BUY" else quote["bid"]
+        sl = entry - sign * body.sl_distance
+        tp = entry + sign * body.tp_distance if body.tp_distance is not None else None
+        if sl <= 0:
+            raise HTTPException(status_code=422, detail="SL mesafesi fiyattan büyük")
+        if bot.account is None:
+            raise HTTPException(status_code=409, detail="hesap durumu bilinmiyor")
+        try:
+            per_lot = abs(bot.provider.loss_for(body.symbol, body.side, 1.0, entry, sl))
+        except LookupError:
+            raise HTTPException(status_code=409, detail="hesap para birimine dönüşüm kuru yok") from None
+        if per_lot <= 0 or not math.isfinite(per_lot):
+            raise HTTPException(status_code=409, detail="lot hesaplanamadı")
+        # Sermaye ve marjin ortak oldugu icin gercek hesap equity'si kullanilir (spec §6.4).
+        settings_risk = repo.get_bot_settings().risk.risk_pct
+        risk_pct = getattr(body, "risk_pct", None) or settings_risk
+        budget = bot.account.equity * risk_pct / 100.0
+        step = Decimal(str(instrument.volume_step))
+        units = (Decimal(str(budget / per_lot + 1e-9)) / step).to_integral_value(rounding=ROUND_FLOOR)
+        suggested = float(min(units * step, Decimal(str(instrument.volume_max))))
+        below_min = False
+        if body.lots is not None:
+            # Lot adim izgarasinda olmali: adim disi lot gonderimde yuvarlanir ve onizlenenden BUYUK olabilirdi.
+            ratio = Decimal(str(body.lots)) / step
+            if ratio != ratio.to_integral_value():
+                raise HTTPException(status_code=422, detail=f"lot {instrument.volume_step:g} adımının katı olmalı")
+            lots = body.lots
+            if lots < instrument.volume_min - 1e-12:
+                raise HTTPException(status_code=422, detail=f"lot en küçük lotun ({instrument.volume_min:g}) altında")
+        elif suggested < instrument.volume_min - 1e-12:
+            # Kucuk hesap: risk butcesi en kucuk lota yetmiyor. Onizleme en kucuk lotu UYARIYLA gosterir;
+            # emir ise lot acikca verilmeden (kullanici o sayiyi gorup onaylamadan) gonderilmez.
+            if not preview:
+                raise HTTPException(status_code=422, detail="en küçük lot risk sınırını aşıyor; lotu açıkça belirtin")
+            lots, below_min = instrument.volume_min, True
+        else:
+            lots = suggested
+        if lots > instrument.volume_max + 1e-12:
+            raise HTTPException(status_code=422, detail="lot en büyük lotu aşıyor")
+        return {"entry": entry, "sl": sl, "tp": tp, "lots": lots, "suggested_lots": suggested, "per_lot": per_lot,
+                "risk_pct": risk_pct, "budget": budget, "spread": quote["spread"], "below_min": below_min,
+                "settings_risk_pct": settings_risk,
+                "settings_budget": bot.account.equity * settings_risk / 100.0}
+
+    @private.post("/trades/preview")
+    async def manual_preview(body: ManualPreview):
+        """Elle islem onizlemesi: onerilen lot ve bu lotla zarar/kar. Emir GONDERMEZ."""
+        try:
+            instrument = bot.catalog.get(body.symbol)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="sembol bulunamadı") from None
+        if not instrument.tradable:
+            raise HTTPException(status_code=409, detail="sembol işleme kapalı")
+        plan = _manual_plan(body, instrument, preview=True)
+        loss = plan["per_lot"] * plan["lots"]
+        equity = bot.account.equity
+        warnings = []
+        if plan["below_min"]:
+            warnings.append(f"Hesap küçük: en küçük lot ({instrument.volume_min:g}) bile risk sınırınızı aşıyor")
+        # Uyari her zaman AYARLARDAKI risk sinirina goredir; istekteki risk_pct uyariyi susturamaz.
+        if loss > plan["settings_budget"] * 1.0001:
+            warnings.append(f"Bu lotla zarar, risk sınırınızın (%{plan['settings_risk_pct']:g}) üstünde")
+        if body.sl_distance < 3 * plan["spread"]:
+            warnings.append("SL mesafesi alış-satış farkına çok yakın; hemen tetiklenebilir")
+        if body.tp_distance is not None and body.tp_distance < body.sl_distance:
+            warnings.append("Hedef, zarar durdurmadan yakın (R/R 1'in altında)")
+        if body.tp_distance is None:
+            warnings.append("Kâr al seviyesi yok")
+        profit = None
+        if plan["tp"] is not None:
+            profit = bot.provider.pnl(body.symbol, body.side, plan["lots"], plan["entry"], plan["tp"])
+        return {"symbol": body.symbol, "side": body.side, "entry": plan["entry"], "sl": plan["sl"], "tp": plan["tp"],
+                "lots": plan["lots"], "suggested_lots": plan["suggested_lots"], "loss": loss, "profit": profit,
+                "loss_pct": loss / equity * 100.0 if equity > 0 else None,
+                "rr": body.tp_distance / body.sl_distance if body.tp_distance is not None else None,
+                "risk_pct": plan["risk_pct"], "settings_risk_pct": plan["settings_risk_pct"],
+                "currency": bot.account.currency, "volume_min": instrument.volume_min,
+                "volume_step": instrument.volume_step, "volume_max": instrument.volume_max, "warnings": warnings}
+
+    @private.get("/symbols")
+    async def symbols():
+        """Islem yapilabilen evren: elle islem ekrani ve ayarlar icin."""
+        now = clock()
+        rows = []
+        for instrument in bot.catalog.universe():
+            age = bot.quotes.age(instrument.symbol)
+            quote = bot.quotes.quote(instrument.symbol)
+            is_open = bot._is_open(instrument, now)
+            fresh = age is not None and age <= QUOTE_MAX_AGE
+            rows.append({"symbol": instrument.symbol, "kind": instrument.kind, "open": is_open, "quoted": fresh,
+                         "bid": quote["bid"] if quote and fresh else None, "ask": quote["ask"] if quote and fresh else None,
+                         "digits": instrument.digits, "tick_size": instrument.tick_size,
+                         "volume_min": instrument.volume_min, "volume_step": instrument.volume_step,
+                         "volume_max": instrument.volume_max})
+        return {"symbols": rows}
+
     @private.post("/trades")
     async def manual_trade(body: ManualTrade):
         try:
@@ -154,32 +263,13 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
                     raise HTTPException(status_code=409, detail="bu client_id başka bir emir için kullanıldı")
                 return {"order": previous["idempotency_key"], "state": previous["state"], "duplicate": True,
                         "lots": float(sent["body"]["volume"]), "sl": sent.get("sl"), "tp": sent.get("tp2")}
-        quote = bot.quotes.quote(body.symbol)
-        if quote is None or clock() - quote["time"] > QUOTE_MAX_AGE:
-            raise HTTPException(status_code=409, detail="güncel fiyat yok")
-        sign = 1.0 if body.side == "BUY" else -1.0
-        entry = quote["ask"] if body.side == "BUY" else quote["bid"]
-        sl = entry - sign * body.sl_distance
-        tp = entry + sign * body.tp_distance if body.tp_distance is not None else None
-        if sl <= 0:
-            raise HTTPException(status_code=422, detail="SL mesafesi fiyattan büyük")
-        lots = body.lots
-        if lots is None:
-            # Sermaye ve marjin ortak oldugu icin gercek hesap equity'si kullanilir (spec §6.4).
-            if bot.account is None:
-                raise HTTPException(status_code=409, detail="hesap durumu bilinmiyor")
-            try:
-                per_lot = abs(bot.provider.loss_for(body.symbol, body.side, 1.0, entry, sl))
-            except LookupError:
-                raise HTTPException(status_code=409, detail="hesap para birimine dönüşüm kuru yok") from None
-            budget = bot.account.equity * repo.get_bot_settings().risk.risk_pct / 100.0
-            if per_lot <= 0 or not math.isfinite(per_lot):
-                raise HTTPException(status_code=409, detail="lot hesaplanamadı")
-            step = Decimal(str(instrument.volume_step))
-            units = (Decimal(str(budget / per_lot + 1e-9)) / step).to_integral_value(rounding=ROUND_FLOOR)
-            lots = float(min(units * step, Decimal(str(instrument.volume_max))))
-        if lots < instrument.volume_min - 1e-12:
-            raise HTTPException(status_code=422, detail="en küçük lot risk sınırını aşıyor")
+            if body.client_id in repo.get_setting(MANUAL_VOID_KEY, []):
+                # Uygulama bu emrin sonucunu sordu, kayit yoktu ve kimlik gecersiz kilindi; kullaniciya "acilmadi"
+                # dendi. Yolda kalmis istek simdi ulasti: emir ACILMAZ.
+                raise HTTPException(status_code=409, detail="bu emir iptal edildi; yeniden önizleyip gönderin")
+        # Buradan emir kaydinin yazilmasina kadar await yok: iptal denetimi ile kayit arasina istek giremez.
+        plan = _manual_plan(body, instrument)
+        entry, sl, tp, lots = plan["entry"], plan["sl"], plan["tp"], plan["lots"]
         try:
             key = await bot.executor.open_manual(body.symbol, body.side, lots, sl=sl, tp=tp, price=entry,
                                                  client_id=body.client_id)
@@ -187,6 +277,22 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
             raise HTTPException(status_code=422, detail=str(exc)) from None
         order = repo.get_order(key)
         return {"order": key, "state": order["state"] if order else None, "lots": lots, "sl": sl, "tp": tp}
+
+    @private.post("/trades/{client_id}/resolve")
+    async def resolve_manual_trade(client_id: str):
+        """Sonucu bilinmeyen elle emri sorar; emir ACMAZ.
+
+        Kayit varsa durumunu doner. Yoksa kimligi gecersiz kilar: ayni kimlikle sonradan ulasan istek
+        reddedilir, boylece uygulama kullaniciya guvenle "emir acilmadi" diyebilir.
+        """
+        if not CLIENT_ID.fullmatch(client_id):
+            raise HTTPException(status_code=422, detail="geçersiz emir kimliği")
+        order = repo.get_order(f"man-{client_id}")
+        if order is not None:
+            return {"found": True, "state": order["state"], "lots": float(order["payload"]["body"]["volume"])}
+        voided = [item for item in repo.get_setting(MANUAL_VOID_KEY, []) if item != client_id]
+        repo.set_setting(MANUAL_VOID_KEY, (voided + [client_id])[-MANUAL_VOID_KEEP:])
+        return {"found": False, "state": None, "lots": None}
 
     # ------------------------------------------------------------------ durdur / devam
     @private.post("/bot/stop")
@@ -242,14 +348,14 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
         # Bir stratejiyi canliya almak gercek islem acar ve bilincli onay ister; bu yalnizca
         # POST /strategies/{id}/mode (confirm=true) ile yapilir. Aksi halde eski bir ayar kopyasini
         # geri gonderen istemci, botun duraklattigi stratejiyi farkinda olmadan yeniden acardi.
-        revived = sorted(s for s in v9.builtin_strategy_ids()
+        revived = sorted(s for s in _strategy_ids()
                          if strategy_mode(body, s) == "live" and strategy_mode(previous, s) != "live")
         if revived:
             raise HTTPException(
                 status_code=409,
                 detail="strateji bu yoldan canlıya alınamaz (" + ", ".join(revived) + "); güncel ayarları "
                        "yeniden okuyun ya da strateji kipini onaylayarak değiştirin")
-        unknown = sorted(set(body.strategy_modes) - v9.builtin_strategy_ids())
+        unknown = sorted(set(body.strategy_modes) - _strategy_ids())
         if unknown:
             raise HTTPException(status_code=422, detail="bilinmeyen strateji: " + ", ".join(unknown))
         repo.set_bot_settings(body)
@@ -311,9 +417,47 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
     async def get_scorecard():
         return scorecard.scorecard(repo, repo.get_bot_settings())
 
+    def _strategy_ids() -> frozenset[str]:
+        return v9.builtin_strategy_ids() | custom.strategy_ids()
+
+    def _live_blocker(strategy_id: str, settings: BotSettings) -> str | None:
+        """Yeni (V9 disi) strateji ancak golge karnesi olumluysa canliya alinabilir (spec §6.2)."""
+        if strategy_id not in custom.strategy_ids():
+            return None
+        held = scorecard.paused(repo).get(strategy_id)
+        if held is not None:
+            # Bot bu stratejiyi kotu sonuc nedeniyle duraklatti: eski karne degil, duraklatmadan SONRAKI
+            # golge sonuclari olumlu olmali.
+            stats = ShadowBook(repo).stats(strategy_id, "paused", since=held.get("at"))
+        else:
+            stats = ShadowBook(repo).stats(strategy_id, "shadow")
+        # Esik ayarla DUSURULEMEZ: ayar yalnizca yukseltebilir.
+        need = max(LIVE_MIN_SHADOW_TRADES, settings.fusion.pause_min_trades)
+        if stats["trades"] < need:
+            return (f"yeni strateji canlıya alınamaz: en az {need} sonuçlanmış gölge işlem gerekli "
+                    f"(şu an {stats['trades']})")
+        if not stats["avg_r"] or stats["avg_r"] <= 0:
+            return f"yeni strateji canlıya alınamaz: gölge karnesi olumlu değil (ortalama R {stats['avg_r']:.2f})"
+        return None
+
+    @private.get("/strategies")
+    async def strategies():
+        """Tum stratejiler: kaynak, kip, golge karnesi ve canliya alinabilirlik."""
+        settings = repo.get_bot_settings()
+        book, held = ShadowBook(repo), scorecard.paused(repo)
+        rows = []
+        for strategy_id in sorted(_strategy_ids()):
+            mode = strategy_mode(settings, strategy_id)
+            blocker = _live_blocker(strategy_id, settings)
+            rows.append({"strategy_id": strategy_id,
+                         "source": "custom" if strategy_id in custom.strategy_ids() else "v9", "mode": mode,
+                         "paused": strategy_id in held, "shadow": book.stats(strategy_id, "shadow"),
+                         "can_go_live": mode != "live" and blocker is None, "live_blocker": blocker})
+        return {"strategies": rows}
+
     @private.post("/strategies/{strategy_id}/mode")
     async def set_strategy_mode(strategy_id: str, body: StrategyModeRequest):
-        if strategy_id not in v9.builtin_strategy_ids():
+        if strategy_id not in _strategy_ids():
             raise HTTPException(status_code=404, detail="strateji bulunamadı")
         settings = repo.get_bot_settings()
         current = strategy_mode(settings, strategy_id)
@@ -321,6 +465,9 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
             if not body.confirm:
                 raise HTTPException(status_code=409,
                                     detail="stratejiyi canlıya almak gerçek işlem açar; onay için confirm=true gönderin")
+            blocker = _live_blocker(strategy_id, settings)
+            if blocker:
+                raise HTTPException(status_code=409, detail=blocker)
             if strategy_id in scorecard.paused(repo):
                 # Yalnizca botun duraklattigi strateji icin karne denetimi bu andan yeniden baslar.
                 # Hic duraklatilmamis stratejiyi kapatip acmak sayaci sifirlamaz.

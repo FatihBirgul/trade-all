@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import logging
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -29,7 +30,7 @@ from .market.catalog import InstrumentCatalog
 from .market.quotes import QuoteBook
 from .news.gate import blocking_event
 from .risk.portfolio import check_entry
-from .signals import v9
+from .signals import custom, v9
 from .signals import fusion, scorecard
 from .signals.adapter import Candidate, Evaluation, evaluate_all
 from .signals.shadow import ShadowBook
@@ -64,6 +65,7 @@ REARM_LIMIT = 3  # stop bu kadar denemede kurulamazsa pozisyon kapatilir
 ATR_MAX_AGE_BARS = 3
 TICK_CHUNK = 20
 VETO_REASON_CHARS = 80
+PUBLIC_NUMBER = re.compile(r"\d+[.,]\d+|\d{3,}")  # ondalikli ya da 3+ haneli sayilar
 SUMMARY_SAMPLES = 5
 RATE_PAUSE_LIMIT = 2  # bir taramada 429 sonrasi en cok bu kadar kisa bekleme; sonra tarama birakilir
 RATE_PAUSE_DEFAULT = 2.0
@@ -445,6 +447,10 @@ class Bot:
                                instrument.trading_hours)
         return status["status"] in ("OPEN", "CLOSING_SOON")
 
+    def _spread(self, symbol: str) -> float:
+        quote = self.quotes.quote(symbol)
+        return float(quote["spread"]) if quote else 0.0
+
     def _commission(self, instrument: Instrument, settings: BotSettings) -> float:
         """Lot basina gidis-donus komisyon (hesap para birimi): ayar ile enstrumanin bildirdiginden buyuk olan."""
         derived = 0.0
@@ -603,6 +609,21 @@ class Bot:
                     continue
                 summary.candidates += 1
                 await self._consider(result, instrument, settings, summary)
+            # V9 disindaki (yeni) stratejiler: varsayilan golge. Canliya alinmis olanlar ayni kapilardan gecer.
+            custom_modes = {s: strategy_mode(settings, s) for s in custom.strategy_ids()}
+            v9_report = next((r.report for r in results if r.report is not None), None)
+            try:
+                extra = custom.evaluate(self.provider, instrument, equity=self.account.equity,
+                                        risk_pct=settings.risk.risk_pct, modes=custom_modes, now=self._clock(),
+                                        report=v9_report, v9_decisions=tuple(r.decision for r in results),
+                                        commission_per_lot=self._commission(instrument, settings))
+            except Exception:  # noqa: BLE001 - yeni stratejilerdeki bir hata taramayi (ve golge sonuclarini) dusurmemeli
+                log.exception("yeni stratejiler degerlendirilemedi: %s", symbol)
+                summary.errors += 1
+                extra = []
+            for result in extra:
+                summary.candidates += 1
+                await self._consider(result, instrument, settings, summary)
 
         for symbol in self.shadow.open_symbols():  # sanal islemleri kapanmis mumlarla sonuclandir
             try:
@@ -662,11 +683,11 @@ class Bot:
         if result.mode == "shadow":
             # Golge kipindeki strateji: sinyali ve sanal sonucu izle, gercek emir gonderme.
             reason = "paused" if candidate.strategy_id in scorecard.paused(self.repo) else "shadow"
-            if self.shadow.open(candidate, reason, score, self._clock()):
+            if self.shadow.open(candidate, reason, score, self._clock(), self._spread(candidate.symbol)):
                 summary.shadowed += 1
             return
         if multiplier is None:
-            self.shadow.open(candidate, "low_score", score, self._clock())
+            self.shadow.open(candidate, "low_score", score, self._clock(), self._spread(candidate.symbol))
             await self._observe(candidate, summary, score=score, votes=votes,
                                 reason=f"güven puanı {score:.0f} < {settings.fusion.min_score:g}")
             return
@@ -955,7 +976,9 @@ class Bot:
         def add(target: dict, source: object) -> None:
             for key, count in (source.items() if isinstance(source, dict) else ()):
                 if isinstance(count, int):
-                    target[str(key)[:VETO_REASON_CHARS]] = target.get(str(key)[:VETO_REASON_CHARS], 0) + count
+                    # Herkese acik: neden metinlerindeki sayilar (fiyat/tutar olabilir) gizlenir.
+                    text = PUBLIC_NUMBER.sub("#", str(key))[:VETO_REASON_CHARS]
+                    target[text] = target.get(text, 0) + count
 
         for event in self.repo.events_since(since, ("scan", "scan_skipped", "signal", "signal_observed")):
             data = event["data"] if isinstance(event["data"], dict) else {}
@@ -980,7 +1003,8 @@ class Bot:
                             if isinstance(entry, (int, float)) and isinstance(stop, (int, float)) and entry else None)
                 out["samples"].append({
                     "at": event["at"], "symbol": data.get("symbol"), "side": data.get("side"),
-                    "strategy_id": data.get("strategy_id"), "lots": data.get("lots"),
+                    # Lot YOK: lot + stop mesafesi + risk yuzdesi birlikte varligi ele verir. Lot yetkili API'dedir.
+                    "strategy_id": data.get("strategy_id"),
                     "score": round(data["score"], 1) if isinstance(data.get("score"), (int, float)) else None,
                     "net_rr": round(data["net_rr"], 2) if isinstance(data.get("net_rr"), (int, float)) else None,
                     "stop_pct": distance, "risk_pct": data.get("risk_pct"),

@@ -41,6 +41,15 @@ class ManualTrade(Strict):
     client_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9._~-]{8,64}$")
 
 
+class ManualPreview(Strict):
+    symbol: str = Field(pattern=r"^[A-Z0-9]{3,12}$")
+    side: Literal["BUY", "SELL"]
+    sl_distance: float = Field(gt=0)
+    tp_distance: float | None = Field(default=None, gt=0)
+    lots: float | None = Field(default=None, gt=0)
+    risk_pct: float | None = Field(default=None, ge=0.05, le=2.0)  # yalnizca oneri icin; emirde ayardaki deger
+
+
 class ResumeRequest(Strict):
     confirm_halt: bool = False
 

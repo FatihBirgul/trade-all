@@ -41,9 +41,10 @@ async def test_summary_counts_scans_candidates_and_reasons_without_account_data(
 
     sample = body["samples"][-1]
     assert sample["symbol"] == "XAUUSD" and sample["side"] == "BUY" and sample["dry_run"] is True
-    assert sample["lots"] > 0 and 0 < sample["risk_pct"] <= 0.5 and sample["stop_pct"] > 0
-    assert set(sample) == {"at", "symbol", "side", "strategy_id", "lots", "score", "net_rr", "stop_pct",
-                           "risk_pct", "dry_run"}
+    assert 0 < sample["risk_pct"] <= 0.5 and sample["stop_pct"] > 0
+    # Lot YOK: lot + stop mesafesi + risk yuzdesi birlikte hesap varligini ele verir (inceleme C2).
+    assert set(sample) == {"at", "symbol", "side", "strategy_id", "score", "net_rr", "stop_pct", "risk_pct",
+                           "dry_run"}
     # Herkese acik cikti: bakiye, varlik, para tutari, hesap numarasi, giris/stop fiyati yok.
     text = response.text
     assert sample["net_rr"] == round(sample["net_rr"], 2)
@@ -125,3 +126,11 @@ async def test_slow_scan_evaluates_each_symbol_at_its_own_time(tmp_path):
     assert summary.scanned == 4
     assert "stale tick" not in summary.veto_reasons, summary.veto_reasons
     assert summary.would_open == 1
+
+
+async def test_public_reasons_hide_numbers(tmp_path):
+    app = await started(tmp_path, dry_run=True)
+    app.repo.add_event("info", "scan", "tarama", {"scanned": 1, "veto_reasons": {"spread 0.00123 above 1234.5": 1,
+                                                                                 "V2 QC: stale_data": 2}})
+    reasons = (await public_get(app, "/health/summary")).json()["veto_reasons"]
+    assert reasons == {"spread # above #": 1, "V2 QC: stale_data": 2}

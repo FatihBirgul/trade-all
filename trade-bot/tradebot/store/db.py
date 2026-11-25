@@ -25,7 +25,7 @@ def connect(path: Path | str) -> sqlite3.Connection:
 
 # Sonradan eklenen sutunlar: mevcut veritabanlarinda ALTER TABLE ile tamamlanir.
 _ADDED_COLUMNS = (("trades", "last_sl", "REAL"), ("trades", "planned_tp", "REAL"), ("trades", "votes_json", "TEXT"),
-                  ("bot_state", "heartbeat_at", "REAL"))
+                  ("bot_state", "heartbeat_at", "REAL"), ("shadow_trades", "spread", "REAL"))
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
