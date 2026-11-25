@@ -43,8 +43,8 @@ test("tabs show bot screens and hide legacy ones", async () => {
     </ThemeProvider>,
   );
   expect(ui.getByText("firstRoute")).toBeTruthy();
-  for (const name of ["index", "positions", "events", "connection"])
+  for (const name of ["index", "positions", "reports", "events", "settings-bot"])
     expect(ui.getByText(name + ":visible")).toBeTruthy();
-  for (const name of ["legacy", "analysis", "portfolios", "scanner", "settings"])
+  for (const name of ["connection", "legacy", "analysis", "portfolios", "scanner", "settings"])
     expect(ui.getByText(name + ":hidden")).toBeTruthy();
 });

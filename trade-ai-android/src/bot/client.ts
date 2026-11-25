@@ -2,7 +2,23 @@
 // "/api/v2" önekini ve V2 şema doğrulamasını zorunlu kılar.
 import { ApiError } from "../api/client";
 import { gatewayOrigin } from "../domain/safety";
-import type { BotConfig, BotEvent, BotHealth, BotPosition, BotStatus, PositionPatch } from "./types";
+import type {
+  BotConfig,
+  BotEvent,
+  BotHealth,
+  BotPosition,
+  BotReport,
+  BotSettings,
+  BotStatus,
+  BotStrategy,
+  BotSymbol,
+  PositionPatch,
+  ReportPeriod,
+  StrategyMode,
+  TradePreview,
+  TradeRequest,
+  TradeResult,
+} from "./types";
 
 const TIMEOUT_MS = 15000;
 const MESSAGES: Record<string, string> = {
@@ -195,6 +211,56 @@ export function createBotApi(config: BotConfig | null, transport: Transport = fe
         "PUT",
         { ...settings, dry_run: dryRun },
       );
+    },
+    reports: async (period: ReportPeriod) => {
+      const value = await request<BotReport>("/reports?period=" + period);
+      if (!isObject(value.totals) || !Array.isArray(value.history)) throw new BotError("INVALID_RESPONSE");
+      return value;
+    },
+    strategies: async () =>
+      listShape<BotStrategy>(await request<unknown>("/strategies"), "strategies", (entry) =>
+        typeof entry.strategy_id === "string" && typeof entry.mode === "string" && isObject(entry.shadow),
+      ),
+    // Canlıya almak sunucuda ayrı onay ister; `confirm` yalnızca kullanıcı onayladıktan sonra true gönderilir.
+    setStrategyMode: (id: string, mode: StrategyMode, confirm = false) => {
+      if (!/^[a-z0-9_]{3,64}$/.test(id)) throw new BotError("INVALID_REQUEST");
+      return request<{ strategy_id: string; mode: StrategyMode }>("/strategies/" + id + "/mode", "POST", {
+        mode,
+        confirm,
+      });
+    },
+    settings: async () => {
+      const value = await request<BotSettings>("/settings");
+      if (!isObject(value.risk) || !isObject(value.news) || !isObject(value.fusion) || typeof value.dry_run !== "boolean")
+        throw new BotError("INVALID_RESPONSE");
+      return value;
+    },
+    // Ayarlar her kayıtta yeniden okunur ve değişiklik o güncel kopyaya uygulanır: eski bir kopya gönderilmez.
+    // Deneme/canlı kipi ve strateji kipleri bu yoldan değişmez (kendi onaylı uç noktaları vardır).
+    updateSettings: async (apply: (current: BotSettings) => BotSettings) => {
+      const current = await request<BotSettings>("/settings");
+      if (!isObject(current.risk) || typeof current.dry_run !== "boolean") throw new BotError("INVALID_RESPONSE");
+      const next = apply(JSON.parse(JSON.stringify(current)) as BotSettings);
+      return request<BotSettings>("/settings", "PUT", {
+        ...next,
+        dry_run: current.dry_run,
+        strategy_modes: current.strategy_modes,
+      });
+    },
+    symbols: async () =>
+      listShape<BotSymbol>(await request<unknown>("/symbols"), "symbols", (entry) =>
+        typeof entry.symbol === "string" && typeof entry.open === "boolean" && typeof entry.volume_min === "number",
+      ),
+    previewTrade: async (trade: TradeRequest & { risk_pct?: number }) => {
+      const value = await request<TradePreview>("/trades/preview", "POST", trade);
+      if (typeof value.lots !== "number" || typeof value.loss !== "number" || !Array.isArray(value.warnings))
+        throw new BotError("INVALID_RESPONSE");
+      return value;
+    },
+    // `clientId` aynı kaldıkça sunucu ikinci bir emir açmaz: sonucu belirsiz kalan istek güvenle yeniden sorulabilir.
+    openTrade: (trade: TradeRequest, clientId: string) => {
+      if (!/^[A-Za-z0-9._~-]{8,64}$/.test(clientId)) throw new BotError("INVALID_REQUEST");
+      return request<TradeResult>("/trades", "POST", { ...trade, client_id: clientId });
     },
     closeAll: () =>
       request<{ requested: number; skipped: string[]; stopped: boolean }>("/bot/close-all", "POST", {

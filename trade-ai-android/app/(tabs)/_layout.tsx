@@ -14,8 +14,10 @@ export default function Layout() {
   const screens = [
     ["index", "Panel", "speedometer-outline", true],
     ["positions", "Pozisyonlar", "list-outline", true],
+    ["reports", "Raporlar", "bar-chart-outline", true],
     ["events", "Bildirimler", "notifications-outline", true],
-    ["connection", "Bağlantı", "link-outline", true],
+    ["settings-bot", "Ayarlar", "options-outline", true],
+    ["connection", "Bağlantı", "link-outline", false],
     ["legacy", "Eski Ana Sayfa", "home-outline", false],
     ["analysis", "Analiz", "analytics-outline", false],
     ["portfolios", "Portföyler", "wallet-outline", false],

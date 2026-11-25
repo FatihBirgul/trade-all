@@ -287,3 +287,44 @@ test("going live re-reads settings and sends the separate confirmation; going ba
   });
   expect(refused).toHaveBeenCalledTimes(2); // yeniden denenmez
 });
+
+test("updateSettings applies the change to freshly read settings and never alters mode or strategy modes", async () => {
+  const fresh = {
+    risk: { risk_pct: 0.5, max_open_bot: 2 },
+    news: { enabled: true, window_minutes: 30 },
+    fusion: { enabled: true, min_score: 40, mid_score: 60, high_score: 80 },
+    dry_run: true,
+    strategy_modes: { fx_trend_momentum_v6: "shadow" },
+  };
+  const transport = jest.fn(async (_url: string, request: { method: string; body?: string }) =>
+    request.method === "GET" ? ok(fresh) : ok(JSON.parse(request.body ?? "{}")),
+  );
+  const api = createBotApi(config, transport as unknown as typeof fetch);
+  await api.updateSettings((current) => {
+    current.risk.risk_pct = 0.25;
+    current.dry_run = false; // form bunu değiştirmeye çalışsa bile
+    current.strategy_modes = {}; // duraklatılmış stratejiyi canlıya döndürmeye çalışsa bile
+    return current;
+  });
+  const calls = transport.mock.calls as unknown as [string, { method: string; body?: string }][];
+  expect(calls.map(([url, request]) => [request.method, url.replace(config.origin, "")])).toEqual([
+    ["GET", "/settings"],
+    ["PUT", "/settings"], // canlıya geçiş onayı (confirm_live) bu yoldan asla gönderilmez
+  ]);
+  expect(JSON.parse(calls[1][1].body ?? "")).toEqual({ ...fresh, risk: { risk_pct: 0.25, max_open_bot: 2 } });
+});
+
+test("manual trade and strategy mode requests", async () => {
+  const transport = jest.fn().mockResolvedValue(ok({ order: "man-1", state: "ACKED", lots: 0.08, sl: 1, tp: null }));
+  const api = createBotApi(config, transport);
+  const trade = { symbol: "EURUSD", side: "BUY" as const, sl_distance: 0.002 };
+  await api.openTrade(trade, "11111111-2222-3333-4444-555555555555");
+  expect(JSON.parse(transport.mock.calls[0][1].body)).toEqual({ ...trade, client_id: "11111111-2222-3333-4444-555555555555" });
+  await expect(async () => api.openTrade(trade, "kisa")).rejects.toMatchObject({ code: "INVALID_REQUEST" });
+  await api.setStrategyMode("tb_ema_pullback_v1", "live");
+  expect(JSON.parse(transport.mock.calls[1][1].body)).toEqual({ mode: "live", confirm: false }); // onay varsayılan olarak yok
+  await api.setStrategyMode("tb_ema_pullback_v1", "live", true);
+  expect(transport.mock.calls[2][0]).toBe(config.origin + "/strategies/tb_ema_pullback_v1/mode");
+  await expect(async () => api.setStrategyMode("../bot/stop", "off")).rejects.toMatchObject({ code: "INVALID_REQUEST" });
+  expect(transport).toHaveBeenCalledTimes(3);
+});

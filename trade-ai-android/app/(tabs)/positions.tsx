@@ -2,7 +2,8 @@ import React from "react";
 import { BotPage, Disconnected, NoData, StaleNotice } from "../../src/bot/BotPage";
 import { PositionCard } from "../../src/bot/PositionCard";
 import { useBot } from "../../src/bot/state";
-import { Empty, ScreenHeader } from "../../src/ui";
+import { router } from "expo-router";
+import { Button, Empty, ScreenHeader } from "../../src/ui";
 
 export default function Positions() {
   const bot = useBot();
@@ -18,6 +19,7 @@ export default function Positions() {
       {ready ? (
         <>
           <StaleNotice />
+          <Button title="Elle işlem aç" onPress={() => router.push("/manual-trade")} secondary />
           <NoData />
           {bot.lastOkAt === null ? null : bot.positions.length === 0 ? (
             <Empty text="Açık pozisyon yok." />
