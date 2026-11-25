@@ -70,7 +70,10 @@ def scorecard(repo: Repo, settings: BotSettings) -> dict:
     shadow = ShadowBook(repo)
     held = paused(repo)
     strategies = {}
-    for strategy_id in sorted(v9.builtin_strategy_ids() | {t.strategy_id for t, _ in rows if t.strategy_id}):
+    from . import custom  # yerel ice aktarma: custom -> adapter zinciri bu modulu dolayli olarak yukleyebilir
+
+    known = v9.builtin_strategy_ids() | custom.strategy_ids()
+    for strategy_id in sorted(known | {t.strategy_id for t, _ in rows if t.strategy_id}):
         strategies[strategy_id] = {
             "mode": strategy_mode(settings, strategy_id), "paused": held.get(strategy_id),
             "live": _stats([r for t, r in rows if t.strategy_id == strategy_id]),

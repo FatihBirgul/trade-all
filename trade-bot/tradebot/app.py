@@ -29,7 +29,7 @@ from .market.catalog import InstrumentCatalog
 from .market.quotes import QuoteBook
 from .news.gate import blocking_event
 from .risk.portfolio import check_entry
-from .signals import v9
+from .signals import custom, v9
 from .signals import fusion, scorecard
 from .signals.adapter import Candidate, Evaluation, evaluate_all
 from .signals.shadow import ShadowBook
@@ -598,6 +598,14 @@ class Bot:
                     summary.veto_reasons[veto] = summary.veto_reasons.get(veto, 0) + 1
                     log.info("aday yok %s: %s (%s)", symbol, result.decision, "; ".join(result.reasons))
                     continue
+                summary.candidates += 1
+                await self._consider(result, instrument, settings, summary)
+            # V9 disindaki (yeni) stratejiler: varsayilan golge. Canliya alinmis olanlar ayni kapilardan gecer.
+            custom_modes = {s: strategy_mode(settings, s) for s in custom.strategy_ids()}
+            v9_report = next((r.report for r in results if r.report is not None), None)
+            for result in custom.evaluate(self.provider, instrument, equity=self.account.equity,
+                                          risk_pct=settings.risk.risk_pct, modes=custom_modes, now=now,
+                                          report=v9_report):
                 summary.candidates += 1
                 await self._consider(result, instrument, settings, summary)
 

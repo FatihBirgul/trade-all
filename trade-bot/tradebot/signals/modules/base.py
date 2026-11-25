@@ -12,6 +12,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
+from ...config import CUSTOM_STRATEGY_PREFIX
+
 Kind = Literal["vote", "strategy"]
 
 
@@ -63,6 +65,9 @@ def register(module: Module) -> Module:
         raise ValueError(f"modul iki kez kaydedildi: {module.id}")
     if module.kind not in ("vote", "strategy"):
         raise ValueError(f"gecersiz modul turu: {module.kind}")
+    if module.kind == "strategy" and not module.id.startswith(CUSTOM_STRATEGY_PREFIX):
+        # On ek, V9 disindaki stratejilerin varsayilan olarak golgede baslamasini saglar.
+        raise ValueError(f"strateji kimligi '{CUSTOM_STRATEGY_PREFIX}' ile baslamali: {module.id}")
     _REGISTRY[module.id] = module
     return module
 

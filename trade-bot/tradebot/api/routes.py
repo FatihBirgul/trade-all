@@ -10,7 +10,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, WebSocket,
 
 from ..app import QUOTE_MAX_AGE, Bot
 from ..config import BotSettings, strategy_mode
-from ..signals import scorecard, v9
+from ..signals import custom, scorecard, v9
+from ..signals.shadow import ShadowBook
 from . import auth
 from .models import (CloseAllRequest, CloseRequest, DeviceRequest, ManualTrade, PairRequest, PositionPatch,
                      ResumeRequest, StrategyModeRequest)
@@ -242,14 +243,14 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
         # Bir stratejiyi canliya almak gercek islem acar ve bilincli onay ister; bu yalnizca
         # POST /strategies/{id}/mode (confirm=true) ile yapilir. Aksi halde eski bir ayar kopyasini
         # geri gonderen istemci, botun duraklattigi stratejiyi farkinda olmadan yeniden acardi.
-        revived = sorted(s for s in v9.builtin_strategy_ids()
+        revived = sorted(s for s in _strategy_ids()
                          if strategy_mode(body, s) == "live" and strategy_mode(previous, s) != "live")
         if revived:
             raise HTTPException(
                 status_code=409,
                 detail="strateji bu yoldan canlıya alınamaz (" + ", ".join(revived) + "); güncel ayarları "
                        "yeniden okuyun ya da strateji kipini onaylayarak değiştirin")
-        unknown = sorted(set(body.strategy_modes) - v9.builtin_strategy_ids())
+        unknown = sorted(set(body.strategy_modes) - _strategy_ids())
         if unknown:
             raise HTTPException(status_code=422, detail="bilinmeyen strateji: " + ", ".join(unknown))
         repo.set_bot_settings(body)
@@ -311,9 +312,40 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
     async def get_scorecard():
         return scorecard.scorecard(repo, repo.get_bot_settings())
 
+    def _strategy_ids() -> frozenset[str]:
+        return v9.builtin_strategy_ids() | custom.strategy_ids()
+
+    def _live_blocker(strategy_id: str, settings: BotSettings) -> str | None:
+        """Yeni (V9 disi) strateji ancak golge karnesi olumluysa canliya alinabilir (spec §6.2)."""
+        if strategy_id not in custom.strategy_ids():
+            return None
+        stats = ShadowBook(repo).stats(strategy_id, "shadow")
+        need = settings.fusion.pause_min_trades
+        if stats["trades"] < need:
+            return (f"yeni strateji canlıya alınamaz: en az {need} sonuçlanmış gölge işlem gerekli "
+                    f"(şu an {stats['trades']})")
+        if not stats["avg_r"] or stats["avg_r"] <= 0:
+            return f"yeni strateji canlıya alınamaz: gölge karnesi olumlu değil (ortalama R {stats['avg_r']:.2f})"
+        return None
+
+    @private.get("/strategies")
+    async def strategies():
+        """Tum stratejiler: kaynak, kip, golge karnesi ve canliya alinabilirlik."""
+        settings = repo.get_bot_settings()
+        book, held = ShadowBook(repo), scorecard.paused(repo)
+        rows = []
+        for strategy_id in sorted(_strategy_ids()):
+            mode = strategy_mode(settings, strategy_id)
+            blocker = _live_blocker(strategy_id, settings)
+            rows.append({"strategy_id": strategy_id,
+                         "source": "custom" if strategy_id in custom.strategy_ids() else "v9", "mode": mode,
+                         "paused": strategy_id in held, "shadow": book.stats(strategy_id, "shadow"),
+                         "can_go_live": mode != "live" and blocker is None, "live_blocker": blocker})
+        return {"strategies": rows}
+
     @private.post("/strategies/{strategy_id}/mode")
     async def set_strategy_mode(strategy_id: str, body: StrategyModeRequest):
-        if strategy_id not in v9.builtin_strategy_ids():
+        if strategy_id not in _strategy_ids():
             raise HTTPException(status_code=404, detail="strateji bulunamadı")
         settings = repo.get_bot_settings()
         current = strategy_mode(settings, strategy_id)
@@ -321,6 +353,9 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
             if not body.confirm:
                 raise HTTPException(status_code=409,
                                     detail="stratejiyi canlıya almak gerçek işlem açar; onay için confirm=true gönderin")
+            blocker = _live_blocker(strategy_id, settings)
+            if blocker:
+                raise HTTPException(status_code=409, detail=blocker)
             if strategy_id in scorecard.paused(repo):
                 # Yalnizca botun duraklattigi strateji icin karne denetimi bu andan yeniden baslar.
                 # Hic duraklatilmamis stratejiyi kapatip acmak sayaci sifirlamaz.

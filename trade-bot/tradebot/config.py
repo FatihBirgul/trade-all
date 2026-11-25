@@ -136,11 +136,19 @@ class BotSettings(BaseModel):
     commission_per_lot: float = Field(default=0.0, ge=0)
 
 
+CUSTOM_STRATEGY_PREFIX = "tb_"  # V9 disindaki (yeni) stratejilerin kimlik on eki
+
+
 def strategy_mode(settings: BotSettings, strategy_id: str) -> str:
-    """Stratejinin etkin kipi: acik kip > eski `enabled_strategies` listesi > varsayilan `live`."""
+    """Stratejinin etkin kipi: acik kip > (yeni strateji ise `shadow`) > eski `enabled_strategies` > `live`.
+
+    Yeni stratejiler (spec §6.2) acikca canliya alinmadikca GOLGEdedir; V9 stratejileri dogrudan canlida baslar.
+    """
     mode = settings.strategy_modes.get(strategy_id)
     if mode is not None:
         return mode
+    if strategy_id.startswith(CUSTOM_STRATEGY_PREFIX):
+        return "shadow"
     if settings.enabled_strategies is not None and strategy_id not in settings.enabled_strategies:
         return "off"
     return "live"

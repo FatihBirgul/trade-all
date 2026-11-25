@@ -4,6 +4,8 @@ Oy modullerinin sirasi `config.FUSION_MODULES` ile aynidir (puan agirliklari o a
 """
 
 from .base import Context, Module, Signal, Vote, get, modules, register
+from .strategies.donchian_breakout import DonchianBreakout
+from .strategies.ema_pullback import EmaPullback
 from .votes.confluence import Confluence
 from .votes.momentum import Momentum
 from .votes.mtf import Mtf
@@ -22,5 +24,9 @@ register(Momentum())
 register(Confluence())
 register(OtherStrategies())
 register(Session())
+
+# Yeni stratejiler: kimlikleri `tb_` ile baslar ve varsayilan olarak golge kipindedir (config.strategy_mode).
+register(EmaPullback())
+register(DonchianBreakout())
 
 __all__ = ["Context", "Module", "Signal", "Vote", "get", "modules", "register"]
