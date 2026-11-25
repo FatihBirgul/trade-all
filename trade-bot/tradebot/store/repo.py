@@ -213,6 +213,15 @@ class Repo:
         return self._order(self.conn.execute(
             "SELECT * FROM orders WHERE operation_id = ?", (str(operation_id),)).fetchone())
 
+    def orders_for_position(self, position_id: str, kind: str | None = None, limit: int = 20) -> list[dict]:
+        """Pozisyona ait emirler, yeniden eskiye."""
+        sql, args = "SELECT * FROM orders WHERE position_id = ?", [str(position_id)]
+        if kind is not None:
+            sql += " AND kind = ?"
+            args.append(kind)
+        rows = self.conn.execute(sql + " ORDER BY created_at DESC, rowid DESC LIMIT ?", args + [int(limit)])
+        return [self._order(r) for r in rows]
+
     def orders_in(self, states: Iterable[str]) -> list[dict]:
         states = list(states)
         marks = ", ".join("?" for _ in states)
