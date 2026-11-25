@@ -5,6 +5,7 @@ import pytest
 from websockets.asyncio.server import serve
 
 from tests.exness.test_client import settings
+from tradebot.exness import schema
 from tradebot.exness.client import ExnessClient
 from tradebot.exness.stream import Stream
 
@@ -109,3 +110,70 @@ async def test_handler_error_does_not_kill_stream():
         stream.stop()
         await asyncio.wait_for(task, timeout=5)
     assert seen == [0, 1, 2]
+
+
+async def _subprotocol_server(seen):
+    """Exness gibi davranan yerel sunucu: el sikismasinda alt-protokol secer."""
+    from websockets.asyncio.server import serve
+
+    async def handler(socket):
+        seen.append((socket.subprotocol, socket.request.headers.get("EXN-API-KEY")))
+        await socket.send(json.dumps({"hello": True}))
+        await socket.wait_closed()
+
+    # Canli sunucu gibi: istemci onermese de alt-protokolu secip yanit basligina yazar.
+    return await serve(handler, "127.0.0.1", 0, subprotocols=[schema.WS_SUBPROTOCOL],
+                       select_subprotocol=lambda connection, offered: schema.WS_SUBPROTOCOL)
+
+
+async def test_default_connect_offers_the_exness_subprotocol():
+    """Canli kesif: 'NegotiationError: no subprotocols supported' (sunucu alt-protokol seciyor)."""
+    from tradebot.exness.stream import _default_connect
+
+    seen = []
+    server = await _subprotocol_server(seen)
+    port = server.sockets[0].getsockname()[1]
+    try:
+        socket = await _default_connect(f"ws://127.0.0.1:{port}/v1/server-events/accounts/1/ws/ticks",
+                                        {"EXN-API-KEY": "k"})
+        try:
+            assert socket.subprotocol == "exness-ws-protocol"
+            assert json.loads(await asyncio.wait_for(socket.recv(), 5)) == {"hello": True}
+        finally:
+            await socket.close()
+        assert seen == [("exness-ws-protocol", "k")]  # imza basliklari el sikismasinda gider
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_connecting_without_the_subprotocol_fails_like_production_did():
+    from websockets.asyncio.client import connect
+    from websockets.exceptions import NegotiationError
+
+    server = await _subprotocol_server([])
+    port = server.sockets[0].getsockname()[1]
+    try:
+        with pytest.raises(NegotiationError, match="no subprotocols supported"):
+            await connect(f"ws://127.0.0.1:{port}/x", open_timeout=5)
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_discovery_listener_offers_the_subprotocol_too():
+    from tradebot import discover
+
+    seen = []
+    server = await _subprotocol_server(seen)
+    port = server.sockets[0].getsockname()[1]
+
+    class Client:
+        async def ws_endpoint(self, path):
+            return f"ws://127.0.0.1:{port}{path}", {"EXN-API-KEY": "k"}
+    try:
+        messages = await discover.listen_ws(Client(), "/v1/x", [{"id": "1"}], 0.5)
+        assert messages == [{"hello": True}] and seen[0][0] == "exness-ws-protocol"
+    finally:
+        server.close()
+        await server.wait_closed()
