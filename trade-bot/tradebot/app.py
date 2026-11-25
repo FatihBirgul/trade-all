@@ -11,6 +11,7 @@ import dataclasses
 from importlib import metadata
 import logging
 import re
+import sqlite3
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -56,6 +57,8 @@ BALANCE_SEEN_LOOKBACK = 2 * 86400.0  # taban alinirken "zaten icinde" sayilacak 
 BALANCE_HISTORY_DAYS = 29  # gecmis sorgusu sinirinin (30 gun) icinde kalinir
 CAPITAL_SEEN = "capital_seen"  # ayar anahtari: deneme modunda ilk okunan varlik kaydedildi mi
 BASE_LIVE = "capital_base_live"  # ayar anahtari: sermaye tabani canli moda geciste alindi mi
+LOOP_ALERT_AFTER = 5  # bir gorev art arda bu kadar hata verirse kullaniciya haber verilir
+LOOP_LOG_EVERY = 100
 CLOCK_SKEW_LIMIT = 5.0  # V9 fiyat saati "simdi"den bu kadar ilerideyse veriyi reddeder
 MAINTENANCE_INTERVAL = 1800.0  # gunluk yedek ve temizlik denetimi (is gunde bir kez yapilir)
 RECONCILE_INTERVAL = 300.0  # olay kacirilmis olabilir: broker durumu duzenli olarak yeniden okunur
@@ -137,6 +140,8 @@ class Bot:
         self._account_alerted = False
         self._tick_lead = float("-inf")
         self._clock_alerted = False
+        self._skew_beats = 0
+        self._loop_failures: dict[str, int] = {}
         self._heal_tried: dict[tuple[str, str, int], float] = {}
         self._last_equity_sample = 0.0
         self._balance_synced_at = 0.0
@@ -967,8 +972,10 @@ class Bot:
                 # Hesap ayarlari (durum, kaldirac) calisirken degisebilir: marjin kisiti, yalnizca-kapat kipi.
                 # Yalnizca acilista okunursa bot bunu emir reddedilene kadar ogrenemezdi. Mutabakat basarili
                 # olduktan SONRA okunur: kimlik/baglanti hatalarinin ele alinisi mutabakat yolunda kalir.
-                self._details = await self.client.get(schema.account_path(self.client.account_id))
-            except ExnessError as exc:
+                fresh = await self.client.get(schema.account_path(self.client.account_id))
+                schema.parse_account(fresh, report.account)  # bicimi bozuk yanit eskisinin yerine GECMEZ
+                self._details = fresh
+            except (ExnessError, ValueError, TypeError, KeyError) as exc:
                 log.warning("hesap ayarlari yenilenemedi: %s", exc)
             self._set_account(report.account)
             blocked = self.account is not None and not self.account.can_open
@@ -1041,7 +1048,9 @@ class Bot:
             self._connection_alerted = False
             await self._record("info", "connection_restored", "Exness bağlantısı geri geldi.")
         lead, self._tick_lead = self._tick_lead, float("-inf")  # son kalp atisindan beri gorulen en buyuk fark
-        if lead > CLOCK_SKEW_LIMIT and not self._clock_alerted:
+        # Tek bir ileri tarihli tick uyari uretmez: fark art arda iki kalp atisinda surmeli.
+        self._skew_beats = self._skew_beats + 1 if lead > CLOCK_SKEW_LIMIT else 0
+        if self._skew_beats >= 2 and not self._clock_alerted:
             self._clock_alerted = True
             await self._record("warning", "clock_skew",
                                f"Sunucu saati fiyat akışının {lead:.0f} sn gerisinde; analiz veriyi bayat sayabilir. "
@@ -1189,8 +1198,6 @@ class Bot:
             return None
         try:
             result = await asyncio.to_thread(backup.backup_database, self.repo.db_path, now)
-            pruned = backup.prune_noise(self.repo.conn, now)
-            self.repo.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         except Exception as exc:  # noqa: BLE001 - bakim hatasi botu durdurmamali
             failures = int(self.repo.get_setting("maintenance_failures", 0)) + 1
             self.repo.set_setting("maintenance_failures", failures)
@@ -1199,8 +1206,14 @@ class Bot:
                 self.repo.set_setting("maintenance_alert_day", today)
                 await self._record("warning", "backup_failed", f"Günlük yedek alınamadı: {type(exc).__name__}",
                                    {"failures": failures}, notify=True, title="Yedek alınamadı")
-            log.exception("bakim basarisiz")
+            log.error("yedek alinamadi: %s", type(exc).__name__)  # hata metni dosya yolu icerebilir: yazilmaz
             return None
+        pruned = 0
+        try:
+            pruned = backup.prune_noise(self.repo.conn, now)
+            self.repo.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except sqlite3.Error as exc:  # yedek alindi; temizlik yarin yeniden denenir
+            log.warning("bakim temizligi tamamlanamadi: %s", type(exc).__name__)
         self.repo.set_setting("maintenance_day", today)
         self.repo.set_setting("maintenance_failures", 0)
         self.repo.set_setting("last_backup_at", now)
@@ -1215,8 +1228,22 @@ class Bot:
                 await action()
             except asyncio.CancelledError:
                 raise
-            except Exception:  # tek bir turun hatasi donguyu durdurmamali
-                log.exception("%s dongusunde hata", name)
+            except Exception as exc:  # tek bir turun hatasi donguyu durdurmamali
+                failures = self._loop_failures.get(name, 0) + 1
+                self._loop_failures[name] = failures
+                if failures <= 3 or failures % LOOP_LOG_EVERY == 0:  # surekli hata gunlugu doldurmasin
+                    log.exception("%s dongusunde hata (%d. kez art arda)", name, failures)
+                if failures == LOOP_ALERT_AFTER:
+                    try:
+                        await self._record("error", "loop_failing",
+                                           f"Botun '{name}' görevi art arda {failures} kez hata verdi "
+                                           f"({type(exc).__name__}). Sunucu günlüğüne bakın.",
+                                           {"task": name, "failures": failures}, notify=True,
+                                           title="Bot görevi hata veriyor")
+                    except Exception:  # kayit da yazilamiyorsa (disk dolu) dongu yine de surer
+                        log.exception("dongu hatasi kaydedilemedi: %s", name)
+            else:
+                self._loop_failures.pop(name, None)
 
     async def _bar_loop(self) -> None:
         while True:

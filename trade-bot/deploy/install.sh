@@ -75,7 +75,7 @@ systemctl enable tradebot >/dev/null
 echo "==> Gunluk boyutu siniri (journald)"
 install -d -o root -g root -m 755 /etc/systemd/journald.conf.d
 install -o root -g root -m 644 "$APP_DIR/trade-bot/deploy/journald-tradebot.conf" /etc/systemd/journald.conf.d/tradebot.conf
-systemctl restart systemd-journald
+systemctl restart systemd-journald || echo "UYARI: journald yeniden baslatilamadi; sinir bir sonraki acilista gecerli olur"
 
 echo "==> Dagitim kullanicisi icin sudo izni (yalnizca uc sabit komut; joker yok)"
 SUDOERS=/etc/sudoers.d/tradebot-deploy

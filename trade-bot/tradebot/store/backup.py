@@ -8,13 +8,17 @@ dosyalar yalnizca servis kullanicisinca okunabilir (600) ve depo/gunluklere yazi
 
 from __future__ import annotations
 
+import errno
 import os
+import shutil
 import sqlite3
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 KEEP_BACKUPS = 14
+MIN_FREE_FACTOR = 2  # yedekten once en az veritabaninin bu kati kadar bos alan olmali
+MIN_FREE_BYTES = 50 * 1024 * 1024
 BACKUP_PREFIX = "tradebot-"
 NOISE_KINDS = ("scan", "scan_skipped", "signal_observed")  # yalnizca bunlar eskiyince silinir
 NOISE_KEEP_DAYS = 60
@@ -38,6 +42,11 @@ def backup_database(db_path: Path | str, now: float, *, keep: int = KEEP_BACKUPS
     source_path = Path(db_path)
     folder = source_path.parent / "backups"
     folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+    size = source_path.stat().st_size
+    free = shutil.disk_usage(folder).free
+    if free < MIN_FREE_FACTOR * size + MIN_FREE_BYTES:
+        # Dolmak uzere olan diske tam boy bir kopya yazmak asil veritabanini da yazilamaz hale getirebilir.
+        raise OSError(errno.ENOSPC, "yedek icin yeterli bos alan yok")
     target = folder / f"{BACKUP_PREFIX}{backup_day(now)}.db"
     partial = target.with_suffix(".db.partial")
     started = time.monotonic()
@@ -48,7 +57,9 @@ def backup_database(db_path: Path | str, now: float, *, keep: int = KEEP_BACKUPS
         os.close(os.open(partial, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
         copy = sqlite3.connect(str(partial))
         try:
-            source.backup(copy, pages=256, sleep=0.01)  # parca parca: yazan baglantiyi uzun sure kilitlemez
+            # Tek adimda (pages=-1): kopya tek bir WAL okuma goruntusunden alinir, yazan baglantiyi kilitlemez.
+            # Parca parca kopyalama, arada her yazmada bastan baslar ve yogun yazma altinda hic bitmeyebilirdi.
+            source.backup(copy, pages=-1)
             _verify(copy)
         finally:
             copy.close()

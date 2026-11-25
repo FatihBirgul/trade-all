@@ -59,13 +59,13 @@ async def test_partial_fill_is_recorded_with_the_real_volume_and_stays_protected
     assert trade.sl is not None and app.fake._sltp(position["position_id"]) is not None  # SL borsada duruyor
     # Risk hesabi gercek hacimle: gercek zarar, planlanandan buyuk olamaz.
     assert trade.initial_volume == pytest.approx(trade.volume)
-    # Kismi kapatma adimi en kucuk lot kuralina uyar: kapatilan ve kalan hacim en kucuk lotun altina inmez.
+    # Stop yonetimi gercek hacimle surer: 1R'de stop girise cekilir.
     risk = trade.initial_risk_r_price
-    await app.fake.set_price("XAUUSD", round(trade.entry + 2 * risk, 2), round(trade.entry + 2 * risk + 0.2, 2))
+    await app.fake.set_price("XAUUSD", round(trade.entry + risk, 2), round(trade.entry + risk + 0.2, 2))
     await app.bot.manage_tick()
     await app.fake.flush()
     after = app.repo.get_trade(trade.position_id)
-    assert after.is_open and after.volume >= 0.01 - 1e-9 and after.sl >= trade.entry
+    assert after.is_open and after.volume == pytest.approx(trade.volume) and after.sl >= trade.entry
 
 
 async def test_database_write_failure_means_no_order_is_sent(tmp_path, monkeypatch):
@@ -109,7 +109,7 @@ async def test_server_clock_behind_the_price_feed_is_reported_once(tmp_path):
     await app.bot.heartbeat()
     assert "clock_skew" not in app.kinds()
     quote = app.bot.quotes.quote("XAUUSD")
-    await feed_ticks(app, "XAUUSD", quote["bid"], quote["ask"], app.clock["now"] + 140, count=5)  # tickler 20+ sn ileride
+    await feed_ticks(app, "XAUUSD", quote["bid"], quote["ask"], app.clock["now"] + 140, count=5)  # tickler ~135 sn ileride
     await app.bot.heartbeat()
     await feed_ticks(app, "XAUUSD", quote["bid"], quote["ask"], app.clock["now"] + 140, count=5)
     await app.bot.heartbeat()
@@ -128,3 +128,60 @@ async def test_account_reopening_is_noticed_without_a_restart(tmp_path):
     await app.bot.reconcile_now()
     assert "account_open" in app.kinds()
     assert (await app.bot.on_bar_close()).opened == 1
+
+
+async def test_a_single_future_tick_is_not_a_clock_alarm(tmp_path):
+    """Inceleme I4: tek bir ileri tarihli tick uyari uretmemeli; fark iki kalp atisinda surmeli."""
+    app = await started(tmp_path)
+    quote = app.bot.quotes.quote("XAUUSD")
+    await feed_ticks(app, "XAUUSD", quote["bid"], quote["ask"], app.clock["now"] + 11, count=5)  # 6-10 sn ileride
+    await app.bot.heartbeat()
+    await feed_ticks(app, "XAUUSD", quote["bid"], quote["ask"], app.clock["now"], count=5)
+    await app.bot.heartbeat()
+    assert "clock_skew" not in app.kinds()
+    await feed_ticks(app, "XAUUSD", quote["bid"], quote["ask"], app.clock["now"] + 6, count=5)  # en cok 5 sn ileride: sinirda, ustunde degil
+    await app.bot.heartbeat()
+    await feed_ticks(app, "XAUUSD", quote["bid"], quote["ask"], app.clock["now"] + 6, count=5)
+    await app.bot.heartbeat()
+    assert "clock_skew" not in app.kinds()
+
+
+async def test_malformed_account_details_never_replace_the_good_copy(tmp_path):
+    """Inceleme I5: bicimi bozuk bir yanit hesap durumunu dondurmamali (bakiye/varlik guncellenmeye devam eder)."""
+    app = await started(tmp_path)
+    good = app.bot._details
+    real_get = app.fake.get
+
+    async def broken(path):
+        if path.endswith("/account"):
+            return {}
+        return await real_get(path)
+
+    app.fake.get = broken
+    assert await app.bot.reconcile_now()
+    assert app.bot._details is good and "account_blocked" not in app.kinds()
+    app.fake.balance = 9_000.0
+    assert await app.bot.reconcile_now()
+    assert app.bot.account.balance == 9_000.0 and app.bot.account.can_open
+
+
+async def test_a_task_that_keeps_failing_is_reported_once(tmp_path):
+    app = await started(tmp_path)
+    calls = {"n": 0}
+
+    async def action():
+        calls["n"] += 1
+        if calls["n"] <= 8:
+            raise RuntimeError("beklenmeyen hata")
+        if calls["n"] == 9:
+            return None  # duzeldi: sayac sifirlanir
+        raise asyncio.CancelledError
+
+    async def no_sleep(_):
+        return None
+
+    app.bot._sleep = no_sleep
+    with pytest.raises(asyncio.CancelledError):
+        await app.bot._every(1.0, action, "yonetim")
+    assert app.kinds().count("loop_failing") == 1 and "loop_failing" in app.notifier.kinds()
+    assert app.bot._loop_failures == {}

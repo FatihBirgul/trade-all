@@ -22,21 +22,24 @@ işlem açmaz.
 | Tarama ve analiz | Yapar | Yapar |
 | Emir gönderme | **Göndermez**; "açardım" diye kaydeder | Gerçek parayla gönderir |
 | Sizin uygulamadan verdiğiniz emirler | **Her zaman gerçektir** | Gerçektir |
+| Açık bot işlemlerinde kademeli stop (başa baş, kısmi kâr, iz süren) | **Yapmaz**; yalnızca Exness'teki SL korur | Yapar |
 
 Deneme modunda bile uygulamadan "Kapat", "SL/TP düzenle", "Hepsini kapat" ve "Elle işlem aç" gerçek hesapta işlem
 yapar. Uygulama bunu her onay penceresinde hatırlatır.
 
 Canlıya geçiş: **Panel → Canlı moda geç** (iki adımlı onay). Geri dönüş: **Panel → Deneme moduna dön**.
+Açık bot işleminiz varken deneme moduna dönerseniz bot o işlemlerin stopunu artık ilerletmez; işlemler Exness'teki
+son SL ve TP seviyeleriyle kalır. Yalnızca yeni işlem açılmasını durdurmak istiyorsanız **Durdur**'u kullanın.
 Kayıp sınırlarının tabanı, canlıya ilk geçtiğiniz andaki hesap varlığıdır; sonradan yatırdığınız ya da çektiğiniz
 para kâr/zarar sayılmaz, taban ona göre kayar.
 
 ## Telefona kurulum ve eşleştirme
 
-1. APK'yı GitHub'daki **Actions → Android APK** çalışmasının çıktısından indirip kurun.
+1. APK'yı GitHub'daki **Actions → Internal Android APK** çalışmasının çıktısından indirip kurun.
 2. Sunucuda bir eşleştirme kodu üretin (10 dakika geçerli, tek kullanımlık):
 
    ```bash
-   tradebot-pair
+   sudo tradebot-pair
    ```
 
 3. Uygulamada **Ayarlar → Bağlantı ayarları**: sunucu adresini (`https://…sslip.io`) ve 6 haneli kodu girin.
@@ -59,8 +62,8 @@ uygulama açıkken görünür.
 - **Bildirimler:** botun kayıtları (açılan/kapanan işlem, uyarılar, hatalar).
 - **Ayarlar:** risk ve sınırlar, korumalar, semboller, stratejiler, bağlantı.
 
-Ekranda "Bağlantı yok" ya da "Bot yanıt vermiyor" görüyorsanız gösterilen sayılar eski olabilir; uygulama bunu
-belirtir. Açık işlemlerinizin SL'i Exness tarafında durduğu için bu durumda da korunursunuz.
+Ekranda "Bottan 5 dakikadır haber yok" ya da "Bot yanıt vermiyor" görüyorsanız gösterilen sayılar eski olabilir;
+uygulama bunu belirtir. Açık işlemlerinizin SL'i Exness tarafında durduğu için bu durumda da korunursunuz.
 
 ## Acil durum
 
@@ -126,22 +129,31 @@ gönderilmez), **Kapalı**.
 - Yeni stratejiler ("(yeni)" ile işaretli) **gölgede** başlar. Canlıya alınabilmeleri için en az 20 sonuçlanmış
   gölge işlem ve pozitif ortalama sonuç gerekir; koşul sağlanmadan **Canlıya al** düğmesi kapalıdır ve nedeni altında
   yazar.
-- Bot, kötü giden bir stratejiyi kendiliğinden duraklatabilir ("bot duraklattı"). Yeniden canlıya almak, duraklatmadan
-  sonraki gölge sonuçlarının iyi olmasını ve sizin onayınızı ister.
+- Bot, kötü giden bir stratejiyi kendiliğinden duraklatabilir ("bot duraklattı"). Yeniden canlıya almak sizin
+  onayınızı ister; yeni stratejilerde ayrıca duraklatmadan sonraki gölge sonuçlarının iyi olması gerekir.
 
 ## Yedekler
 
 Bot her gün veritabanının bir kopyasını alır: `/var/lib/tradebot/backups/tradebot-YYYYAAGG.db`. Son 14 gün
-saklanır. Yedek alınamazsa bildirim gelir.
+saklanır. Yedek alınamazsa **Bildirimler** ekranında "Yedek alınamadı" uyarısı görünür (uygulama açıkken).
 
 Yedekler işlem geçmişinizi ve ayarlarınızı içerir; **paranız ve açık pozisyonlarınız Exness'tedir**, veritabanı
 kaybolsa da onlar kaybolmaz. Veritabanı silinirse bot açık pozisyonları Exness'ten yeniden okur, ama onları "elle
-açılmış" sayar ve geçmiş raporlar boş başlar.
+açılmış" sayar; geçmiş raporlar, ayarlarınız ve telefon eşleştirmesi sıfırlanır (bot deneme modunda, varsayılan
+ayarlarla başlar ve telefonu yeniden eşleştirmeniz gerekir).
 
-Geri yükleme (yalnızca gerekirse; önce botu durdurur):
+Geri yükleme **yalnızca gerekirse** yapılır ve işlem geçmişini o günün haline döndürür. Dört komut, sırayla:
 
 ```bash
 sudo systemctl stop tradebot
+```
+
+```bash
+sudo -u tradebot mv /var/lib/tradebot/tradebot.db /var/lib/tradebot/tradebot.db.eski
+```
+
+```bash
+sudo rm -f /var/lib/tradebot/tradebot.db-wal /var/lib/tradebot/tradebot.db-shm
 ```
 
 ```bash
@@ -152,7 +164,18 @@ sudo -u tradebot cp /var/lib/tradebot/backups/tradebot-YYYYAAGG.db /var/lib/trad
 sudo systemctl start tradebot
 ```
 
-`YYYYAAGG` yerine geri dönmek istediğiniz günün dosya adındaki tarihi yazın.
+`YYYYAAGG` yerine geri dönmek istediğiniz günün dosya adındaki tarihi yazın. İkinci ve üçüncü komutu atlamayın:
+eski veritabanının yanındaki `-wal` dosyası yerinde kalırsa, kopyalanan yedeğin üstüne eski kayıtlar yeniden
+yazılır ve geri yükleme sessizce işe yaramaz.
+
+Geri yüklemeden sonra bilmeniz gerekenler:
+
+- Bot, yedeğin alındığı gündeki **kipe** döner. Yedek canlı moddayken alındıysa bot canlı başlar; önce
+  **Panel**'den kipi ve Durdur/Devam durumunu kontrol edin.
+- Yedekten sonra açılmış bot işlemleri "elle açılmış" sayılır: SL'leri Exness'te durur ama bot onlara kademeli stop
+  uygulamaz. Bu işlemleri kendiniz izleyin.
+- Yedekten sonra iptal ettiğiniz telefon bağlantıları geri gelir. Telefon kaybı nedeniyle iptal yaptıysanız
+  iptali yeniden çalıştırın (komut [`deploy/README.md`](deploy/README.md) içinde) ve yeniden eşleştirin.
 
 ## Sık görülen uyarılar
 
@@ -161,11 +184,12 @@ sudo systemctl start tradebot
 | Exness bağlantısı yok | Fiyat akışı kesildi; yeni işlem açılmaz | Genelde kendiliğinden düzelir. Saatlerce sürerse sunucu günlüğüne bakın |
 | Günlük kayıp sınırı doldu | Bugün yeni işlem yok | Ertesi gün (UTC) kendiliğinden açılır |
 | Bot durduruldu (toplam kayıp sınırı) | Kilit | Nedenini inceleyin; devam etmek ayrı onay ister |
-| Stop eksik (`sl_missing`) | Bir pozisyonda SL görünmüyor | Bot stopu yeniden kurmayı dener; 3 denemede kuramazsa pozisyonu kapatır |
+| Stop eksik (`sl_missing`) | Bir pozisyonda SL görünmüyor | Bot stopu yeniden kurmayı dener; 3 denemede kuramazsa ya da fiyat stop seviyesini çoktan geçmişse pozisyonu kapatır |
 | Emir sonucu belirsiz | Bir emrin yanıtı alınamadı | Bot yeniden göndermez; Pozisyonlar ekranından durumu kontrol edin |
-| Haber takvimi güncel değil | Haber koruması veri alamıyor | Bot çalışır ama haber penceresi uygulanamayabilir; düzelmezse haber bildirin |
+| Haber takvimi güncel değil | Haber koruması veri alamıyor | Bot çalışır ama haber penceresi uygulanamayabilir; bir günden uzun sürerse geliştiriciye bildirin |
 | Yedek alınamadı | Günlük kopya yazılamadı | Çoğunlukla disk dolu; sunucuda `df -h /var/lib/tradebot` |
 | Hesap yeni işleme kapalı | Exness hesabı yeni emir kabul etmiyor (marjin vb.) | Exness hesabınızı kontrol edin |
+| Bot görevi hata veriyor | Botun iç görevlerinden biri art arda hata veriyor | Sunucu günlüğündeki son hata satırlarını geliştiriciye iletin; açık işlemlerin SL'i Exness'te durur |
 | Sunucu saati kaymış | Sunucu saati fiyat akışının gerisinde; analiz veriyi "bayat" sayıp işlem açmayabilir | Sunucuda `timedatectl status`; "System clock synchronized: yes" olmalı |
 
 ## Sunucuda işe yarayan komutlar
@@ -191,7 +215,7 @@ sudo systemctl restart tradebot
 Yeni eşleştirme kodu:
 
 ```bash
-tradebot-pair
+sudo tradebot-pair
 ```
 
 Günlük boyutunu sınırlama (isteğe bağlı, bir kez; sunucudaki bütün servislerin günlüğünü en çok 300 MB / 30 günle

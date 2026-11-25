@@ -303,3 +303,24 @@ kalır); anahtar etiketlerindeki "1R/2R" sabit yazıdır (eşikler sunucuda değ
 - **Kılavuz:** `trade-bot/README.md` (Türkçe, teknik olmayan kullanıcı için).
 - Yapılmayan (plandaki Task 4/6. madde): "uzun kesinti sonrası açılış" için ayrı test yazılmadı; mevcut yeniden
   başlatma testleri (açık pozisyonla açılış, kapalıyken stop tetiklenmesi) ve boşluk onarımı bu alanı kapsıyor.
+
+### Faz 4 bağımsız incelemesi (2026-11-25) ve düzeltmeler
+
+İşlem yolu sağlam çıktı (yedek sırasında 139 bin yazmada kilit hatası yok, en uzun duraksama 48 ms). Düzeltilenler:
+- **K1 geri yükleme talimatı işe yaramıyordu:** servis durunca eski veritabanının `-wal` dosyası diskte kalıyor ve
+  kopyalanan yedeğin üstüne yeniden oynatılıyordu. Kılavuz artık eski dosyayı kenara alıp `-wal`/`-shm`'yi siliyor;
+  geri yüklemenin kipi, sonradan açılan işlemleri ve iptal edilmiş telefon bağlantılarını nasıl etkilediği yazıldı.
+- **Ö1** Yedek parça parça kopyalanıyordu; arada her yazmada baştan başlayıp yoğun yazma altında hiç bitmeyebilirdi.
+  Tek adımda (`pages=-1`) alınıyor; yazma sürerken bittiği testle doğrulanır.
+- **Ö2** Yeni uyarılar (`backup_failed`, `account_blocked`, `clock_skew`, `loop_failing`) uygulamada bildirim
+  üretmiyordu ve etiketsizdi; eklendi. Kılavuzdaki "bildirim gelir" ifadesi gerçeğe göre düzeltildi.
+- **Ö3** Kılavuz: deneme modunda açık bot işlemlerine kademeli stop uygulanmadığı yazıldı.
+- **Ö4** Tek bir ileri tarihli tick "saat kaymış" uyarısı üretiyordu; fark art arda iki kalp atışında sürmeli.
+- **Ö5** Biçimi bozuk hesap yanıtı iyi kopyanın yerine geçip hesap durumunu donduruyordu; önce doğrulanıyor.
+- **Ö6** Bir zamanlayıcı görevi art arda 5 kez hata verirse tek `loop_failing` uyarısı; sürekli hata günlüğü
+  doldurmaz. `status.sh` yedek 36 saatten eskiyse uyarır.
+- **Ö8** Yedekten önce boş alan denetimi (veritabanının 2 katı + 50 MB); hata günlüğüne dosya yolu yazılmaz.
+Bilinen, bırakılanlar: disk tamamen doluyken olay kaydı da yazılamadığı için uyarı üretilemez (tek işaret
+uygulamadaki "bottan haber yok"); sunucu saatinin İLERİDE olması algılanmıyor; `systemctl stop` süreci temiz
+kapatmıyor (WAL diskte kalır — veri kaybı yok, geri yükleme talimatı bunu hesaba katar); sürüm satırı commit
+bilgisini içermiyor; kısmi dolumda `risk_amount` planlanan tutarda kalıyor (R istatistiğini hafif kaydırır).
