@@ -280,20 +280,24 @@ class Repo:
                  "data": json.loads(r["data_json"]) if r["data_json"] else None} for r in rows]
 
     # ---------------------------------------------------------------- ayarlar ve durum
-    def apply_balance_op(self, deal_id: str, at: float, amount: float, *, apply: bool) -> float | None:
-        """Para yatirma/cekme deal'ini bir kez kaydeder. `apply` ise tutari sermaye tabanina ekler ve yeni
-        tabani dondurur; deal daha once islenmisse ya da taban degismediyse None. Tek islemde yapilir:
-        kayit ile taban guncellemesi birbirinden ayrilamaz."""
+    def apply_balance_op(self, deal_id: str, at: float, amount: float, *, apply: bool) -> tuple[bool, float | None]:
+        """Para yatirma/cekme deal'ini bir kez kaydeder -> (yeni mi, yeni taban).
+
+        `apply` ise tutar sermaye tabanina eklenir ve yeni taban doner; degilse taban None'dir. Deal daha
+        once islenmisse (False, None). Kayit ile taban guncellemesi tek islemdedir: ayrilamaz.
+        """
         with transaction(self.conn):
             cursor = self.conn.execute(
                 "INSERT OR IGNORE INTO balance_ops (deal_id, at, amount, applied) VALUES (?, ?, ?, ?)",
                 (deal_id, float(at), float(amount), 1 if apply else 0))
-            if cursor.rowcount == 0 or not apply:
-                return None
+            if cursor.rowcount == 0:
+                return False, None
+            if not apply:
+                return True, None
             row = self.conn.execute("SELECT start_capital FROM bot_state WHERE id = 1").fetchone()
             base = max((row[0] or 0.0) + float(amount), 0.0)
             self.conn.execute("UPDATE bot_state SET start_capital = ? WHERE id = 1", (base,))
-            return base
+            return True, base
 
     def balance_ops(self) -> list[dict]:
         rows = self.conn.execute("SELECT deal_id, at, amount, applied FROM balance_ops ORDER BY at").fetchall()

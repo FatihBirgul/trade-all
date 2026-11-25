@@ -177,3 +177,59 @@ async def test_discovery_listener_offers_the_subprotocol_too():
     finally:
         server.close()
         await server.wait_closed()
+
+
+class OneMessageSocket:
+    """Baglantiyi kabul edip tek mesaj gonderen ve kapatan sunucu (or. reddedilen abonelik)."""
+
+    def __init__(self, clock, alive):
+        self.clock, self.alive = clock, alive
+
+    async def send(self, raw):
+        pass
+
+    async def close(self):
+        pass
+
+    def __aiter__(self):
+        return self._messages()
+
+    async def _messages(self):
+        yield json.dumps({"code": 3000, "error_message": "REQUEST_INVALID"})
+        self.clock["now"] += self.alive  # baglanti bu kadar ayakta kaldi
+
+
+async def run_flapping(alive, rounds=6):
+    from tradebot.exness.stream import STABLE_SECONDS  # noqa: F401
+    clock = {"now": 0.0}
+    delays = []
+
+    async def connect(url, headers):
+        return OneMessageSocket(clock, alive)
+
+    async def fake_sleep(seconds):
+        delays.append(seconds)
+        if len(delays) == rounds:
+            raise StopLoop
+
+    async def on_message(message):
+        pass
+
+    stream = Stream(ExnessClient(settings(EXNESS_AP_HOST="http://127.0.0.1:1")), "/v1/x", on_message,
+                    connect=connect, sleep=fake_sleep, clock=lambda: clock["now"])
+    with pytest.raises(StopLoop):
+        await stream.run()
+    return delays, stream
+
+
+async def test_accept_then_close_does_not_become_a_one_second_reconnect_loop():
+    """Ucuncu inceleme I-6: 12 saniyede 12 baglanti olculmustu (ihlal esigi 10 dakikada 10)."""
+    delays, stream = await run_flapping(alive=0.5)
+    assert delays == [1, 2, 4, 8, 16, 32]  # mesaj alinmis olsa da bekleme buyur
+    assert stream.connections == 6
+
+
+async def test_backoff_resets_after_a_connection_that_stayed_up():
+    from tradebot.exness.stream import STABLE_SECONDS
+    delays, _ = await run_flapping(alive=STABLE_SECONDS + 1, rounds=4)
+    assert delays == [1, 1, 1, 1]

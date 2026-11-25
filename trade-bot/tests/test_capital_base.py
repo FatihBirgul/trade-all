@@ -35,14 +35,22 @@ async def test_dry_run_base_is_provisional_and_live_base_is_taken_at_go_live(tmp
     assert base(app) == (1279.0, NOW)
     assert not app.repo.get_setting(BASE_LIVE, False)
     assert "capital_base" not in app.kinds() and app.notifier.sent == []
+    # Canliya gecmeden once ilk okunan varlik olay olarak kayda gecer (bir kez).
+    seen = [e for e in app.repo.events() if e["kind"] == "capital_seen"]
+    assert len(seen) == 1 and "1279.00 USC" in seen[0]["message"]
+    assert seen[0]["data"] == {"equity": 1279.0, "balance": 1279.0, "currency": "USC"}
 
     app.advance(3600)
     app.fake.balance_operation(1971.0)  # deneme modunda para yatirma
     await app.fake.flush()
     await app.bot.heartbeat()
     assert base(app)[0] == 3250.0  # gecici taban varligi izler
-    assert "balance_change" not in app.kinds()  # canli taban yokken kaydirma olayi yok
+    # Deneme modunda para yatirma tabani kaydirmaz ama kayda gecer (bicim buradan dogrulanir); bildirim yok.
+    change = [e for e in app.repo.events() if e["kind"] == "balance_change"]
+    assert len(change) == 1 and change[0]["data"]["amount"] == 1971.0 and change[0]["data"]["applied"] is False
+    assert "tabanı değişmedi" in change[0]["message"] and app.notifier.sent == []
     assert not app.repo.get_setting(BASE_LIVE, False)
+    assert app.kinds().count("capital_seen") == 1  # varlik degisse de "ilk okunan" bir kez yazilir
 
     app.advance(3600)
     live_at = app.clock["now"]
@@ -313,3 +321,72 @@ async def test_a_stale_live_settings_copy_cannot_undo_a_return_to_dry_run(tmp_pa
     assert app.repo.get_bot_settings().dry_run is True and app.repo.get_bot_settings().risk.risk_pct == 0.5
     summary = await app.bot.on_bar_close()
     assert summary.opened == 0 and app.fake.calls("POST", "/positions") == []
+
+
+async def test_deposit_made_before_this_version_is_recorded_from_history_in_dry_run(tmp_path):
+    """Canli durum: kullanici parayi yatirdi, sonra bu surum dagitildi. Olay akisi o islemi tasimaz;
+    deal gecmisinden okunup olay olarak kaydedilir (bicimi /events ile dogrulanabilsin)."""
+    app = build(tmp_path, dry_run=True, balance=1279.0, currency="USC")
+    await app.bot.start()
+    app.advance(600)
+    app.fake.balance_operation(3000.0, event=False)
+    app.advance(BALANCE_SYNC_INTERVAL + 1)
+    await app.bot.reconcile_now()
+    await app.bot.heartbeat()
+    change = [e for e in app.repo.events() if e["kind"] == "balance_change"]
+    assert len(change) == 1 and change[0]["data"]["amount"] == 3000.0 and change[0]["data"]["applied"] is False
+    assert base(app)[0] == 4279.0 and app.notifier.sent == []
+    for _ in range(2):
+        app.advance(BALANCE_SYNC_INTERVAL + 1)
+        await app.bot.heartbeat()
+    assert app.kinds().count("balance_change") == 1
+
+
+async def test_deposit_just_before_go_live_is_never_added_twice_even_with_clock_skew(tmp_path):
+    """Ucuncu inceleme I-4: broker saati sunucudan ilerideyse deal zamani taban anindan sonra gorunur.
+    Taban alinirken gecmisteki islemler kimlikle isaretlendigi icin yeniden eklenmez."""
+    app = build(tmp_path, dry_run=True, balance=1279.0, currency="USC")
+    await app.bot.start()
+    app.advance(600)
+    real_clock = app.fake.clock
+    app.fake.clock = lambda: real_clock() + 5  # broker saati 5 sn ileride
+    app.fake.balance_operation(1971.0, event=False)
+    app.fake.clock = real_clock
+    app.advance(1)
+    await go_live_via_api(app)  # para yatirmadan 1 sn sonra canliya gecis
+    assert base(app)[0] == 3250.0
+    for _ in range(3):
+        app.advance(BALANCE_SYNC_INTERVAL + 1)
+        await app.bot.heartbeat()
+    assert base(app)[0] == 3250.0
+    assert [op["applied"] for op in app.repo.balance_ops()] == [False]
+
+
+async def test_emptying_and_refunding_the_account_does_not_erase_earlier_bot_losses(tmp_path):
+    """Ucuncu inceleme I-5: taban 0'a inip yeniden kuruldugunda olcum baslangici korunur."""
+    app = await started(tmp_path)
+    app.advance(60)
+    app.repo.upsert_trade(Trade(position_id="9", origin="bot", symbol="EURUSD", side="BUY", volume=0.0,
+                                entry=1.1, opened_at=NOW + 10, closed_at=NOW + 60))
+    app.repo.add_realized("9", "deal-loss", NOW + 60, -2_000.0)
+    app.advance(600)
+    app.fake.balance = 0.0  # hesap bosaltildi; olay akisi bakiye islemini tasimadi
+    app.repo.conn.execute("UPDATE bot_state SET start_capital = 0")
+    await app.bot.reconcile_now()
+    await app.bot.heartbeat()
+    app.advance(600)
+    app.fake.balance = 10_000.0  # yeniden yatirildi; kalp atisi yeni varligi islemden once gordu
+    await app.bot.reconcile_now()
+    await app.bot.heartbeat()
+    state = app.repo.bot_state()
+    assert state.start_capital == 10_000.0 and state.start_at == NOW
+    assert app.bot.bot_pnl()[1] == -2_000.0  # onceki zarar hala sayiliyor
+
+
+async def test_withdrawal_larger_than_the_base_clamps_at_zero(tmp_path):
+    app = await started(tmp_path)
+    app.advance(600)
+    app.fake.balance_operation(-12_000.0)
+    await app.fake.flush()
+    await app.bot.heartbeat()
+    assert app.repo.bot_state().start_capital == 0.0

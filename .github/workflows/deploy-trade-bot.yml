@@ -40,7 +40,7 @@ jobs:
   deploy:
     needs: test
     # status kipinde test atlanir; dagitim yalnizca testler gectiyse yapilir.
-    if: always() && (needs.test.result == 'success' || (needs.test.result == 'skipped' && inputs.mode == 'status'))
+    if: ${{ !cancelled() && (needs.test.result == 'success' || (needs.test.result == 'skipped' && inputs.mode == 'status')) }}
     runs-on: ubuntu-latest
     environment: production
     steps:

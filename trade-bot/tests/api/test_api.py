@@ -34,7 +34,7 @@ async def test_health_is_public_and_minimal(tmp_path):
         response = await http.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "last_scan_at": None, "heartbeat_at": NOW + 30,
-                               "stream_connected": True, "halted": False, "last_scan": None}
+                               "stream_connected": True, "halted": False, "last_scan": None, "tick_errors": 0}
 
 
 async def test_health_reports_last_scan_counts_without_account_data(tmp_path):
@@ -43,7 +43,8 @@ async def test_health_reports_last_scan_counts_without_account_data(tmp_path):
     await app.bot.on_bar_close()
     async with client_for(app) as http:
         body = (await http.get("/health")).json()
-    assert body["last_scan"] == {"at": NOW, "scanned": 4, "closed": 0, "errors": 0, "skipped": None}
+    assert body["last_scan"] == {"at": NOW, "scanned": 4, "closed": 0, "errors": 0, "skipped": None,
+                                 "quoted": 1, "candle_retries": 0}  # yalnizca XAUUSD icin fiyat akisi var
     assert body["last_scan_at"] == NOW
     text = str(body)
     assert "10000" not in text and "XAUUSD" not in text and "candidates" not in text and "opened" not in text

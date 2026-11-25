@@ -40,10 +40,12 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
         # Herkese acik: yalnizca calisma durumu ve sayilar. Bakiye, pozisyon ya da sinyal icermez.
         last_scan = None if scan is None else {
             "at": scan.at, "scanned": scan.scanned, "closed": scan.closed, "errors": scan.errors,
-            "skipped": scan.skipped}
+            "skipped": scan.skipped,
+            # quoted: taranan sembollerden taze fiyati olanlar. 0 ise akis "bagli" gorunse de fiyat gelmiyor.
+            "quoted": scan.quoted, "candle_retries": scan.candle_retries}
         return {"status": "ok" if fresh else "stale", "last_scan_at": state.last_scan_at,
                 "heartbeat_at": state.heartbeat_at, "stream_connected": bot.streams_up(), "halted": state.halted,
-                "last_scan": last_scan}
+                "last_scan": last_scan, "tick_errors": getattr(bot, "tick_errors", 0)}
 
     @public.post("/pair")
     async def pair(body: PairRequest):

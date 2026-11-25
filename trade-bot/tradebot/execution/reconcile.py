@@ -17,7 +17,7 @@ from ..exness.schema import AccountState, Deal, Position, Snapshot
 from ..store.repo import Repo, Trade
 
 OPEN_STATES = ("PENDING", "ACKED", "UNKNOWN")
-HISTORY_DAYS = 30
+HISTORY_DAYS = 29  # gecmis sorgusu siniri 30 gun (limits: history_age_days); sinirin icinde kalinir
 FRESH_SECONDS = 120.0  # bu kadar yeni bir islem, tek bir anlik goruntuye dayanarak kapatilmaz
 MISSING_CONFIRM_SECONDS = 60.0  # kapanis deal'i yoksa: en az bu kadar arayla iki kez "yok" gorulmeli
 ADOPT_WINDOW = 300.0  # birakilmis bir acma emrine baglanabilecek pozisyonun acilis penceresi

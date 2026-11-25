@@ -256,7 +256,8 @@ class Executor:
                 "error", "tp_lost",
                 f"{trade.symbol} {trade.side}: SL değişikliği TP'yi sildi; TP {trade.planned_tp:g} yeniden kuruluyor.",
                 {"position_id": trade.position_id, "symbol": trade.symbol, "tp": trade.planned_tp})
-            await self.modify(trade.position_id, tp=trade.planned_tp)
+            # SL de birlikte gonderilir: verilmeyen alan siliniyorsa yalnizca TP gondermek stopu silerdi.
+            await self.modify(trade.position_id, sl=trade.sl, tp=trade.planned_tp)
 
     def _claim(self, order: dict, trade: Trade) -> None:
         """Mutabakatin `manual` diye ice aldigi pozisyon aslinda bu emrin: bot islemine cevir."""

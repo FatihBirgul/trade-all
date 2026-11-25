@@ -116,9 +116,10 @@ async def test_transient_candle_rejection_is_retried_once_and_reported(tmp_path)
     assert len(candles) == 9 + 1  # 3 sembol x 3 zaman dilimi + tek yineleme
     assert candles[0].url.raw_path == candles[1].url.raw_path  # ayni salt-okuma istegi
     assert sleeps == [discover.RETRY_DELAY]
-    assert "AUTH_INVALID_API_KEY" in summary["errors"]["candles/EURUSDc_M15"]
-    assert "[http 401]" in summary["errors"]["candles/EURUSDc_M15"]
-    assert "candles/EURUSDc_M15#retry" not in summary["errors"]
+    # Ikinci denemede gecen istek hata sayilmaz; ilk ret ayri bir alanda saklanir.
+    assert "candles/EURUSDc_M15" not in summary["errors"] and "candles/EURUSDc_M15#retry" not in summary["errors"]
+    assert "AUTH_INVALID_API_KEY" in summary["retried_errors"]["candles/EURUSDc_M15"]
+    assert "[http 401]" in summary["retried_errors"]["candles/EURUSDc_M15"]
     assert summary["retried_ok"] == ["candles/EURUSDc_M15"]
     assert (folder / "candles/EURUSDc_M15.json").exists()
 
