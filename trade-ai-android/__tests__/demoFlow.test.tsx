@@ -3,7 +3,7 @@ import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import { Pressable, Text } from "react-native";
 import { AppProvider, useApp } from "../src/state";
 import { ThemeProvider } from "../src/theme";
-import Home from "../app/(tabs)/index";
+import Home from "../app/(tabs)/legacy";
 import Analysis from "../app/(tabs)/analysis";
 import Result from "../app/result";
 import Detail from "../app/detail";

@@ -49,5 +49,10 @@ class CloseAllRequest(Strict):
     confirm: str
 
 
+class StrategyModeRequest(Strict):
+    mode: Literal["live", "shadow", "off"]
+    confirm: bool = False  # golgedeki/duraklatilmis stratejiyi canliya almak icin bilincli onay
+
+
 class DeviceRequest(Strict):
     expo_token: str = Field(pattern=r"^Expo(nent)?PushToken\[[A-Za-z0-9_-]{1,200}\]$")

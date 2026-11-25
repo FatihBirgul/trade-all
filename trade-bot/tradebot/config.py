@@ -12,7 +12,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -78,12 +78,69 @@ class ManageSettings(BaseModel):
     tp2_r: float = Field(default=3.0, gt=0, le=20)
 
 
+FUSION_MODULES = ("mtf", "regime", "candle_pattern", "chart_pattern", "structure", "momentum", "confluence",
+                  "other_strategies", "session")
+
+
+def _default_weights() -> dict[str, float]:
+    return {module: (2.0 if module in ("mtf", "regime") else 1.0) for module in FUSION_MODULES}
+
+
+class FusionSettings(BaseModel):
+    """Spec §6.2 guven puani: esikler ve modul agirliklari. Carpanlar sabittir: 0.5x / 0.75x / 1.0x."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    min_score: float = Field(default=40, ge=0, le=100)  # altinda islem yok (gozlem)
+    mid_score: float = Field(default=60, ge=0, le=100)  # altinda 0.5x risk
+    high_score: float = Field(default=80, ge=0, le=100)  # altinda 0.75x, ustunde 1.0x risk
+    weights: dict[str, float] = Field(default_factory=_default_weights)
+    pause_min_trades: int = Field(default=20, ge=5, le=500)  # karne: en az bu kadar islemden sonra
+    pause_avg_r: float = Field(default=0.0, ge=-1.0, le=1.0)  # ortalama R bunun altindaysa strateji duraklatilir
+
+    @model_validator(mode="after")
+    def _ordered(self):
+        if not self.min_score <= self.mid_score <= self.high_score:
+            raise ValueError("esikler artan sirada olmali: min_score <= mid_score <= high_score")
+        if any(not 0 <= float(w) <= 10 for w in self.weights.values()):
+            raise ValueError("modul agirliklari 0 ile 10 arasinda olmali")
+        unknown = set(self.weights) - set(FUSION_MODULES)
+        if unknown:
+            raise ValueError("bilinmeyen modul: " + ", ".join(sorted(unknown)))
+        self.weights = {**_default_weights(), **self.weights}
+        return self
+
+
+class NewsSettings(BaseModel):
+    """Spec §6.6 haber penceresi: yuksek etkili haberden once ve sonra bu kadar dakika yeni bot islemi yok."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    window_minutes: int = Field(default=30, ge=5, le=120)
+
+
 class BotSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     risk: RiskSettings = Field(default_factory=RiskSettings)
     manage: ManageSettings = Field(default_factory=ManageSettings)
+    news: NewsSettings = Field(default_factory=NewsSettings)
+    fusion: FusionSettings = Field(default_factory=FusionSettings)
     enabled_symbols: set[str] | None = None  # None = hepsi
-    enabled_strategies: set[str] | None = None  # None = hepsi
+    enabled_strategies: set[str] | None = None  # None = hepsi (eski alan; listede olmayan strateji kapali sayilir)
+    # Strateji kipi: live (gercek islem), shadow (yalnizca sanal izleme), off. Listede olmayan strateji live'dir.
+    strategy_modes: dict[str, Literal["live", "shadow", "off"]] = Field(default_factory=dict)
     dry_run: bool = True
     commission_per_lot: float = Field(default=0.0, ge=0)
+
+
+def strategy_mode(settings: BotSettings, strategy_id: str) -> str:
+    """Stratejinin etkin kipi: acik kip > eski `enabled_strategies` listesi > varsayilan `live`."""
+    mode = settings.strategy_modes.get(strategy_id)
+    if mode is not None:
+        return mode
+    if settings.enabled_strategies is not None and strategy_id not in settings.enabled_strategies:
+        return "off"
+    return "live"

@@ -1,249 +1,214 @@
-import { BrandMark } from "../../src/BrandMark";
-import React, { useState } from "react";
-import { View } from "react-native";
-import { router } from "expo-router";
-import * as Crypto from "expo-crypto";
-import { useMarketQuotes } from "../../src/useMarketQuotes";
-import { validatePortfolio } from "../../src/domain/portfolio";
-import { MarketRow } from "../../src/MarketRow";
-import { directionText } from "../../src/domain/presentation";
-import { useResource } from "../../src/resource";
-import { useApp } from "../../src/state";
+import React, { useRef, useState } from "react";
+import { Alert } from "react-native";
+import { BotPage, Disconnected, NoData, StaleNotice } from "../../src/bot/BotPage";
+import { REAL_ACTION_NOTE, agoText, amountText, botStateText, pnlText } from "../../src/bot/presentation";
+import { useBot } from "../../src/bot/state";
 import { useTheme } from "../../src/theme";
-import {
-  Button,
-  Card,
-  Heading,
-  Label,
-  Page,
-  Row,
-  Choices,
-  Failure,
-  Loading,
-  ScreenHeader,
-  SectionHeader,
-} from "../../src/ui";
-import {
-  symbols,
-  money,
-  emptyPortfolio,
-  safeDecision,
-} from "../../src/domain/safety";
-export default function Home() {
-  const app = useApp();
+import { Button, Card, Heading, Label, Row, ScreenHeader } from "../../src/ui";
+
+export default function Panel() {
+  const bot = useBot();
   const { colors } = useTheme();
-  const [symbol, setSymbol] = useState<string>("BTCUSDT");
-  const scope = [app.mode, app.connectionKey, app.config.session].join("|");
-  const recent = useResource(
-    async () =>
-      app.mode === "demo"
-        ? app.history.filter((a) => a.data_mode === "fixture").slice(0, 3)
-        : app.api.analyses(),
-    scope + "|" + app.history.length,
-  );
-  const prices = useMarketQuotes();
-  const portfolios = useResource(
-    async () =>
-      app.mode === "demo"
-        ? (["AUTO", "MANUAL"] as const).map(emptyPortfolio)
-        : app.api.portfolios().then((rows) => {
-            rows.forEach((p) => {
-              if (!app.sessionInfo?.accounts.includes(p.portfolio_id))
-                throw new Error("Hesap yetkisi doğrulanamadı.");
-              validatePortfolio(p, p.portfolio_id);
-            });
-            return rows;
-          }),
-    scope,
-  );
-  const supported = app.sessionInfo?.capabilities?.includes("market-quotes-v1");
-  function analyze(market: string) {
-    router.push({
-      pathname: "/analysis",
-      params: { symbol: market, requestId: Crypto.randomUUID() },
-    });
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<{ text: string; bad: boolean } | null>(null);
+  const status = bot.status;
+
+  const running = useRef(false); // çift dokunuş aynı emri iki kez göndermesin
+  async function run(action: () => Promise<unknown>, done: string) {
+    if (running.current) return;
+    running.current = true;
+    setBusy(true);
+    setNotice(null);
+    try {
+      await action();
+      setNotice({ text: done, bad: false });
+    } catch (reason) {
+      setNotice({ text: reason instanceof Error ? reason.message : "İşlem tamamlanamadı.", bad: true });
+    } finally {
+      running.current = false;
+      setBusy(false);
+      void bot.refresh();
+    }
   }
+  function confirmStop() {
+    Alert.alert(
+      "Bot durdurulsun mu?",
+      "Yeni işlem açılmaz. Açık işlemler zarar durdurmalarıyla birlikte yönetilmeye devam eder.",
+      [
+        { text: "Vazgeç", style: "cancel" },
+        { text: "Durdur", style: "destructive", onPress: () => void run(() => bot.api.stop(), "Bot durduruldu.") },
+      ],
+    );
+  }
+  function confirmResume() {
+    if (!status?.halted) {
+      Alert.alert("Bot devam etsin mi?", "Bot yeniden işlem açabilir.", [
+        { text: "Vazgeç", style: "cancel" },
+        { text: "Devam et", onPress: () => void run(() => bot.api.resume(false), "Bot devam ediyor.") },
+      ]);
+      return;
+    }
+    // Bot kendini kayıp sınırı yüzünden durdurdu: iki ayrı onay istenir.
+    Alert.alert(
+      "Bot kayıp sınırı nedeniyle durdu",
+      "Neden: " +
+        (status.halt_reason || "toplam kayıp sınırı") +
+        ".\n\nDevam ederseniz kayıp ölçümü şimdiki bakiyeden yeniden başlar ve bot yeni işlem açabilir.",
+      [
+        { text: "Vazgeç", style: "cancel" },
+        {
+          text: "Devam etmek istiyorum",
+          style: "destructive",
+          onPress: () =>
+            Alert.alert("Emin misiniz?", "Kayıp sınırı koruması sıfırlanacak.", [
+              { text: "Vazgeç", style: "cancel" },
+              {
+                text: "Evet, devam et",
+                style: "destructive",
+                onPress: () => void run(() => bot.api.resume(true), "Bot devam ediyor."),
+              },
+            ]),
+        },
+      ],
+    );
+  }
+  function confirmGoLive() {
+    // Canlı mod gerçek para ile emir gönderir: iki ayrı onay.
+    Alert.alert(
+      "Canlı moda geçilsin mi?",
+      "Bot GERÇEK PARA ile emir göndermeye başlar ve kendi kararıyla işlem açar.\n\n" +
+        "Kayıp sınırları şu anki varlık (" +
+        amountText(status?.equity, status?.currency) +
+        ") üzerinden ölçülmeye başlar.",
+      [
+        { text: "Vazgeç", style: "cancel" },
+        {
+          text: "Canlıya geçmek istiyorum",
+          style: "destructive",
+          onPress: () =>
+            Alert.alert("Emin misiniz?", "Bu andan itibaren bot gerçek hesapta işlem açabilir.", [
+              { text: "Vazgeç", style: "cancel" },
+              {
+                text: "Evet, canlıya geç",
+                style: "destructive",
+                onPress: () => void run(() => bot.api.setDryRun(false), "Canlı moda geçildi."),
+              },
+            ]),
+        },
+      ],
+    );
+  }
+  function confirmDryRun() {
+    Alert.alert(
+      "Deneme moduna dönülsün mü?",
+      "Bot yeni işlem açmaz ve açık işlemlerde kademeli stop yapmaz. Mevcut SL ve TP emirleri Exness’te kalır.",
+      [
+        { text: "Vazgeç", style: "cancel" },
+        { text: "Deneme moduna dön", onPress: () => void run(() => bot.api.setDryRun(true), "Deneme moduna geçildi.") },
+      ],
+    );
+  }
+  function confirmCloseAll() {
+    const count = (status?.open_bot ?? 0) + (status?.open_manual ?? 0);
+    Alert.alert(
+      "Tüm pozisyonlar kapatılsın mı?",
+      (count > 0
+        ? "Bot ve elle açılmış " + count + " pozisyonun tamamı piyasa fiyatından kapatılır ve bot durdurulur."
+        : "Açık pozisyon görünmüyor; yine de varsa hepsi kapatılır ve bot durdurulur.") +
+        " Bu işlem geri alınamaz." +
+        (status?.dry_run ? "\n\n" + REAL_ACTION_NOTE : ""),
+      [
+        { text: "Vazgeç", style: "cancel" },
+        {
+          text: "Hepsini kapat",
+          style: "destructive",
+          onPress: () =>
+            void run(async () => {
+              const result = await bot.api.closeAll();
+              if (result.skipped?.length)
+                throw new Error(
+                  result.requested +
+                    " pozisyon için kapama istendi; " +
+                    result.skipped.length +
+                    " pozisyonda zaten bekleyen bir kapama var. Pozisyonlar sekmesinden kontrol edin.",
+                );
+            }, "Kapama istekleri gönderildi. Pozisyonlar sekmesinden izleyin."),
+        },
+      ],
+    );
+  }
+
+  if (bot.phase !== "ready")
+    return (
+      <BotPage>
+        <ScreenHeader title="Panel" badge="TRADE BOT" />
+        <Disconnected />
+      </BotPage>
+    );
+
+  const state = status ? botStateText(status) : null;
+  const toneColor = { ok: colors.green, warn: colors.gold, bad: colors.red };
+  const currency = status?.currency;
+  // Süreler sunucu saatine göre hesaplanır; eski sunucularda son yanıt anı kullanılır.
+  const nowSeconds = status?.server_time ?? (bot.lastOkAt ?? 0) / 1000;
   return (
-    <Page mode={app.mode} connection={app}>
-      <BrandMark compact />
-      <ScreenHeader
-        title="Piyasaya bakış"
-        badge={app.uiMode === "pro" ? "PRO" : "BASİT"}
-      />
-      <Button
-        title="Tarayıcı ve fırsatlar"
-        secondary
-        onPress={() => router.push("/market-discovery")}
-      />
-      <SectionHeader
-        title="Piyasalar"
-        action={
-          app.mode === "live"
-            ? prices.loading
-              ? "Yenileniyor…"
-              : "Piyasayı yenile"
-            : undefined
-        }
-        onPress={prices.loading || !supported ? undefined : prices.reload}
-      />
-      {app.mode === "demo" ? (
-        <Label muted>
-          Bu modda canlı fiyat alınmaz. Yerel örnekler gösterilir.
-        </Label>
-      ) : (
+    <BotPage>
+      <ScreenHeader title="Panel" badge="TRADE BOT" />
+      <StaleNotice />
+      <NoData />
+      {!status || !state ? null : (
         <>
-          {prices.stale ? (
-            <Label style={{ color: colors.gold }}>
-              Güncel değil · Son başarılı fiyatlar gösteriliyor.
-            </Label>
-          ) : null}
-          {!supported ? (
-            <Label muted>
-              Piyasa verileri için güncel Gateway ve Backend gerekir.
-            </Label>
-          ) : null}
-          {prices.error ? (
-            <Label style={{ color: colors.red }}>{prices.error}</Label>
-          ) : null}
-          {prices.data ? (
-            <Card elevated>
-              {prices.data.items.map((quote) => (
-                <MarketRow
-                  key={quote.symbol}
-                  quote={quote}
-                  stale={prices.stale}
-                  onPress={() => analyze(quote.symbol)}
-                />
-              ))}
-              <Label muted>
-                Binance Spot · Satıra dokunarak analiz açın. Grafik: son kapalı
-                1 saatlik mumlar. Canlı mum grafiği değildir; analiz kaydından
-                ayrıdır.
+          <Card>
+            <Heading>Bot durumu</Heading>
+            {bot.heartbeatStale ? (
+              <Label style={{ color: colors.red, fontWeight: "700" }}>
+                Bot yanıt vermiyor (son bilinen durum: {state.label})
               </Label>
-            </Card>
-          ) : prices.loading ? (
-            <Loading />
-          ) : (
-            <Card>
-              <Label>
-                Piyasa fiyatı yüklenemedi; örnek fiyat gösterilmedi.
-              </Label>
-            </Card>
-          )}
+            ) : (
+              <Label style={{ color: toneColor[state.tone], fontWeight: "700" }}>{state.label}</Label>
+            )}
+            <Row name="Son tarama" value={agoText(status.last_scan_at, nowSeconds)} />
+            <Row name="Exness bağlantısı" value={status.stream_connected ? "Bağlı" : "Kopuk"} />
+          </Card>
+          <Card>
+            <Heading>Hesap</Heading>
+            <Row name="Bakiye" value={amountText(status.balance, currency)} />
+            <Row name="Varlık (equity)" value={amountText(status.equity, currency)} />
+            <Row name="Serbest teminat" value={amountText(status.margin_free, currency)} />
+          </Card>
+          <Card>
+            <Heading>Bugünkü kâr/zarar</Heading>
+            <Row name="Bot" value={pnlText(status.pnl_today.bot, currency)} />
+            <Row name="Elle" value={pnlText(status.pnl_today.manual, currency)} />
+            <Row name="Toplam" value={pnlText(status.pnl_today.total, currency)} />
+            <Label muted style={{ fontSize: 12 }}>
+              Açık işlemlerin anlık kârı/zararı dahildir. Gün Türkiye saatiyle 03:00’te başlar.
+            </Label>
+          </Card>
+          <Card>
+            <Heading>Açık işlemler</Heading>
+            <Row name="Bot işlemleri" value={String(status.open_bot)} />
+            <Row name="Elle işlemler" value={String(status.open_manual)} />
+          </Card>
+          <Card>
+            <Heading>Kontrol</Heading>
+            {status.halted || status.stopped ? (
+              <Button title="Devam" onPress={confirmResume} disabled={busy} />
+            ) : (
+              <Button title="Durdur" onPress={confirmStop} disabled={busy} secondary />
+            )}
+            <Button title="Hepsini kapat" onPress={confirmCloseAll} disabled={busy} secondary />
+            {status.dry_run ? (
+              <Button title="Canlı moda geç" onPress={confirmGoLive} disabled={busy || bot.heartbeatStale} secondary />
+            ) : (
+              <Button title="Deneme moduna dön" onPress={confirmDryRun} disabled={busy} secondary />
+            )}
+            {notice ? (
+              <Label style={{ color: notice.bad ? colors.red : colors.muted }}>{notice.text}</Label>
+            ) : null}
+          </Card>
         </>
       )}
-      <Card elevated>
-        <Heading>Hızlı analiz</Heading>
-        <Label muted>
-          {app.account} · yalnız analiz; otomatik emir oluşturmaz.
-        </Label>
-        <Choices values={symbols} value={symbol} onChange={setSymbol} />
-        <Button title="Analiz Et" onPress={() => analyze(symbol)} />
-      </Card>
-      <SectionHeader
-        title="Son analizler"
-        action="Yenile"
-        onPress={recent.loading ? undefined : recent.reload}
-      />
-      {recent.loading ? (
-        <Loading />
-      ) : recent.error ? (
-        <Failure message={recent.error} retry={recent.reload} />
-      ) : recent.data?.length ? (
-        <Card>
-          {recent.data.slice(0, app.uiMode === "pro" ? 3 : 1).map((a) => (
-            <View key={a.analysis_id} style={{ gap: 6 }}>
-              <Row
-                name={a.symbol + " · " + a.timeframe}
-                value={directionText(safeDecision(a))}
-              />
-              <Label muted>
-                {new Date(a.created_at_ms).toLocaleString("tr-TR")}
-              </Label>
-              <Button
-                title="Son analizi aç"
-                variant="ghost"
-                onPress={() =>
-                  router.push({
-                    pathname: "/result",
-                    params: { id: a.analysis_id },
-                  })
-                }
-              />
-            </View>
-          ))}
-        </Card>
-      ) : (
-        <Label muted>Henüz analiz yüklenmedi.</Label>
-      )}
-      {app.uiMode === "pro" ? (
-        <Button
-          title="Analiz geçmişini aç"
-          variant="ghost"
-          onPress={() => router.push("/history")}
-        />
-      ) : null}
-      <SectionHeader
-        title={app.mode === "demo" ? "Örnek sanal portföy" : "Sanal portföy"}
-        action="Portföyleri aç"
-        onPress={() => router.push("/portfolios")}
-      />
-      {portfolios.loading ? (
-        <Loading />
-      ) : portfolios.error ? (
-        <Failure message={portfolios.error} retry={portfolios.reload} />
-      ) : portfolios.data?.length ? (
-        <Card>
-          {portfolios.data.map((p) => (
-            <View key={p.portfolio_id} style={{ gap: 4 }}>
-              <Row
-                name={
-                  p.portfolio_id +
-                  (app.mode === "demo" ? " · DEMO hesabı" : " · Sanal hesap")
-                }
-                value={money(p.equity_quote) + " USDT"}
-              />
-              <Label muted>
-                {p.open_positions} açık pozisyon · {p.pending_orders} bekleyen
-                emir
-              </Label>
-            </View>
-          ))}
-          <Label muted>
-            {app.mode === "demo"
-              ? "Yerel örnek bakiyeler · backend sorgulanmadı."
-              : "Backend’den alınan ayrı sanal hesaplar · gerçek para kullanılmaz."}
-          </Label>
-        </Card>
-      ) : (
-        <Label muted>Portföy verisi alınamadı.</Label>
-      )}
-      {app.uiMode === "pro" ? (
-        <>
-          <Button
-            title="Tarayıcıyı aç"
-            secondary
-            onPress={() => router.push("/scanner")}
-          />
-          <Button
-            title="Performans"
-            variant="ghost"
-            onPress={() => router.push("/performance")}
-          />
-        </>
-      ) : null}
-      {app.mode === "live" ? (
-        <Button
-          title="Analiz takipleri"
-          variant="ghost"
-          onPress={() => router.push("/follows")}
-        />
-      ) : null}
-      <Button
-        title="Bildirimler"
-        variant="ghost"
-        onPress={() => router.push("/notifications")}
-      />
-    </Page>
+    </BotPage>
   );
 }

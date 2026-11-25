@@ -11,6 +11,7 @@ from .api.server import serve
 from .app import Bot
 from .config import Settings
 from .exness.client import ExnessClient
+from .news.calendar import NewsCalendar
 from .notify.expo import ExpoNotifier
 from .store.repo import Repo
 
@@ -37,6 +38,8 @@ class Runtime:
             closer = getattr(self.bot.notifier, "aclose", None)
             if closer is not None:
                 await closer()  # yoldaki bildirimler veritabani kapanmadan tamamlansin
+            if self.bot.news is not None:
+                await self.bot.news.aclose()
             await self.client.aclose()
             self.repo.close()
 
@@ -49,7 +52,7 @@ def build_notifier(repo: Repo):
 def build_runtime(settings: Settings) -> Runtime:
     client = ExnessClient(settings)
     repo = Repo(settings.db_path)
-    bot = Bot(settings, client, repo, build_notifier(repo))
+    bot = Bot(settings, client, repo, build_notifier(repo), news=NewsCalendar(repo))
     return Runtime(settings, client, repo, bot)
 
 

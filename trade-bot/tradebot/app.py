@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 
-from .config import BotSettings, Settings
+from .config import BotSettings, Settings, strategy_mode
 from .execution.executor import Executor
 from .execution.reconcile import fetch_all_deals, reconcile
 from .store.repo import Trade
@@ -27,9 +27,12 @@ from .manager.manage import MoveSL, NoOp, PartialClose, decide
 from .market.candles import CandleStore
 from .market.catalog import InstrumentCatalog
 from .market.quotes import QuoteBook
+from .news.gate import blocking_event
 from .risk.portfolio import check_entry
 from .signals import v9
-from .signals.adapter import Candidate, evaluate
+from .signals import fusion, scorecard
+from .signals.adapter import Candidate, Evaluation, evaluate_all
+from .signals.shadow import ShadowBook
 from .signals.provider import ExnessV9Provider
 from .store.repo import BotState, Repo
 
@@ -60,6 +63,9 @@ STOP_RECHECK_UNKNOWN = 300.0  # seviye bilinmiyorsa (elle mudahale gerekir) daha
 REARM_LIMIT = 3  # stop bu kadar denemede kurulamazsa pozisyon kapatilir
 ATR_MAX_AGE_BARS = 3
 TICK_CHUNK = 20
+RATE_PAUSE_LIMIT = 2  # bir taramada 429 sonrasi en cok bu kadar kisa bekleme; sonra tarama birakilir
+RATE_PAUSE_DEFAULT = 2.0
+RATE_PAUSE_MAX = 10.0
 
 
 @dataclass
@@ -70,6 +76,9 @@ class ScanSummary:
     candidates: int = 0
     opened: int = 0
     blocked: int = 0
+    news_blocked: int = 0  # haber penceresi nedeniyle analiz edilmeden atlanan semboller
+    observed: int = 0  # guven puani esigin altinda kalan (islem acilmayan) adaylar
+    shadowed: int = 0  # golge kipindeki stratejilerin (yalnizca sanal izlenen) adaylari
     errors: int = 0
     skipped: str | None = None
     quoted: int = 0  # taranan sembollerden taze fiyati (tick) olanlar; 0 ise fiyat akisi calismiyor demektir
@@ -84,13 +93,14 @@ def _default_stream_factory(client, path, on_message, name):
 
 class Bot:
     def __init__(self, settings: Settings, client, repo: Repo, notifier, clock: Callable[[], float] = time.time,
-                 *, stream_factory=None, sleep=asyncio.sleep):
+                 *, stream_factory=None, sleep=asyncio.sleep, news=None):
         self.settings = settings
         self.client = client
         self.repo = repo
         self.notifier = notifier
         self._clock = clock
         self._sleep = sleep
+        self.news = news  # NewsCalendar | None (None: haber filtresi yok)
         self._stream_factory = stream_factory or _default_stream_factory
         self.catalog = InstrumentCatalog(client)
         self.quotes = QuoteBook(clock=clock)
@@ -99,6 +109,7 @@ class Bot:
         self.provider = ExnessV9Provider(self.catalog, self.candles, self.quotes, lambda: self.account)
         self.executor = Executor(client, repo, notifier, self.catalog, clock=clock,
                                  on_auth_error=self._auth_error)
+        self.shadow = ShadowBook(repo)
         self.streams: list = []
         self.started = False
         self._details: dict | None = None
@@ -110,6 +121,7 @@ class Bot:
         self._balance_synced_at = 0.0
         self.last_scan: ScanSummary | None = None
         self.tick_errors = 0  # fiyat akisinin dondurdugu hata sayisi (reddedilen abonelik vb.)
+        self.tick_error: dict | None = None  # son hata: {"code", "message", "id"}
         self._limits = schema.Limits()
         self._events_stream = None
         self._event_connections = 0
@@ -155,6 +167,7 @@ class Bot:
         report = await reconcile(self.client, self.repo, self.catalog, clock=self._clock, snapshot=snapshot)
         await self.executor.publish(report)
         self._open_streams()
+        await self._refresh_news()
         self.started = True
         universe = self.catalog.universe(self.repo.get_bot_settings().enabled_symbols)
         await self._record("info", "bot_started", f"Bot başladı: {len(universe)} sembol izleniyor",
@@ -209,8 +222,13 @@ class Bot:
             # Abonelik yaniti ya da hata: reddedilen abonelik sessiz kalmamali (fiyat hic gelmez).
             code, message = schema.parse_error(raw)
             if code is not None:
-                log.warning("fiyat akisi hata dondurdu: %s (kod %s)", message, code)
+                log.warning("fiyat akisi hata dondurdu: %s (kod %s, istek %s)", message, code, raw.get("id"))
                 self.tick_errors += 1
+                # Son hata /health'te gorunur (kod, sabit hata adi ve bizim gonderdigimiz istek kimligi;
+                # hesap bilgisi icermez): reddedilen aboneligin nedeni sunucu gunlugune bakmadan anlasilir.
+                request_id = raw.get("id")
+                self.tick_error = {"code": code, "message": (message or "")[:80],
+                                   "id": request_id[:40] if isinstance(request_id, str) else None}
             return
         instrument = self.catalog.by_broker(tick.symbol)
         self.quotes.on_tick(dataclasses.replace(tick, symbol=instrument.symbol) if instrument else tick)
@@ -492,6 +510,7 @@ class Bot:
         now = self._clock()
         summary = ScanSummary(at=now)
         self.repo.set_bot_state(last_scan_at=now)
+        await self._check_scorecard()
         settings = self.repo.get_bot_settings()
         await self._check_limits(settings)
         state = self.repo.bot_state()
@@ -507,11 +526,17 @@ class Bot:
             return await self._skip(summary, "daily_limit")
 
         scanned: set[str] = set()
+        news_events = self.news.events() if self.news is not None and settings.news.enabled else []
         retries_before = self.candles.transient_rejections
+        rate_pauses = 0
         for instrument in self.catalog.universe(settings.enabled_symbols):
             symbol = instrument.symbol
             if not self._is_open(instrument, now):
                 summary.closed += 1  # hafta sonu forex gibi: sessizce atla
+                continue
+            if news_events and blocking_event(instrument, news_events, now=now,
+                                              window_minutes=settings.news.window_minutes) is not None:
+                summary.news_blocked += 1  # haber penceresi: yeni islem yok (acik islemler stoplariyla surer)
                 continue
             try:
                 for frame in FRAMES:
@@ -530,11 +555,20 @@ class Bot:
                 summary.skipped = "auth_error"
                 return summary
             except ExnessRateLimited as exc:
-                # Limit asildi: bu turu birak, dongude tekrar deneme.
+                # Limit asildi. Reddedilen istek YINELENMEZ (bu sembol bu mumda atlanir); kisa bir beklemeden
+                # sonra siradaki sembollerle devam edilir. Art arda olursa tarama birakilir: dongu yok.
                 summary.errors += 1
-                summary.skipped = "rate_limited"
-                await self._record("warning", "rate_limited", f"İstek limiti doldu; tarama yarıda kesildi ({exc})")
-                return summary
+                rate_pauses += 1
+                if rate_pauses > RATE_PAUSE_LIMIT:
+                    summary.skipped = "rate_limited"
+                    await self._record("warning", "rate_limited",
+                                       f"İstek limiti doldu; tarama yarıda kesildi ({exc})")
+                    return summary
+                if rate_pauses == 1:
+                    await self._record("warning", "rate_limited",
+                                       f"İstek limiti doldu; {symbol} bu mumda atlandı, tarama sürüyor ({exc})")
+                await self._sleep(min(max(exc.retry_after or RATE_PAUSE_DEFAULT, 0.5), RATE_PAUSE_MAX))
+                continue
             except (ExnessError, ValueError) as exc:
                 summary.errors += 1
                 log.warning("mumlar alinamadi %s: %s", symbol, exc)
@@ -544,18 +578,28 @@ class Bot:
             if age is not None and age <= QUOTE_MAX_AGE:
                 summary.quoted += 1
             await self._auth_ok()
-            result = evaluate(self.provider, symbol, equity=self.account.equity, risk_pct=settings.risk.risk_pct,
-                              commission_per_lot=self._commission(instrument, settings),
-                              enabled_strategies=settings.enabled_strategies, now=now)
+            modes = {s: strategy_mode(settings, s) for s in v9.builtin_strategy_ids()}
+            results = evaluate_all(self.provider, symbol, equity=self.account.equity, risk_pct=settings.risk.risk_pct,
+                                   commission_per_lot=self._commission(instrument, settings), modes=modes, now=now)
             summary.scanned += 1
             await asyncio.sleep(0)  # analiz islemciyi tutar; pozisyon yonetimine sira ver
-            if result.candidate is None:
-                summary.reasons[result.decision] = summary.reasons.get(result.decision, 0) + 1
-                log.info("aday yok %s: %s (%s)", symbol, result.decision, "; ".join(result.reasons))
-                continue
-            summary.candidates += 1
-            await self._consider(result.candidate, instrument, settings, summary)
+            for result in results:
+                if result.candidate is None:
+                    summary.reasons[result.decision] = summary.reasons.get(result.decision, 0) + 1
+                    log.info("aday yok %s: %s (%s)", symbol, result.decision, "; ".join(result.reasons))
+                    continue
+                summary.candidates += 1
+                await self._consider(result, instrument, settings, summary)
 
+        for symbol in self.shadow.open_symbols():  # sanal islemleri kapanmis mumlarla sonuclandir
+            try:
+                self.catalog.get(symbol)
+                if symbol not in scanned:
+                    await self.candles.get(symbol, "M15", 128)
+                    scanned.add(symbol)
+                self.shadow.resolve(symbol, self.candles.cached(symbol, "M15", 128), now)
+            except (ExnessError, ValueError, KeyError):
+                continue
         await self._refresh_open_candles(scanned)
         summary.candle_retries = self.candles.transient_rejections - retries_before
         if summary.candle_retries:
@@ -563,7 +607,9 @@ class Bot:
         await self._record(
             "info", "scan",
             f"Tarama: {summary.scanned} sembol, {summary.candidates} aday, {summary.opened} emir"
-            + (f", {summary.closed} kapalı" if summary.closed else ""), dataclasses.asdict(summary))
+            + (f", {summary.closed} kapalı" if summary.closed else "")
+            + (f", {summary.news_blocked} haber penceresinde" if summary.news_blocked else ""),
+            dataclasses.asdict(summary))
         return summary
 
     def _with_tp2(self, candidate: Candidate, instrument: Instrument, settings: BotSettings) -> Candidate:
@@ -576,10 +622,49 @@ class Bot:
         units = (Decimal(str(raw)) / quantum).to_integral_value(rounding=ROUND_CEILING if sign > 0 else ROUND_FLOOR)
         return dataclasses.replace(candidate, take_profit_2=float(units * quantum))
 
-    async def _consider(self, candidate: Candidate, instrument: Instrument, settings: BotSettings,
+    def _score(self, result: Evaluation, instrument: Instrument, settings: BotSettings):
+        """(puan, oylar, carpan). Guven puani kapaliyken ya da rapor yokken tam risk (1.0)."""
+        if not settings.fusion.enabled or result.report is None:
+            return None, None, 1.0
+        votes = fusion.collect_votes(result.report, result.candidate.side, now=self._clock(), kind=instrument.kind)
+        value = fusion.score(votes, settings.fusion.weights)
+        return value, {v.module: v.value for v in votes}, fusion.risk_multiplier(value, settings.fusion)
+
+    async def _observe(self, candidate: Candidate, summary: ScanSummary, *, score: float | None, votes: dict | None,
+                       reason: str) -> None:
+        """Islem acilmayan aday: "gozlem" olarak kaydedilir (spec §6.2), emir gonderilmez."""
+        summary.observed += 1
+        await self._record(
+            "info", "signal_observed",
+            f"{candidate.symbol} {candidate.side} gözlem olarak kaydedildi: {reason}",
+            {"symbol": candidate.symbol, "side": candidate.side, "strategy_id": candidate.strategy_id,
+             "setup_id": candidate.setup_id, "score": score, "votes": votes, "reason": reason})
+
+    async def _consider(self, result: Evaluation, instrument: Instrument, settings: BotSettings,
                         summary: ScanSummary) -> None:
+        candidate = result.candidate
         if self.executor.already_submitted(candidate):
             return  # ayni mum ikinci kez tarandi
+        score, votes, multiplier = self._score(result, instrument, settings)
+        if result.mode == "shadow":
+            # Golge kipindeki strateji: sinyali ve sanal sonucu izle, gercek emir gonderme.
+            reason = "paused" if candidate.strategy_id in scorecard.paused(self.repo) else "shadow"
+            if self.shadow.open(candidate, reason, score, self._clock()):
+                summary.shadowed += 1
+            return
+        if multiplier is None:
+            self.shadow.open(candidate, "low_score", score, self._clock())
+            await self._observe(candidate, summary, score=score, votes=votes,
+                                reason=f"güven puanı {score:.0f} < {settings.fusion.min_score:g}")
+            return
+        if multiplier < 1.0:
+            lots = fusion.scale_lots(candidate.lots, multiplier, instrument)
+            if lots is None:
+                await self._observe(candidate, summary, score=score, votes=votes,
+                                    reason=f"puan {score:.0f} için azaltılmış lot en küçük lotun altında")
+                return
+            candidate = dataclasses.replace(candidate, lots=lots,
+                                            risk_amount=candidate.risk_amount * lots / candidate.lots)
         state = self.repo.bot_state()
         today, total = self.bot_pnl(state)
         # Islem satiri ancak dolum olayiyla olusur. Ayni taramada gonderilmis ama henuz dolmamis
@@ -600,7 +685,7 @@ class Bot:
             log.info("aday engellendi %s %s: %s", candidate.symbol, candidate.side, verdict.reason)
             return
         candidate = self._with_tp2(candidate, instrument, settings)
-        data = {**dataclasses.asdict(candidate), "dry_run": settings.dry_run}
+        data = {**dataclasses.asdict(candidate), "dry_run": settings.dry_run, "score": score, "votes": votes}
         text = (f"{candidate.symbol} {candidate.side} {candidate.lots:g} lot @ {candidate.entry:g}, "
                 f"SL {candidate.stop_loss:g}, TP {candidate.take_profit_2:g} ({candidate.strategy_id})")
         if settings.dry_run:
@@ -608,7 +693,7 @@ class Bot:
             return
         await self._record("info", "signal", text, data)
         try:
-            key = await self.executor.open(candidate, "bot")
+            key = await self.executor.open(candidate, "bot", score=score, votes=votes)
         except ValueError as exc:  # istek kurulamadi (or. hacim sinir disi): bu adayi birak, taramaya devam
             await self._record("warning", "signal_invalid", f"{candidate.symbol} emri kurulamadı: {exc}",
                                {"symbol": candidate.symbol})
@@ -767,10 +852,48 @@ class Bot:
         if not self._auth_blocked():
             await self.executor.resolve_unknown()
 
+    async def _refresh_news(self) -> None:
+        """Takvimi gerektiginde yeniler. Alinamamasi botu durdurmaz; 24 saati asarsa gunde bir kez uyarilir."""
+        if self.news is None:
+            return
+        try:
+            if self.news.due():
+                await self.news.refresh()
+        except Exception:  # takvim kaynagi botun calismasini hicbir kosulda bozmamali
+            log.exception("haber takvimi yenilenemedi")
+        if self.news.stale() and self.repo.get_bot_settings().news.enabled:
+            day = datetime.fromtimestamp(self._clock(), timezone.utc).strftime("%Y-%m-%d")
+            if self.repo.get_setting("news_warned_day") != day:
+                self.repo.set_setting("news_warned_day", day)
+                missing = self.news.never_fetched()
+                await self._record(
+                    "warning", "news_unavailable",
+                    ("Haber takvimi hiç alınamadı. Bot çalışmaya devam ediyor ama haber penceresi koruması "
+                     "ÇALIŞMIYOR: önemli haberlerde de işlem açılabilir." if missing else
+                     "Haber takvimi 24 saattir alınamıyor. Bot çalışmaya devam ediyor ama haber penceresi "
+                     "koruması güncel değil."),
+                    {"never_fetched": missing}, notify=True, title="Haber takvimi alınamıyor")
+
+    async def _check_scorecard(self) -> None:
+        """Karnesi bozulan stratejiyi duraklatir: golge kipine alir (izlenir, emir acmaz) ve bir kez bildirir."""
+        settings = self.repo.get_bot_settings()
+        for strategy_id, stats in scorecard.strategies_to_pause(self.repo, settings):
+            settings.strategy_modes[strategy_id] = "shadow"
+            self.repo.set_bot_settings(settings)  # kalici: yeniden baslatmada da duraklatilmis kalir
+            scorecard.mark_paused(self.repo, strategy_id, self._clock(), stats)
+            await self._record(
+                "error", "strategy_paused",
+                f"{strategy_id} duraklatıldı: {stats['trades']} işlemde ortalama {stats['avg_r']:+.2f}R. "
+                "Strateji gölgede izlenmeye devam ediyor; uygulamadan yeniden açabilirsiniz.",
+                {"strategy_id": strategy_id, "trades": stats["trades"], "avg_r": stats["avg_r"]},
+                notify=True, title="Strateji duraklatıldı")
+
     # ------------------------------------------------------------------ kalp atisi
     async def heartbeat(self) -> None:
         now = self._clock()
         self.repo.set_bot_state(heartbeat_at=now)
+        await self._refresh_news()
+        await self._check_scorecard()
         if self.account is not None and now - self._last_equity_sample >= EQUITY_SAMPLE_INTERVAL:
             self._last_equity_sample = now
             self.repo.add_equity(now, self.account.balance, self.account.equity)
@@ -799,6 +922,15 @@ class Bot:
                 self._subscribed.update(missing)
                 await self._tick_stream.subscribe(schema.subscribe_ticks(f"ticks-extra-{int(now)}", missing))
 
+    def quoted_now(self) -> int:
+        """Evrende su an taze (QUOTE_MAX_AGE icinde) fiyati olan sembol sayisi."""
+        count = 0
+        for instrument in self.catalog.universe():
+            age = self.quotes.age(instrument.symbol)
+            if age is not None and age <= QUOTE_MAX_AGE:
+                count += 1
+        return count
+
     def status(self) -> dict:
         state = self.repo.bot_state()
         settings = self.repo.get_bot_settings()
@@ -817,6 +949,8 @@ class Bot:
             "dry_run": settings.dry_run, "start_capital": state.start_capital,
             "last_scan_at": state.last_scan_at, "heartbeat_at": state.heartbeat_at,
             "stream_connected": self.streams_up(), "started": self.started,
+            # Uygulama kalp atisinin bayatligini telefon saatine degil bu degere gore olcer.
+            "server_time": self._clock(),
         }
 
     # ------------------------------------------------------------------ zamanlayicilar

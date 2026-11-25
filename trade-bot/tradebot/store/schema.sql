@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS trades (
     be_done INTEGER NOT NULL DEFAULT 0,
     partial_done INTEGER NOT NULL DEFAULT 0,
     last_sl REAL,     -- broker'in en son onayladigi SL (SL/TP emri iptal olsa da silinmez)
-    planned_tp REAL   -- planlanan TP (broker'daki TP kaybolursa yeniden kurmak icin)
+    planned_tp REAL,  -- planlanan TP (broker'daki TP kaybolursa yeniden kurmak icin)
+    votes_json TEXT   -- giristeki modul oylari (karne icin)
 );
 CREATE INDEX IF NOT EXISTS trades_open ON trades (closed_at) WHERE closed_at IS NULL;
 
@@ -44,6 +45,24 @@ CREATE TABLE IF NOT EXISTS realized (
     pnl REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS realized_at ON realized (at);
+
+-- Sanal (golge) islemler: emir gonderilmeyen adaylarin izlenen sonucu.
+CREATE TABLE IF NOT EXISTS shadow_trades (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL,
+    side TEXT NOT NULL CHECK (side IN ('BUY', 'SELL')),
+    strategy_id TEXT NOT NULL,
+    setup_id TEXT NOT NULL UNIQUE,
+    reason TEXT NOT NULL CHECK (reason IN ('shadow', 'low_score', 'paused')),
+    entry REAL NOT NULL,
+    sl REAL NOT NULL,
+    tp REAL NOT NULL,
+    score REAL,
+    opened_at REAL NOT NULL,
+    closed_at REAL,
+    result_r REAL
+);
+CREATE INDEX IF NOT EXISTS shadow_open ON shadow_trades (symbol) WHERE closed_at IS NULL;
 
 -- Para yatirma/cekme (balance turu deal): her biri tam bir kez islenir (WS olayi ve gecmis ayni deal'i
 -- getirebilir). applied = 1 ise tutar kayip siniri tabanina (start_capital) eklenmistir.

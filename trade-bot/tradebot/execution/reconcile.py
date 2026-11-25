@@ -6,6 +6,7 @@ anlik goruntu acik pozisyonlari, deal gecmisi kapanislari verir. Bu fonksiyon em
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -82,6 +83,7 @@ def trade_from_order(order: dict, position: Position, symbol: str, fallback_time
         sl=position.sl, tp1=meta.get("tp1"), tp2=position.tp if position.tp is not None else meta.get("tp2"),
         initial_risk_r_price=risk_distance(position.side, entry, requested if requested is not None else position.sl),
         risk_amount=meta.get("risk_amount"), strategy_id=meta.get("strategy_id"), setup_id=order.get("setup_id"),
+        score=meta.get("score"), votes_json=json.dumps(meta["votes"]) if meta.get("votes") else None,
         opened_at=position.opened_at or fallback_time, sltp_order_id=position.sltp_order_id,
         manage=bool(meta.get("manage", True)), last_sl=position.sl,
         planned_tp=meta.get("tp2") if meta.get("tp2") is not None else position.tp)

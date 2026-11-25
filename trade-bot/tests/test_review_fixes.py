@@ -15,7 +15,7 @@ from tradebot.config import BotSettings, RiskSettings
 from tradebot.execution.reconcile import reconcile, risk_distance
 from tradebot.exness import schema
 from tradebot.exness.errors import ExnessAuthError, ExnessRateLimited, ExnessUnavailable
-from tradebot.exness.limits import RateLimiter
+from tradebot.exness.limits import SAFETY, RateLimiter
 from tradebot.market.catalog import InstrumentCatalog
 
 METALS = {**DEFAULT_INSTRUMENTS,
@@ -204,7 +204,7 @@ async def test_i2_trading_request_is_not_stuck_behind_a_candle_wait():
     await limiter.acquire("GET", "/v1/market-data/accounts/1/candles?x=1")
     waiting = asyncio.create_task(limiter.acquire("GET", "/v1/market-data/accounts/1/candles?x=2"))
     await asyncio.sleep(0)
-    assert waits == [60.0] and not waiting.done()
+    assert waits == [60.0 * SAFETY] and not waiting.done()  # pencere guvenlik payiyla genis tutulur
     await asyncio.wait_for(limiter.acquire("DELETE", "/v1/trading/accounts/1/positions/7"), timeout=1)
     waiting.cancel()
 
@@ -862,11 +862,11 @@ async def test_invalid_order_does_not_abort_the_scan(tmp_path):
     real_open = app.bot.executor.open
     seen = []
 
-    async def flaky(cand, origin="bot"):
+    async def flaky(cand, origin="bot", **extra):
         seen.append(cand.symbol)
         if len(seen) == 1:
             raise ValueError("hacim enstruman sinirlarinin disinda")
-        return await real_open(cand, origin)
+        return await real_open(cand, origin, **extra)
     app.bot.executor.open = flaky
     summary = await app.bot.on_bar_close()
     assert summary.candidates == 2 and summary.opened == 1 and "signal_invalid" in app.kinds()
@@ -965,6 +965,12 @@ async def test_rejected_tick_subscription_is_visible(tmp_path):
     app = await started(tmp_path)
     await app.bot.on_tick_message({"code": 3000, "error_message": "REQUEST_INVALID"})
     assert app.bot.tick_errors == 1
+    api = create_app(app.bot, clock=lambda: app.clock["now"])
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api), base_url="http://bot") as http:
+        await app.bot.on_tick_message({"id": "ticks-0", "code": 4000, "error_message": "MARKET_INSTRUMENT_NOT_FOUND"})
+        health = (await http.get("/health")).json()
+    assert health["tick_errors"] == 2 and health["quoted_now"] == 1
+    assert health["tick_error"] == {"code": 4000, "message": "MARKET_INSTRUMENT_NOT_FOUND", "id": "ticks-0"}
     summary = await app.bot.on_bar_close()
     assert summary.scanned == 4 and summary.quoted == 1  # yalnizca fiyati gelen sembol
 
@@ -974,3 +980,60 @@ def test_deal_history_with_more_pages_but_no_cursor_fails_loudly():
         schema.parse_deals({"items": [], "has_more": True})
     assert schema.parse_deals({"items": [], "has_more": True, "next_cursor": "abc"}) == ([], "abc")
     assert schema.parse_deals({"items": [], "has_more": False}) == ([], None)
+
+
+async def test_limiter_keeps_a_margin_under_the_documented_rate():
+    """Canli: mum siniri 2 istek/sn; pencere tam dolduruldugunda ag gecikmesi oynamasi 429 uretti."""
+    fake = FakeTime()
+    limiter = RateLimiter(clock=fake.clock, sleep=fake.sleep)
+    limiter.configure(global_rate=(15, 1.0), methods=[("GET", "/v1/market-data/accounts/{account_id}/candles", 2, 1.0)])
+    sent = []
+    for _ in range(9):
+        await limiter.acquire("GET", "/v1/market-data/accounts/1/candles?x=1")
+        sent.append(fake.clock())
+    # Hicbir 1 saniyelik pencerede (0.2 sn'ye kadar gecikme oynamasi dahil) 2'den fazla istek yok.
+    for i, start in enumerate(sent):
+        assert sum(1 for t in sent[i:] if t - start < 1.2) <= 2, sent
+    assert sent[-1] == pytest.approx(4 * SAFETY)  # 9 istek ~5 sn: gereksiz yavaslama da yok
+
+
+async def test_rate_limited_candle_request_pauses_the_scan_instead_of_dropping_the_bar(tmp_path):
+    """Canli (13:30 taramasi): 9 sembolden sonra 429 geldi ve kalan 21 sembol o mumda hic taranmadi.
+    Artik kisa bir beklemeden sonra SONRAKI sembollerle devam edilir; reddedilen istek yinelenmez."""
+    app = await started(tmp_path)
+    sleeps = []
+
+    async def fake_sleep(seconds):
+        sleeps.append(seconds)
+    app.bot._sleep = fake_sleep
+    app.fake.fail_next = ExnessRateLimited("REQUEST_RATE_LIMIT", retry_after=2, code=3015)
+    summary = await app.bot.on_bar_close()
+    assert summary.skipped is None and summary.errors == 1
+    assert summary.scanned == 3  # ilk sembol bu mumda atlandi, digerleri tarandi
+    assert sleeps == [2]
+    assert app.kinds().count("rate_limited") == 1
+    first = app.fake.calls("GET", "/candles")[0][1]
+    assert sum(1 for call in app.fake.calls("GET", "/candles") if call[1] == first) == 1  # yineleme yok
+
+
+async def test_repeated_rate_limits_still_abort_the_scan(tmp_path):
+    app = await started(tmp_path)
+    sleeps = []
+
+    async def fake_sleep(seconds):
+        sleeps.append(seconds)
+    app.bot._sleep = fake_sleep
+    real_get = app.fake.get
+
+    async def limited(path):
+        if "/candles" in path:
+            app.fake.requests.append(("GET", path, None, ""))
+            raise ExnessRateLimited("REQUEST_RATE_LIMIT", retry_after=600, code=3015)
+        return await real_get(path)
+    app.fake.get = limited
+    summary = await app.bot.on_bar_close()
+    assert summary.skipped == "rate_limited" and summary.scanned == 0
+    assert len(sleeps) == 2 and max(sleeps) <= 10  # en cok iki kisa bekleme; sunucunun 600 sn'si beklenmez
+    assert len(app.fake.calls("GET", "/candles")) == 3  # dongu yok
+    limited_events = [e["message"] for e in app.repo.events() if e["kind"] == "rate_limited"]
+    assert len(limited_events) == 2 and "sürüyor" in limited_events[0] and "yarıda kesildi" in limited_events[1]

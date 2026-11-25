@@ -100,6 +100,22 @@ Kod tarafi tamam (Task 1–14 adim 5). Kullanicidan beklenenler:
 - Task 1: `setup-https.sh` Caddy'yi kurar ve yalnizca `127.0.0.1:8090`'a vekillik eden bir Caddyfile yazar (erisim logu yok: `/stream` token'i diske dusmesin; admin API kapali; 64 KB govde siniri; HSTS). Genel adres `/etc/tradebot/public-url` dosyasina yazilir. `tradebot-pair` komutu (`/usr/local/bin`) eslestirme kodunu ve adresi gosterir.
 - `bootstrap.sh` kesfi servisten ONCE calistirir ve o sirada servisi durdurur: WebSocket baglanti siniri ve istek kotasi ortak. Exness degerleri gorunmeden okunur, 128 hex anahtar gercek Ed25519 dogrulamasindan gecer, env dosyasina yalnizca guvenli karakterler yazilir.
 - **VPS'te dogrulanacak:** `sslip.io` icin Let's Encrypt sertifikasinin alinabildigi (hiz siniri) ve 80/443'un disaridan erisilebildigi.
+- Task 2: Haber vetosu bot katmaninda uygulanir, V9'un `information_provider` yolu KULLANILMAZ: V9 `MacroEvent` yalnizca USD/EUR/GBP/JPY kabul eder (AUD, CAD, CHF, NZD haberleri temsil edilemez) ve V9 degistirilemez. Pencere icindeki sembol analiz edilmeden atlanir (`ScanSummary.news_blocked`), bildirim uretilmez.
+- Takvim kaynagi `nfs.faireconomy.media/ff_calendar_thisweek.json`; 6 saatte bir yenilenir, basarisiz denemeden sonra en erken 15 dk'da yeniden denenir, SQLite'ta saklanir. Saat dilimi (ofset) tasimayan kayit kullanilmaz. Bos ya da taninmayan yanit mevcut takvimi silmez. 24 saattir alinamiyorsa gunde bir `news_unavailable` uyarisi gider; bot calismaya devam eder (spec §6.6).
+- Ayar: `news.enabled` (varsayilan acik), `news.window_minutes` (varsayilan 30, aralik 5–120). `GET /news` onumuzdeki yuksek etkili haberleri dondurur.
+- Task 3: Guven puani = `100 × Σ wᵢ·sᵢ / Σ wᵢ` (destek 1, cekimser 0.5, karsi 0). Moduller: `mtf`, `regime` (agirlik 2), `candle_pattern`, `chart_pattern`, `structure`, `momentum`, `confluence`, `other_strategies`, `session` (agirlik 1). Hepsi V9 raporunu okur; V9'a dokunulmaz. Carpanlar sabit (0.5 / 0.75 / 1.0), esikler ayarlanir (`fusion.min_score/mid_score/high_score`).
+- Puan riski yalnizca azaltir: lot adima ASAGI yuvarlanir; en kucuk lotun altina duserse islem acilmaz ve `signal_observed` olayi yazilir (yukari yuvarlama yok). Sira: V9 adayi → puan → portfoy kapisi → emir. `trades.score` ve `trades.votes_json` dolumda emir kaydindan yazilir.
+- Seans oyu: forex/metal icin Londra ya da New York acikken destek, yalnizca Asya'da cekimser, seans disinda karsi; kripto cekimser.
+- Task 4: Strateji kipleri `strategy_modes` (`live` / `shadow` / `off`; listede olmayan `live`). Eski `enabled_strategies` alani gecerli kalir: listede olmayan strateji `off` sayilir; acik kip onceliklidir.
+- `evaluate_all`: V9'un sectigi strateji sonraki bir kapidan gecemezse, ayni anda CONFIRMED olan diger stratejiler tek tek yeniden degerlendirilir (en cok 3 ek analiz). Ters yonlu onayda ya da V9 hic secim yapmadiysa yeniden deneme yapilmaz (sert veto delinmez). Sembol basina en cok bir aday doner.
+- Golge islemleri (`shadow_trades`): golge kipindeki stratejinin adayi ve puani esigin altinda kalan aday emir acmaz, sanal olarak izlenir. Sonuc kapanmis M15 mumlarindan: once stop (ayni mumda ikisi de varsa stop sayilir), sonra TP1 (2R); 96 mumda sonuclanmazsa son kapanisa gore R. Gercek islemdeki kismi kapama + iz suren stop modellenmez; golge R'si yaklasik bir gostergedir.
+- Task 5: Karne `GET /scorecard`: strateji basina canli (islem, kazanma orani, ortalama R, kar faktoru) ve golge sonuclari; modul basina destek/karsi/cekimser oylarinin sonuclari. R = gerceklesen kar/zarar ÷ giristeki risk tutari; riski bilinmeyen ve elle acilan islemler karneye girmez.
+- Otomatik duraklatma: canli kipteki strateji ≥ `fusion.pause_min_trades` (20) islemde ortalama R < `fusion.pause_avg_r` (0) ise kipi `shadow` yapilir (kalici), `strategy_paused` bildirimi bir kez gider. Duraklatilan strateji golgede izlenmeye devam eder (plan "duraklat" diyordu; kapatmak yerine golgeye almak, geri acma karari icin veri uretir).
+- Geri acma: `POST /strategies/{id}/mode {mode: "live", confirm: true}` (onaysiz 409) ya da `PUT /settings`. Her iki yolda da karne denetimi o andan sonraki islemlerle yeniden baslar; yoksa strateji eski karnesi yuzunden hemen yeniden duraklatilirdi.
+- Modul agirliklari otomatik degismez (spec §6.2); karne yalnizca gosterir.
+- Kontrolcu kararlari (2026-11-25, ek): (1) Stop korumasi dry-run'da da acik kalir (yalnizca botun/uygulamanin actigi pozisyonlar icin). (2) Ucuncu bagimsiz inceleme, kesif ciktisiyla yapilacak sema duzeltmeleriyle birlikte ve ILK GERCEK EMIRDEN ONCE yapilir. (3) Exness API anahtarinin IP beyaz listesine sunucu IP'si eklendi; ozel anahtar kullanicida.
+- `setup-https.sh` adresi tireli bicimde uretir (`a-b-c-d.sslip.io`); noktali bicim (`a.b.c.d.sslip.io`) de ayni adrese cozulur. Sertifika tireli ad icin alinir; uygulamaya kurulum sonunda yazilan adres girilmelidir.
+
 
 ## İlk canlı keşif (2026-11-25) ve düzeltmeler
 
@@ -111,6 +127,24 @@ Kod tarafi tamam (Task 1–14 adim 5). Kullanicidan beklenenler:
 - Para yatırma/çekme (`balance` türü deal): bot K/Z'sine girmez; canlı tabanı tutar kadar kaydırır, her deal bir kez (`balance_ops`). Kaynak: olay akışı + 5 dakikada bir deal geçmişi. Tabandan önceki işlemler yalnızca kaydedilir.
 - `/health` son taramanın sayılarını verir (hesap bilgisi yok); `deploy/status.sh` ve iş akışının `status` kipi dağıtım sonrası doğrulama içindir.
 - Hâlâ gerçek örneği olmayanlar: pozisyon, emir, deal, tick, WS olayları, ACK, operasyon durumu → ilk asgari lot işleminde doğrulanacak.
+
+## Faz 2 bağımsız incelemesi (2026-11-25, sunucu + Android ayrı ayrı)
+
+Sunucu (d6551d9..2fcf2e1) — düzeltilenler, gerileme testleri `tests/test_phase2_review.py` (her biri mutasyonla doğrulandı):
+- C1: `PUT /settings` bir stratejiyi canlıya alamaz (409). Önceki karar ("ya da PUT /settings") geri alındı: bayat ayar kopyası botun duraklattığı stratejiyi onaysız açabiliyordu. Tek yol `POST /strategies/{id}/mode` + `confirm`.
+- I1: gölge işlem açıldığı mumu da sayar (giriş mum kapanışından 5 sn sonra, yeni mumun içinde).
+- I2: aynı sembol/strateji/yön için açık gölge varken yenisi açılmaz; karne gölge sonuçlarını nedene göre ve duraklatmadan sonrası olarak ayırır.
+- I3: takvim hiç alınamadıysa hemen (ve her gün) uyarılır; `/news.stale` bu durumda `true`.
+- I4: gölgedeki strateji canlı stratejiyi bastırmaz; yalnızca aynı yöndeki canlı aday kabul edilir.
+- I5: karne tabanı yalnızca botun duraklattığı strateji yeniden açılınca sıfırlanır.
+- Kullanıcı SL/TP (Android C2'nin sunucu tarafı): yanlış taraf ve fiyattan %50'den uzak seviye 422.
+- Ertelenen (Minor): haber `country: All` olayları, uzun süre çözülemeyen gölge işlemler için 128 mum sınırı, SELL gölgede spread, `signal_observed` tekrar kaydı, taramada V9 analizlerinin `manage_tick`'e yol vermemesi.
+
+Android (aynı aralık) — düzeltilenler, testler `__tests__/bot*.test.ts(x)`:
+- C1 veri hiç alınmadıysa "pozisyon/olay yok" yerine hata + yeniden dene. C2 SL/TP: her değişiklik eski → yeni değerle onaylanır; yanlış taraf ve fiyattan çok uzak seviye gönderilmez; SL uzaklaşıyorsa risk uyarısı. C3 bayatlık bir isteğin bitmesini beklemez.
+- I1 kâr al = broker emri (`tp2`). I2 deneme modunda onay metinleri işlemin gerçek olduğunu söyler. I3 bayatken "Çalışıyor"/CANLI gösterilmez. I4 eski bağlantının geç 401'i yeni eşleştirmeyi silemez. I5 değişiklik isteklerinde 502/503/504 ve okunamayan 2xx "sonuç belirsiz". I6 eşleştirme hata metinleri. I7 başka adresten gelen yanıt reddedilir. I8 pozisyon kimliği biçimi serbest. I9 birikmiş olaylar tek özet bildirim. I10 kademeli stop kapatma onaylı. I11 yanıt biçimi doğrulanır.
+- Açık kalan: I12 uzak push (FCM yok; kanal kimliği `default` ile hizalandı), uygulama arka plandayken kalp atışı uyarısı gelmez, "Bağlantıyı sil" token'ı sunucuda iptal etmez (`tradebot revoke` ile yapılır).
+- Öneri (kontrolcü kararı): `PUT /settings` ile `dry_run: false` geçişi için de açık onay alanı.
 - Canlıya geçiş onayı (kontrolcü kararı): `PUT /settings` ile `dry_run: true → false` yalnızca `?confirm_live=true` ile kabul edilir (yoksa 409); gövdeye gömülü onay kabul edilmez. Deneme moduna dönüş onay istemez. Canlıya tekrar dönüşte taban sıfırlanmaz (onaylandı).
 
 ## Üçüncü bağımsız inceleme (2026-11-25; ikinci tur düzeltmeleri + canlı keşif düzeltmeleri)

@@ -9,11 +9,13 @@ from decimal import ROUND_FLOOR, Decimal
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 
 from ..app import QUOTE_MAX_AGE, Bot
-from ..config import BotSettings
+from ..config import BotSettings, strategy_mode
+from ..signals import scorecard, v9
 from . import auth
 from .models import (CloseAllRequest, CloseRequest, DeviceRequest, ManualTrade, PairRequest, PositionPatch,
-                     ResumeRequest)
+                     ResumeRequest, StrategyModeRequest)
 
+MAX_LEVEL_DISTANCE = 0.5  # kullanici SL/TP seviyesi fiyattan en cok bu oranda uzak olabilir
 CLOSE_ALL_PHRASE = "CLOSE-ALL"
 HEARTBEAT_STALE = 120.0
 
@@ -43,7 +45,10 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
             "quoted": scan.quoted, "candle_retries": scan.candle_retries}
         return {"status": "ok" if fresh else "stale", "last_scan_at": state.last_scan_at,
                 "heartbeat_at": state.heartbeat_at, "stream_connected": bot.streams_up(), "halted": state.halted,
-                "last_scan": last_scan, "tick_errors": getattr(bot, "tick_errors", 0)}
+                "last_scan": last_scan, "tick_errors": getattr(bot, "tick_errors", 0),
+                "tick_error": getattr(bot, "tick_error", None),
+                # Su an taze fiyati olan evren sembolu sayisi: tarama beklemeden fiyat akisinin calistigini gosterir.
+                "quoted_now": bot.quoted_now() if hasattr(bot, "quoted_now") else None}
 
     @public.post("/pair")
     async def pair(body: PairRequest):
@@ -85,11 +90,28 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
             raise HTTPException(status_code=404, detail="açık pozisyon bulunamadı")
         return trade
 
+    def _check_levels(trade, sl: float | None, tp: float | None) -> None:
+        """Kullanicinin verdigi SL/TP: yon ve akla yatkinlik. Yazim hatasi (binlik ayrac, eksik hane)
+        korumayi fiilen kaldirabilir; broker boyle bir seviyeyi kabul eder ve bot geri almaz."""
+        quote = bot.quotes.quote(trade.symbol)
+        reference = (quote["bid"] if trade.side == "BUY" else quote["ask"]) if quote else trade.entry
+        buy = trade.side == "BUY"
+        for name, value, below in (("SL", sl, buy), ("TP", tp, not buy)):
+            if value is None:
+                continue
+            if abs(value - reference) / reference > MAX_LEVEL_DISTANCE:
+                raise HTTPException(status_code=422,
+                                    detail=f"{name} {value:g} anlık fiyattan ({reference:g}) çok uzak; yazım hatası olabilir")
+            if (value >= reference) if below else (value <= reference):
+                side = "altında" if below else "üstünde"
+                raise HTTPException(status_code=422, detail=f"{name} anlık fiyatın ({reference:g}) {side} olmalı")
+
     @private.patch("/positions/{position_id}")
     async def patch_position(position_id: str, body: PositionPatch):
-        _open_trade(position_id)
+        trade = _open_trade(position_id)
         key = None
         if body.sl is not None or body.tp is not None:
+            _check_levels(trade, body.sl, body.tp)
             # Kullanicinin koydugu SL: bot bunu zarar yonune geri almaz (user_sl_override).
             key = await bot.executor.modify(position_id, sl=body.sl, tp=body.tp, user=True)
             if key is None:
@@ -211,6 +233,19 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
             raise HTTPException(
                 status_code=409,
                 detail="canlı moda geçiş gerçek emir gönderir; onay için confirm_live=true ile gönderin")
+        # Bir stratejiyi canliya almak gercek islem acar ve bilincli onay ister; bu yalnizca
+        # POST /strategies/{id}/mode (confirm=true) ile yapilir. Aksi halde eski bir ayar kopyasini
+        # geri gonderen istemci, botun duraklattigi stratejiyi farkinda olmadan yeniden acardi.
+        revived = sorted(s for s in v9.builtin_strategy_ids()
+                         if strategy_mode(body, s) == "live" and strategy_mode(previous, s) != "live")
+        if revived:
+            raise HTTPException(
+                status_code=409,
+                detail="strateji bu yoldan canlıya alınamaz (" + ", ".join(revived) + "); güncel ayarları "
+                       "yeniden okuyun ya da strateji kipini onaylayarak değiştirin")
+        unknown = sorted(set(body.strategy_modes) - v9.builtin_strategy_ids())
+        if unknown:
+            raise HTTPException(status_code=422, detail="bilinmeyen strateji: " + ", ".join(unknown))
         repo.set_bot_settings(body)
         if previous.dry_run != body.dry_run:
             repo.add_event("warning", "mode_changed",
@@ -266,9 +301,50 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
                         for t in closed[:200]],
         }
 
+    @private.get("/scorecard")
+    async def get_scorecard():
+        return scorecard.scorecard(repo, repo.get_bot_settings())
+
+    @private.post("/strategies/{strategy_id}/mode")
+    async def set_strategy_mode(strategy_id: str, body: StrategyModeRequest):
+        if strategy_id not in v9.builtin_strategy_ids():
+            raise HTTPException(status_code=404, detail="strateji bulunamadı")
+        settings = repo.get_bot_settings()
+        current = strategy_mode(settings, strategy_id)
+        if body.mode == "live" and current != "live":
+            if not body.confirm:
+                raise HTTPException(status_code=409,
+                                    detail="stratejiyi canlıya almak gerçek işlem açar; onay için confirm=true gönderin")
+            if strategy_id in scorecard.paused(repo):
+                # Yalnizca botun duraklattigi strateji icin karne denetimi bu andan yeniden baslar.
+                # Hic duraklatilmamis stratejiyi kapatip acmak sayaci sifirlamaz.
+                scorecard.mark_resumed(repo, strategy_id, clock())
+        settings.strategy_modes[strategy_id] = body.mode
+        if settings.enabled_strategies is not None and body.mode != "off":
+            settings.enabled_strategies.add(strategy_id)
+        repo.set_bot_settings(settings)
+        repo.add_event("info", "strategy_mode", f"{strategy_id} kipi: {body.mode}",
+                       {"strategy_id": strategy_id, "mode": body.mode})
+        return {"strategy_id": strategy_id, "mode": body.mode}
+
+    @private.get("/news")
+    async def news(hours: int = Query(default=48, ge=1, le=168)):
+        """Onumuzdeki yuksek etkili haberler ve takvimin guncelligi."""
+        calendar = bot.news
+        settings = repo.get_bot_settings().news
+        now = clock()
+        events = [] if calendar is None else [
+            {"currency": e.currency, "title": e.title, "at": e.at, "impact": e.impact}
+            for e in calendar.events() if e.impact == "high" and now - settings.window_minutes * 60 <= e.at <= now + hours * 3600]
+        return {"enabled": settings.enabled, "window_minutes": settings.window_minutes,
+                "fetched_at": calendar.fetched_at() if calendar is not None else None,
+                "stale": calendar.stale() if calendar is not None else True, "events": events}
+
     @private.get("/events")
-    async def events(after: int = Query(default=0, ge=0), limit: int = Query(default=200, ge=1, le=500)):
-        return {"events": repo.events(after=after, limit=limit)}
+    async def events(after: int = Query(default=0, ge=0), limit: int = Query(default=200, ge=1, le=500),
+                     newest: bool = False):
+        # newest=true: en yeni olaylar, yeniden eskiye (uygulamanin ilk acilisi icin).
+        return {"events": repo.events(after=after, limit=limit, newest=newest)}
 
     @private.post("/devices")
     async def register_device(body: DeviceRequest):

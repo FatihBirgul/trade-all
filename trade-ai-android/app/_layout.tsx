@@ -11,6 +11,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { ThemeProvider, useTheme } from "../src/theme";
 import { AppProvider } from "../src/state";
+import { BotProvider } from "../src/bot/state";
 prepareNativeSplash();
 
 function Navigation() {
@@ -52,7 +53,9 @@ export default function Layout() {
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <ThemeProvider>
         <AppProvider>
-          <Navigation />
+          <BotProvider>
+            <Navigation />
+          </BotProvider>
         </AppProvider>
       </ThemeProvider>
     </SafeAreaProvider>

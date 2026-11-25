@@ -12,6 +12,7 @@ Kurallar:
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 import uuid
@@ -80,8 +81,12 @@ class Executor:
                 if o["kind"] == "open" and (origin is None or o["origin"] == origin)]
 
     # ------------------------------------------------------------------ gonderim
-    async def open(self, candidate: Candidate, origin: str = "bot") -> str:
-        """Aday icin piyasa emri. Ayni setup icin ikinci kez cagrilirsa hicbir sey gondermez."""
+    async def open(self, candidate: Candidate, origin: str = "bot", *, score: float | None = None,
+                   votes: dict[str, int] | None = None) -> str:
+        """Aday icin piyasa emri. Ayni setup icin ikinci kez cagrilirsa hicbir sey gondermez.
+
+        `score` ve `votes` (guven puani ve modul oylari) emir kaydiyla saklanir; dolunca isleme yazilir.
+        """
         key = f"bot-{candidate.setup_id}"
         instrument = self.catalog.get(candidate.symbol)
         path, body = schema.open_position_request(
@@ -92,7 +97,8 @@ class Executor:
         payload = {"path": path, "body": body, "symbol": candidate.symbol, "side": candidate.side,
                    "entry": candidate.entry, "sl": candidate.stop_loss, "tp1": candidate.take_profit_1,
                    "tp2": candidate.take_profit_2, "strategy_id": candidate.strategy_id,
-                   "risk_amount": candidate.risk_amount, "analysis_id": candidate.analysis_id}
+                   "risk_amount": candidate.risk_amount, "analysis_id": candidate.analysis_id,
+                   "score": score, "votes": votes}
         if not self.repo.insert_order(key, kind="open", payload=payload, setup_id=candidate.setup_id, origin=origin):
             return key
         await self._send(key, "post", path, body)
@@ -260,6 +266,7 @@ class Executor:
         self.repo.update_trade(
             trade.position_id, origin=order["origin"], setup_id=order.get("setup_id"),
             strategy_id=meta.get("strategy_id"), tp1=meta.get("tp1"), risk_amount=meta.get("risk_amount"),
+            score=meta.get("score"), votes_json=json.dumps(meta["votes"]) if meta.get("votes") else None,
             manage=bool(meta.get("manage", True)),
             planned_tp=meta.get("tp2") if meta.get("tp2") is not None else trade.planned_tp,
             initial_risk_r_price=risk_distance(trade.side, trade.entry, requested if requested is not None else trade.sl))
@@ -454,6 +461,7 @@ class Executor:
             position_id=opening.position_id, origin=order["origin"], symbol=meta.get("symbol") or opening.symbol,
             side=opening.side, volume=volume, initial_volume=volume, entry=entry, tp1=meta.get("tp1"),
             tp2=meta.get("tp2"), initial_risk_r_price=risk_distance(opening.side, entry, meta.get("sl")),
+            score=meta.get("score"), votes_json=json.dumps(meta["votes"]) if meta.get("votes") else None,
             risk_amount=meta.get("risk_amount"), strategy_id=meta.get("strategy_id"),
             setup_id=order.get("setup_id"), opened_at=opening.time or order["created_at"]))
         for deal in [opening, *closes]:
