@@ -11,6 +11,7 @@ import time
 from collections.abc import Callable
 
 from ..exness import schema
+from ..store.db import transaction
 
 DURATIONS = {"M5": 300, "M15": 900, "M30": 1800, "H1": 3600, "H4": 14400, "D1": 86400}
 DEFAULT_MAX_CANDLES = 500  # limit bilinmiyorsa temkinli deger; gercegi /limits'ten gelir
@@ -67,7 +68,7 @@ class CandleStore:
             rows = schema.parse_candles(await self._client.get(path))
             closed = [(symbol, tf, r["time"], r["open"], r["high"], r["low"], r["close"], r["tick_volume"])
                       for r in rows if r["time"] + duration <= now]
-            with self._db:
+            with transaction(self._db):
                 self._db.executemany("INSERT OR REPLACE INTO candles VALUES (?,?,?,?,?,?,?,?)", closed)
                 self._db.execute(
                     "DELETE FROM candles WHERE symbol = ? AND tf = ? AND time < ?",

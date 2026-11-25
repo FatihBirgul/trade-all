@@ -1,0 +1,1 @@
+"""SQLite durum deposu."""
