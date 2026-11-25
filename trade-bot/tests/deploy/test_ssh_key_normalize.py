@@ -41,7 +41,12 @@ def mangle(key: str) -> dict[str, str]:
         "girintili ve bos satirli": "\n\n".join("    " + line for line in lines),
         "yazi olarak \\n": "\\n".join(lines),
         "basinda ve sonunda fazladan metin": "ozel anahtar:\n" + key + "\n(buraya kadar)",
-        "terminal 60 sutunda sarmis": "\n".join(part for line in lines for part in (line[:40], line[40:]) if part),
+        # Canli durum (2026-11-25): yalnizca govde yapistirilmis; tani "uzunluk=328 satir=5 BEGIN=yok END=yok".
+        "yalnizca govde (baslik ve bitis satiri yok)": "\n".join(lines[1:-1]),
+        "bitis satiri yok": "\n".join(lines[:-1]),
+        "baslik satiri yok": "\n".join(lines[1:]),
+        "govde tek satir": "".join(lines[1:-1]),
+                "terminal 60 sutunda sarmis": "\n".join(part for line in lines for part in (line[:40], line[40:]) if part),
     }
 
 
@@ -62,10 +67,17 @@ def test_damage_that_ssh_itself_rejects(keypair, tmp_path):
     assert public_of(damaged["yazi olarak \\n"], tmp_path) is None
 
 
+def test_bare_body_without_the_openssh_signature_is_not_wrapped():
+    """Baslik eklemek yalnizca govde OpenSSH imzasiyla basliyorsa yapilir; rastgele metin anahtar sayilmaz."""
+    for bad in ("QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo=" * 8, "AAAAC3NzaC1lZDI1NTE5AAAAIabc" * 10):
+        with pytest.raises(ValueError, match="blogu bulunamadi"):
+            module.normalize(bad)
+
+
 @pytest.mark.parametrize("bad, expected", [
     ("", "blogu bulunamadi"),
     ("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIabc github-deploy", "blogu bulunamadi"),  # acik anahtar yapistirilmis
-    ("-----BEGIN OPENSSH PRIVATE KEY-----\nAAAA", "blogu bulunamadi"),  # sonu kesilmis
+    ("-----BEGIN OPENSSH PRIVATE KEY-----\nAAAA", "blogu bulunamadi"),  # govde anahtar degil
     ("-----BEGIN OPENSSH PRIVATE KEY-----\n***\n-----END OPENSSH PRIVATE KEY-----", "beklenmeyen karakter"),
     ("-----BEGIN OPENSSH PRIVATE KEY-----\n-----END OPENSSH PRIVATE KEY-----", "beklenmeyen karakter"),
 ])
