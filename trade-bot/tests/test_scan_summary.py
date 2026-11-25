@@ -190,3 +190,27 @@ async def test_a_real_market_gap_is_asked_for_once_not_on_every_scan(tmp_path):
         again = await app.bot.on_bar_close()
         assert "borsada da yok" in again.data_rejects["XAUUSD"]
     assert len(h1_requests(app)) == asked  # ayni bosluk icin yeniden istek yok (istek limiti korunur)
+
+
+async def test_a_hole_is_healed_even_when_v9_does_not_complain_and_a_failed_request_is_retried(tmp_path):
+    """Inceleme: V9 devirdeki tek sessiz M15 mumunu hos gorur; borsada aslinda VAR olan bir mum onbellekte
+    eksik kaldiysa onarim V9'un reddini beklememeli. Basarisiz istek "denendi" sayilmaz."""
+    from tradebot.exness.errors import ExnessUnavailable
+
+    app = await started(tmp_path, dry_run=True)
+    await app.bot.on_bar_close()
+    monkey = {"fail": True}
+    real_heal = app.bot.candles.heal
+
+    async def flaky(symbol, frame, minute):
+        if monkey["fail"]:
+            raise ExnessUnavailable("gecici")
+        return await real_heal(symbol, frame, minute)
+
+    app.bot.candles.heal = flaky
+    app.bot._gaps = lambda instrument: iter([("M15", int(NOW) - 40 * 900, "OPEN")] if instrument.symbol == "XAUUSD" else [])
+    await app.bot.on_bar_close()  # V9 reddetmedi (bosluk yapay), yine de onarim denendi ve basarisiz oldu
+    assert app.bot._heal_tried == {}
+    monkey["fail"] = False
+    await app.bot.on_bar_close()  # basarisiz istek yeniden denendi
+    assert list(app.bot._heal_tried) == [("XAUUSD", "M15", (int(NOW) - 40 * 900) // 900)]

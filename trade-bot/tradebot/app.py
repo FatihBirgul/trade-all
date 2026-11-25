@@ -478,10 +478,14 @@ class Bot:
 
     def _gap(self, instrument: Instrument) -> tuple[str, int, str] | None:
         """Mum serisinde, beyan edilen islem saatlerine gore ACIK gorunen ilk eksik dakika -> (cerceve, an, durum)."""
+        return next(iter(self._gaps(instrument)), None)
+
+    def _gaps(self, instrument: Instrument):
+        """Serideki her bosluk icin, acik saate denk gelen ilk eksik dakika (bosluk basina bir kayit)."""
         from forex.sessions import broker_status
 
         if not instrument.trading_hours:
-            return None
+            return
         for frame in FRAMES:
             size = FRAME_SECONDS[frame]
             rows = self.candles.cached(instrument.symbol, frame, 256)
@@ -490,40 +494,48 @@ class Bot:
                     moment = datetime.fromtimestamp(minute, timezone.utc)
                     status = broker_status(moment, "", True, instrument.trading_hours)["status"]
                     if status not in ("CLOSED", "OPENING_SOON"):
-                        return frame, minute, status
-        return None
+                        yield frame, minute, status
+                        break
 
-    async def _heal_gaps(self, summary: ScanSummary) -> None:
-        """V9'un "eksik mum" diye reddettigi sembollerde boslugu borsadan yeniden ister (tarama basina sinirli).
+    async def _heal_gaps(self, summary: ScanSummary, scanned: set[str]) -> None:
+        """Taranan sembollerin mum serisinde acik saate denk gelen boslugu borsadan yeniden ister (tarama basina sinirli).
 
-        Mum gelirse bir sonraki taramada sembol yeniden degerlendirilebilir. Gelmezse bosluk gercektir; ayni
-        bosluk icin HEAL_RETRY suresince yeniden istek yapilmaz (istek limiti korunur).
+        V9'un reddetmesi BEKLENMEZ: V9 gunluk devirdeki tek sessiz M15 mumunu hos gorur; o mum borsada
+        aslinda varsa (onbellege alinamamissa) sessizce eksik kalmamali. Mum gelirse bir sonraki taramada
+        kullanilir. Borsa da vermiyorsa bosluk gercektir ve HEAL_RETRY suresince yeniden istenmez. Istek
+        basarisiz olursa (baglanti, limit) deneme sayilmaz: sonraki taramada yeniden denenir.
         """
         now = self._clock()
         healed = 0
-        for symbol, note in list(summary.data_rejects.items()):
-            if healed >= HEAL_PER_SCAN or "missing candle" not in note:
-                continue
+        for symbol in sorted(scanned):
+            if healed >= HEAL_PER_SCAN:
+                break
             try:
-                gap = self._gap(self.catalog.get(symbol))
+                gaps = list(self._gaps(self.catalog.get(symbol)))
             except KeyError:
                 continue
-            if gap is None:
+            note = summary.data_rejects.get(symbol)
+            # Borsanin da vermedigi (yakin zamanda sorulmus) bosluklar atlanir; siradaki sorulmamis bosluk istenir.
+            # Boylece kalici bir devir boslugu, ayni semboldeki sonraki gercek bir eksigi gizlemez.
+            fresh = [(frame, minute) for frame, minute, _ in gaps
+                     if now - self._heal_tried.get((symbol, frame, minute // FRAME_SECONDS[frame]), float("-inf"))
+                     >= HEAL_RETRY]
+            if not fresh:
+                if gaps and note is not None:
+                    summary.data_rejects[symbol] = note + " (onarım denendi: borsada da yok)"
                 continue
-            frame, minute, _ = gap
+            frame, minute = fresh[0]
             key = (symbol, frame, minute // FRAME_SECONDS[frame])
-            if now - self._heal_tried.get(key, float("-inf")) < HEAL_RETRY:
-                summary.data_rejects[symbol] = note + " (onarım denendi: borsada da yok)"
-                continue
-            self._heal_tried[key] = now
             healed += 1
             try:
                 filled = await self.candles.heal(symbol, frame, minute)
             except (ExnessError, ValueError) as exc:
                 log.warning("mum onarimi basarisiz %s %s: %s", symbol, frame, exc)
                 continue
-            summary.data_rejects[symbol] = note + (" (onarıldı: mum geldi)" if filled
-                                                   else " (onarım denendi: borsada da yok)")
+            self._heal_tried[key] = now  # yalnizca kesin yanittan sonra: basarisiz istek yeniden denenir
+            if note is not None:
+                summary.data_rejects[symbol] = note + (" (onarıldı: mum geldi)" if filled
+                                                       else " (onarım denendi: borsada da yok)")
             log.info("mum onarimi %s %s: %s", symbol, frame, "geldi" if filled else "borsada da yok")
         for key in [k for k, at in self._heal_tried.items() if now - at > 2 * HEAL_RETRY]:
             del self._heal_tried[key]
@@ -719,7 +731,7 @@ class Bot:
             except (ExnessError, ValueError, KeyError):
                 continue
         await self._refresh_open_candles(scanned)
-        await self._heal_gaps(summary)
+        await self._heal_gaps(summary, scanned)
         summary.candle_retries = self.candles.transient_rejections - retries_before
         if summary.candle_retries:
             log.warning("tarama: %d mum istegi ilk denemede reddedildi, ikincide gecti", summary.candle_retries)

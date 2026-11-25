@@ -331,9 +331,15 @@ bilgisini içermiyor; kısmi dolumda `risk_amount` planlanan tutarda kalıyor (R
   **borsada da yok** (o 15 dakikada hiç fiyat gelmemiş; Exness saati "açık" beyan ediyor). V9 bu sembolleri eksik
   mum 64 saatlik pencereden çıkana kadar reddediyordu.
 - Karar (kullanıcı): V9, açık saatte tek mumluk boşluğu hoş görür. Sınırlar
-  (`trade-ai-unified/vendor/day_trader/forex/contracts.py`): yalnızca M15; boşluk tam bir mum; seri başına en çok 4;
-  en yeni 16 mumun (4 saat) içinde tolere edilen boşluk olamaz. H1/H4'te, art arda iki mumda, yakın zamanda ya da
-  5+ boşlukta ret sürer. İşlem kapıları (seans, spread, net R/R, risk) değişmedi.
+  (`trade-ai-unified/vendor/day_trader/forex/contracts.py`), hepsi birlikte sağlanmalı: işlem saati durumu
+  gerçekten AÇIK; yalnızca M15; boşluk tam bir mum; eksik mum New York saatiyle 16:00–17:59 arasında (günlük devir,
+  yaz/kış saatine uyumlu); seri başına en çok 4; boşluktan sonra en az 16 mum gelmiş olmalı. H1/H4/M5'te, art arda
+  iki mumda, devir saati dışında, yakın zamanda ya da 5+ boşlukta ret sürer. İşlem kapıları (seans, spread, net R/R,
+  risk) değişmedi; ATR(14) ve stop mesafesi etkilenmez (boşluk ATR penceresinin dışında kalır).
+- Bağımsız inceleme (kritik yok) sonrası eklenenler: "açık" durumu ve devir saati koşulu (ilk sürüm okunamayan
+  saatlerde ve günün herhangi bir saatinde de hoş görüyordu); boşluk onarımı artık V9 reddetmese de çalışır ve
+  başarısız istek "denendi" sayılmaz (borsada aslında var olan bir mum sessizce eksik kalmasın); kalıcı devir
+  boşluğu aynı semboldeki sonraki gerçek eksiği gizlemez. Testler güçlendirildi: 10 mutasyonun hepsi yakalanıyor
+  (ilk sürümde "iki gece" doğrulaması boşa çalışıyordu).
 - Sonuç: devirden etkilenen sembol devirden sonraki 4 saat analiz dışı kalır, sonra geri döner (önceden 64 saat).
-- Testler: `tests/signals/test_weekend_gap.py` (gerçek Exness saatleriyle uçtan uca; sınırların her biri
-  mutasyonla doğrulandı).
+- Testler: `tests/signals/test_weekend_gap.py` (gerçek Exness saatleriyle uçtan uca ve sınır değerleriyle).
