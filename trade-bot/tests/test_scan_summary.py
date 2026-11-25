@@ -105,3 +105,23 @@ async def test_subscription_ack_is_not_counted_as_an_error(tmp_path):
     assert schema.parse_ws_event(ack)[0] == "ack"
     assert schema.parse_ws_event({"id": "x", "code": 3000, "error_message": "REQUEST_INVALID"})[0] == "error"
     assert schema.is_ws_ack({"code": True}) is False and schema.is_ws_ack({"code": "200"}) is False
+
+
+async def test_slow_scan_evaluates_each_symbol_at_its_own_time(tmp_path):
+    """Canlida goruldu: mumlar yavas cekilirken fiyat akmaya devam eder. Tarama baslangic saatiyle
+    degerlendirilirse sonraki semboller "stale tick" ile elenir ve hic aday cikmaz."""
+    app = await started(tmp_path, dry_run=True)
+    real_get = app.bot.candles.get
+
+    async def slow_get(symbol, frame, count):
+        app.advance(4)  # istek limiti beklemesi
+        quote = app.bot.quotes.quote(symbol)
+        if quote is not None:
+            await feed_ticks(app, symbol, quote["bid"], quote["ask"], app.clock["now"])  # akis surer
+        return await real_get(symbol, frame, count)
+
+    app.bot.candles.get = slow_get
+    summary = await app.bot.on_bar_close()
+    assert summary.scanned == 4
+    assert "stale tick" not in summary.veto_reasons, summary.veto_reasons
+    assert summary.would_open == 1

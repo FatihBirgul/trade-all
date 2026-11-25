@@ -582,6 +582,9 @@ class Bot:
                 log.warning("mumlar alinamadi %s: %s", symbol, exc)
                 continue
             scanned.add(symbol)
+            # Mumlar istek limitiyle cekilir: soguk taramada 30 sembol ~1 dakika surer. Degerlendirme ANI tarama
+            # baslangici degil, simdidir; yoksa canli akistan gelen fiyat "gelecekten" gorunur ve V9 bayat der.
+            now = self._clock()
             age = self.quotes.age(symbol)
             if age is not None and age <= QUOTE_MAX_AGE:
                 summary.quoted += 1
