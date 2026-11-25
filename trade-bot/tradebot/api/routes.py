@@ -45,7 +45,10 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
             "quoted": scan.quoted, "candle_retries": scan.candle_retries}
         return {"status": "ok" if fresh else "stale", "last_scan_at": state.last_scan_at,
                 "heartbeat_at": state.heartbeat_at, "stream_connected": bot.streams_up(), "halted": state.halted,
-                "last_scan": last_scan, "tick_errors": getattr(bot, "tick_errors", 0)}
+                "last_scan": last_scan, "tick_errors": getattr(bot, "tick_errors", 0),
+                "tick_error": getattr(bot, "tick_error", None),
+                # Su an taze fiyati olan evren sembolu sayisi: tarama beklemeden fiyat akisinin calistigini gosterir.
+                "quoted_now": bot.quoted_now() if hasattr(bot, "quoted_now") else None}
 
     @public.post("/pair")
     async def pair(body: PairRequest):

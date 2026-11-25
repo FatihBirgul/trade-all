@@ -965,6 +965,12 @@ async def test_rejected_tick_subscription_is_visible(tmp_path):
     app = await started(tmp_path)
     await app.bot.on_tick_message({"code": 3000, "error_message": "REQUEST_INVALID"})
     assert app.bot.tick_errors == 1
+    api = create_app(app.bot, clock=lambda: app.clock["now"])
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api), base_url="http://bot") as http:
+        await app.bot.on_tick_message({"id": "ticks-0", "code": 4000, "error_message": "MARKET_INSTRUMENT_NOT_FOUND"})
+        health = (await http.get("/health")).json()
+    assert health["tick_errors"] == 2 and health["quoted_now"] == 1
+    assert health["tick_error"] == {"code": 4000, "message": "MARKET_INSTRUMENT_NOT_FOUND", "id": "ticks-0"}
     summary = await app.bot.on_bar_close()
     assert summary.scanned == 4 and summary.quoted == 1  # yalnizca fiyati gelen sembol
 

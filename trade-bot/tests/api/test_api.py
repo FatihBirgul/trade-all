@@ -34,7 +34,8 @@ async def test_health_is_public_and_minimal(tmp_path):
         response = await http.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "last_scan_at": None, "heartbeat_at": NOW + 30,
-                               "stream_connected": True, "halted": False, "last_scan": None, "tick_errors": 0}
+                               "stream_connected": True, "halted": False, "last_scan": None, "tick_errors": 0,
+                               "tick_error": None, "quoted_now": 1}
 
 
 async def test_health_reports_last_scan_counts_without_account_data(tmp_path):

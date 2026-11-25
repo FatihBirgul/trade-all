@@ -118,6 +118,7 @@ class Bot:
         self._balance_synced_at = 0.0
         self.last_scan: ScanSummary | None = None
         self.tick_errors = 0  # fiyat akisinin dondurdugu hata sayisi (reddedilen abonelik vb.)
+        self.tick_error: dict | None = None  # son hata: {"code", "message", "id"}
         self._limits = schema.Limits()
         self._events_stream = None
         self._event_connections = 0
@@ -218,8 +219,13 @@ class Bot:
             # Abonelik yaniti ya da hata: reddedilen abonelik sessiz kalmamali (fiyat hic gelmez).
             code, message = schema.parse_error(raw)
             if code is not None:
-                log.warning("fiyat akisi hata dondurdu: %s (kod %s)", message, code)
+                log.warning("fiyat akisi hata dondurdu: %s (kod %s, istek %s)", message, code, raw.get("id"))
                 self.tick_errors += 1
+                # Son hata /health'te gorunur (kod, sabit hata adi ve bizim gonderdigimiz istek kimligi;
+                # hesap bilgisi icermez): reddedilen aboneligin nedeni sunucu gunlugune bakmadan anlasilir.
+                request_id = raw.get("id")
+                self.tick_error = {"code": code, "message": (message or "")[:80],
+                                   "id": request_id[:40] if isinstance(request_id, str) else None}
             return
         instrument = self.catalog.by_broker(tick.symbol)
         self.quotes.on_tick(dataclasses.replace(tick, symbol=instrument.symbol) if instrument else tick)
@@ -902,6 +908,15 @@ class Bot:
             if missing:
                 self._subscribed.update(missing)
                 await self._tick_stream.subscribe(schema.subscribe_ticks(f"ticks-extra-{int(now)}", missing))
+
+    def quoted_now(self) -> int:
+        """Evrende su an taze (QUOTE_MAX_AGE icinde) fiyati olan sembol sayisi."""
+        count = 0
+        for instrument in self.catalog.universe():
+            age = self.quotes.age(instrument.symbol)
+            if age is not None and age <= QUOTE_MAX_AGE:
+                count += 1
+        return count
 
     def status(self) -> dict:
         state = self.repo.bot_state()
