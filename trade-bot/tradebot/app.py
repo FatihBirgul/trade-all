@@ -19,6 +19,7 @@ from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 from .config import BotSettings, Settings, strategy_mode
 from .execution.executor import Executor
 from .execution.reconcile import fetch_all_deals, reconcile
+from .store import backup
 from .store.repo import Trade
 from .exness import schema
 from .exness.errors import ExnessAuthError, ExnessError, ExnessRateLimited, ExnessUnavailable
@@ -54,6 +55,7 @@ BALANCE_SEEN_LOOKBACK = 2 * 86400.0  # taban alinirken "zaten icinde" sayilacak 
 BALANCE_HISTORY_DAYS = 29  # gecmis sorgusu sinirinin (30 gun) icinde kalinir
 CAPITAL_SEEN = "capital_seen"  # ayar anahtari: deneme modunda ilk okunan varlik kaydedildi mi
 BASE_LIVE = "capital_base_live"  # ayar anahtari: sermaye tabani canli moda geciste alindi mi
+MAINTENANCE_INTERVAL = 1800.0  # gunluk yedek ve temizlik denetimi (is gunde bir kez yapilir)
 RECONCILE_INTERVAL = 300.0  # olay kacirilmis olabilir: broker durumu duzenli olarak yeniden okunur
 AUTH_BACKOFF_START = 30.0  # kimlik reddinden sonra yonetim isteklerinin durdugu sure (art arda redde katlanir)
 AUTH_BACKOFF_MAX = 300.0
@@ -1096,6 +1098,37 @@ class Bot:
             await self._sleep(delay)
             delay = min(delay * 2, 300.0)
 
+    async def maintenance(self) -> dict | None:
+        """Gunde bir kez: SQLite yedegi, eski tarama gurultusunun silinmesi, WAL'in kisaltilmasi.
+
+        Islem yolunu bloklamaz (yedek ayri is parcaciginda, ayri baglantiyla) ve asla dusurmez: hata olursa
+        olay + bildirim, bot calismaya devam eder. Ayni gun ikinci kez calismaz; basarisiz gun yeniden denenir.
+        """
+        now = self._clock()
+        today = backup.backup_day(now)
+        if self.repo.get_setting("maintenance_day") == today or str(self.repo.db_path) == ":memory:":
+            return None
+        try:
+            result = await asyncio.to_thread(backup.backup_database, self.repo.db_path, now)
+            pruned = backup.prune_noise(self.repo.conn, now)
+            self.repo.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except Exception as exc:  # noqa: BLE001 - bakim hatasi botu durdurmamali
+            failures = int(self.repo.get_setting("maintenance_failures", 0)) + 1
+            self.repo.set_setting("maintenance_failures", failures)
+            # Ilk hatada ve sonra gunde bir kez haber ver; her yarim saatte bildirim yagdirma.
+            if self.repo.get_setting("maintenance_alert_day") != today:
+                self.repo.set_setting("maintenance_alert_day", today)
+                await self._record("warning", "backup_failed", f"Günlük yedek alınamadı: {type(exc).__name__}",
+                                   {"failures": failures}, notify=True, title="Yedek alınamadı")
+            log.exception("bakim basarisiz")
+            return None
+        self.repo.set_setting("maintenance_day", today)
+        self.repo.set_setting("maintenance_failures", 0)
+        self.repo.set_setting("last_backup_at", now)
+        data = {"bytes": result["bytes"], "seconds": result["seconds"], "removed": result["removed"], "pruned": pruned}
+        await self._record("info", "backup_done", f"Günlük yedek alındı ({result['bytes'] // 1024} KB)", data)
+        return data
+
     async def _every(self, interval: float, action, name: str) -> None:
         while True:
             await self._sleep(interval)
@@ -1127,6 +1160,7 @@ class Bot:
             self._every(HEARTBEAT_INTERVAL, self.heartbeat, "kalp atisi"),
             self._every(RESOLVE_INTERVAL, self.resolve_orders, "emir cozumleme"),
             self._every(RECONCILE_INTERVAL, self.reconcile_now, "mutabakat"),
+            self._every(MAINTENANCE_INTERVAL, self.maintenance, "bakim"),
         )
 
 

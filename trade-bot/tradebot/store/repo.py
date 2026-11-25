@@ -81,6 +81,7 @@ def _trade(row: sqlite3.Row) -> Trade:
 
 class Repo:
     def __init__(self, db_path: Path | str, *, clock: Callable[[], float] = time.time):
+        self.db_path = db_path
         self.conn = connect(db_path)
         self._clock = clock
 

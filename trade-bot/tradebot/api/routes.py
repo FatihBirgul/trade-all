@@ -54,7 +54,9 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
                 "last_scan": last_scan, "tick_errors": getattr(bot, "tick_errors", 0),
                 "tick_error": getattr(bot, "tick_error", None), "tick_acks": getattr(bot, "tick_acks", 0),
                 # Su an taze fiyati olan evren sembolu sayisi: tarama beklemeden fiyat akisinin calistigini gosterir.
-                "quoted_now": bot.quoted_now() if hasattr(bot, "quoted_now") else None}
+                "quoted_now": bot.quoted_now() if hasattr(bot, "quoted_now") else None,
+                # Son basarili gunluk yedegin zamani (hesap verisi degil); 36 saatten eskiyse yedek calismiyor.
+                "last_backup_at": repo.get_setting("last_backup_at")}
 
     @public.get("/health/summary")
     async def health_summary(hours: float = Query(default=24.0, ge=0.25, le=168.0)):
