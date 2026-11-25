@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 
-from .config import BotSettings, Settings
+from .config import BotSettings, Settings, strategy_mode
 from .execution.executor import Executor
 from .execution.reconcile import reconcile
 from .store.repo import Trade
@@ -31,7 +31,8 @@ from .news.gate import blocking_event
 from .risk.portfolio import check_entry
 from .signals import v9
 from .signals import fusion
-from .signals.adapter import Candidate, Evaluation, evaluate
+from .signals.adapter import Candidate, Evaluation, evaluate_all
+from .signals.shadow import ShadowBook
 from .signals.provider import ExnessV9Provider
 from .store.repo import BotState, Repo
 
@@ -68,6 +69,7 @@ class ScanSummary:
     blocked: int = 0
     news_blocked: int = 0  # haber penceresi nedeniyle analiz edilmeden atlanan semboller
     observed: int = 0  # guven puani esigin altinda kalan (islem acilmayan) adaylar
+    shadowed: int = 0  # golge kipindeki stratejilerin (yalnizca sanal izlenen) adaylari
     errors: int = 0
     skipped: str | None = None
     reasons: dict[str, int] = field(default_factory=dict)
@@ -96,6 +98,7 @@ class Bot:
         self.provider = ExnessV9Provider(self.catalog, self.candles, self.quotes, lambda: self.account)
         self.executor = Executor(client, repo, notifier, self.catalog, clock=clock,
                                  on_auth_error=self._auth_error)
+        self.shadow = ShadowBook(repo)
         self.streams: list = []
         self.started = False
         self._details: dict | None = None
@@ -395,18 +398,28 @@ class Bot:
                 continue
             scanned.add(symbol)
             await self._auth_ok()
-            result = evaluate(self.provider, symbol, equity=self.account.equity, risk_pct=settings.risk.risk_pct,
-                              commission_per_lot=self._commission(instrument, settings),
-                              enabled_strategies=settings.enabled_strategies, now=now)
+            modes = {s: strategy_mode(settings, s) for s in v9.builtin_strategy_ids()}
+            results = evaluate_all(self.provider, symbol, equity=self.account.equity, risk_pct=settings.risk.risk_pct,
+                                   commission_per_lot=self._commission(instrument, settings), modes=modes, now=now)
             summary.scanned += 1
             await asyncio.sleep(0)  # analiz islemciyi tutar; pozisyon yonetimine sira ver
-            if result.candidate is None:
-                summary.reasons[result.decision] = summary.reasons.get(result.decision, 0) + 1
-                log.info("aday yok %s: %s (%s)", symbol, result.decision, "; ".join(result.reasons))
-                continue
-            summary.candidates += 1
-            await self._consider(result, instrument, settings, summary)
+            for result in results:
+                if result.candidate is None:
+                    summary.reasons[result.decision] = summary.reasons.get(result.decision, 0) + 1
+                    log.info("aday yok %s: %s (%s)", symbol, result.decision, "; ".join(result.reasons))
+                    continue
+                summary.candidates += 1
+                await self._consider(result, instrument, settings, summary)
 
+        for symbol in self.shadow.open_symbols():  # sanal islemleri kapanmis mumlarla sonuclandir
+            try:
+                self.catalog.get(symbol)
+                if symbol not in scanned:
+                    await self.candles.get(symbol, "M15", 128)
+                    scanned.add(symbol)
+                self.shadow.resolve(symbol, self.candles.cached(symbol, "M15", 128), now)
+            except (ExnessError, ValueError, KeyError):
+                continue
         await self._refresh_open_candles(scanned)
         await self._record(
             "info", "scan",
@@ -450,7 +463,13 @@ class Bot:
         if self.executor.already_submitted(candidate):
             return  # ayni mum ikinci kez tarandi
         score, votes, multiplier = self._score(result, instrument, settings)
+        if result.mode == "shadow":
+            # Golge kipindeki strateji: sinyali ve sanal sonucu izle, gercek emir gonderme.
+            if self.shadow.open(candidate, "shadow", score, self._clock()):
+                summary.shadowed += 1
+            return
         if multiplier is None:
+            self.shadow.open(candidate, "low_score", score, self._clock())
             await self._observe(candidate, summary, score=score, votes=votes,
                                 reason=f"güven puanı {score:.0f} < {settings.fusion.min_score:g}")
             return

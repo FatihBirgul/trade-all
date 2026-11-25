@@ -129,6 +129,18 @@ class BotSettings(BaseModel):
     news: NewsSettings = Field(default_factory=NewsSettings)
     fusion: FusionSettings = Field(default_factory=FusionSettings)
     enabled_symbols: set[str] | None = None  # None = hepsi
-    enabled_strategies: set[str] | None = None  # None = hepsi
+    enabled_strategies: set[str] | None = None  # None = hepsi (eski alan; listede olmayan strateji kapali sayilir)
+    # Strateji kipi: live (gercek islem), shadow (yalnizca sanal izleme), off. Listede olmayan strateji live'dir.
+    strategy_modes: dict[str, Literal["live", "shadow", "off"]] = Field(default_factory=dict)
     dry_run: bool = True
     commission_per_lot: float = Field(default=0.0, ge=0)
+
+
+def strategy_mode(settings: BotSettings, strategy_id: str) -> str:
+    """Stratejinin etkin kipi: acik kip > eski `enabled_strategies` listesi > varsayilan `live`."""
+    mode = settings.strategy_modes.get(strategy_id)
+    if mode is not None:
+        return mode
+    if settings.enabled_strategies is not None and strategy_id not in settings.enabled_strategies:
+        return "off"
+    return "live"

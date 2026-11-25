@@ -6,6 +6,7 @@ durumda aday yoktur ve neden loglanir; bu katman bildirim gondermez.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 from dataclasses import dataclass
 from typing import Literal
@@ -40,6 +41,7 @@ class Evaluation:
     reasons: tuple[str, ...]
     candidate: Candidate | None = None
     report: object | None = None  # V9 AnalysisReport (guven puani modulleri okur)
+    mode: str = "live"  # adayin stratejisinin kipi: live | shadow
 
 
 def evaluate(provider, symbol: str, *, equity: float, risk_pct: float, commission_per_lot: float,
@@ -79,3 +81,40 @@ def evaluate_symbol(provider, symbol: str, *, equity: float, risk_pct: float, co
     if result.candidate is None:
         log.info("aday yok %s: %s (%s)", symbol, result.decision, "; ".join(result.reasons))
     return result.candidate
+
+
+MAX_EXTRA_STRATEGIES = 3
+
+
+def evaluate_all(provider, symbol: str, *, equity: float, risk_pct: float, commission_per_lot: float,
+                 modes: dict[str, str], now: float | None = None, engine=None) -> list[Evaluation]:
+    """Kipi `off` olmayan stratejilerle degerlendirir; her CONFIRMED stratejiye ayri sans verir.
+
+    V9 yonlendiricisi tek strateji secer. Sectigi strateji sonraki bir kapidan (or. maliyet sonrasi
+    R/R) gecemezse ve ayni anda baska bir strateji de CONFIRMED ise, o strateji tek basina yeniden
+    degerlendirilir. Ters yonlu onay V9'da sert vetodur ve burada asilmaz. Aday varsa aday(lar),
+    yoksa nedeniyle birlikte ilk degerlendirme doner.
+    """
+    active = sorted(s for s in v9.builtin_strategy_ids() if modes.get(s, "live") != "off")
+    if not active:
+        return [Evaluation(symbol, "WAIT", ("etkin strateji yok",))]
+
+    def run(enabled: list[str]) -> Evaluation:
+        result = evaluate(provider, symbol, equity=equity, risk_pct=risk_pct, commission_per_lot=commission_per_lot,
+                          enabled_strategies=set(enabled), now=now, engine=engine)
+        if result.candidate is not None:
+            return dataclasses.replace(result, mode=modes.get(result.candidate.strategy_id, "live"))
+        return result
+
+    first = run(active)
+    if first.candidate is not None or first.report is None:
+        return [first]
+    routing = getattr(first.report, "routing", None) or {}
+    if routing.get("status") != "selected":
+        return [first]  # secim yok ya da ters yonlu catisma: tek tek denemek vetoyu delmek olurdu
+    routed = routing.get("strategy_id")
+    others = [s.get("strategy_id") for s in getattr(first.report, "strategies", [])
+              if s.get("status") == "CONFIRMED" and s.get("strategy_id") != routed and s.get("strategy_id") in active]
+    found = [result for result in (run([strategy]) for strategy in others[:MAX_EXTRA_STRATEGIES])
+             if result.candidate is not None]
+    return found[:1] or [first]
