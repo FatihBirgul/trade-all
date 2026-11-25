@@ -138,6 +138,7 @@ export type TradePreview = {
   loss_pct: number | null;
   rr: number | null;
   risk_pct: number;
+  settings_risk_pct?: number; // ayarlardaki risk sınırı; uyarılar buna göredir
   currency: string;
   volume_min: number;
   volume_step: number;

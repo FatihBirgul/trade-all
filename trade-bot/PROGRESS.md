@@ -166,3 +166,75 @@ Kritik bulgu yok; "deneme modunda dağıtılabilir". İkinci tur düzeltmeleri (
 3. İlk bot emrinde: PATCH verilmeyen TP'yi koruyor mu (I7), dolum olayı sltp emrini taşıyor mu, ACK/operasyon biçimleri, yeniden bağlanmada snapshot, `client_request_id` yankısı.
 4. Cuma 21:45 UTC girişleri (kapanıştan 13 dk önce) isteniyor mu: kullanıcı kararı.
 - Ertelenen (Minor): WS yönlendirmesinde imzalı başlıklar, hız sınırında pay, seansların yalnızca açılışta okunması (yaz saati), tick aboneliklerinde tek hatalı sembolün grubunu düşürmesi, N5 testlerinin eksikleri.
+
+## Faz 3 (plan: `docs/superpowers/plans/2026-11-25-trade-bot-faz3.md`)
+
+- **Ortak modül arayüzü:** `tradebot/signals/modules/` (`Context`, `Vote`, `Signal`, kayıt defteri). Oy modülleri
+  tek tek dosyalara taşındı; eski kodun dondurulmuş kopyasıyla (`tests/signals/legacy_votes.py`) birebir aynı oy
+  verdikleri testle doğrulanır. V9 (`trade-ai-unified/`) değişmedi.
+- **Yeni stratejiler (varsayılan gölge):** `tb_ema_pullback_v1`, `tb_donchian_breakout_v1`. `tb_` önekli her
+  strateji varsayılan olarak gölgededir; canlıya yalnızca `POST /strategies/{id}/mode {mode: live, confirm: true}`
+  ile ve gölge karnesi olumluysa alınır. `PUT /settings` hiçbir stratejiyi canlıya alamaz.
+- **API:** `GET /strategies`, `POST /trades/preview`, `GET /symbols`, `POST /trades/{client_id}/resolve`,
+  herkese açık `GET /health/summary` (yalnızca sayılar ve nedenler).
+- **Android 0.9.0:** Raporlar, Ayarlar ve Elle işlem ekranları; APK iş akışında kalıcı anahtarla imzalama adımı
+  (Secret'lar tanımlıysa).
+
+### Canlı dry-run bulgusu: hiç aday çıkmıyordu (PR #7)
+
+İlk canlı özet 15 taramada 0 aday gösterdi; son taramada 30 sembolün 29'u V9'da `stale tick` ile elenmişti.
+Neden: tarama başlangıç saati bütün semboller için V9'a "şimdi" diye veriliyordu; mumlar istek limitiyle ~1
+dakikada çekilirken canlı fiyat bu saatten 5 saniyeden fazla ileride kalıyordu. Düzeltme: her sembol kendi anında
+değerlendirilir. Ders: "30/30 tarandı" sayısı sinyal üretildiğini göstermez; özetin karar/neden dağılımına bakılır.
+
+### Faz 3 bağımsız incelemesi (2026-11-25, sunucu + Android ayrı ayrı) ve düzeltmeler
+
+Sunucu:
+- **K1 bayat fiyatla lot:** yeni stratejiler giriş/lotu son tick'ten hesaplıyordu, tick'in yaşına bakmadan. 2 saatlik
+  fiyatla stop mesafesi küçülüyor, lot bütçenin ~10 katına çıkıyordu. Artık fiyat 60 sn'den eskiyse (ya da
+  gelecekten görünüyorsa) aday yok; V9 aynı sembolde `STALE_DATA`/`PROVIDER_UNAVAILABLE` dediyse de yok. V9 raporu
+  yoksa ya da `INSUFFICIENT_DATA` ise canlı strateji de yalnızca gölgede izlenir.
+- **K2 özetten varlık çıkarımı:** herkese açık örneklerde lot + stop % + risk % birlikte hesap varlığını %0,04
+  hatayla veriyordu. Örneklerden **lot kaldırıldı** (yetkili API'de duruyor); neden metinlerindeki sayılar `#` olur.
+- **Ö1** Canlıya alma eşiği ayarla düşürülemez: `max(20, pause_min_trades)`.
+- **Ö2** Botun duraklattığı strateji eski karnesiyle değil, duraklatmadan SONRAKI gölge sonuçlarıyla değerlendirilir.
+- **Ö3** Elle işlem: lot adım ızgarasında değilse 422 (gönderimde yukarı yuvarlanıyordu); risk uyarısı her zaman
+  ayarlardaki sınıra göre (`settings_risk_pct`), istekteki `risk_pct` uyarıyı susturamaz.
+- **Ö4 (bilinçli davranış değişikliği):** `POST /trades` artık lot açıkça verilse de hesap durumu ve dönüşüm kuru
+  bilinmeden emir göndermez (zarar hesaplanamayan emir gönderilmez).
+- **Ö5 küçük hesap:** risk bütçesi en küçük lota yetmiyorsa önizleme reddetmez; en küçük lotu ve gerçek zararı
+  uyarıyla gösterir. Emir, lot açıkça verilmeden (kullanıcı o sayıyı görüp onaylamadan) gönderilmez.
+- **Ö6** Yeni strateji adaylarında komisyon riske ve net R/R'ye dahil; en büyük lot adıma aşağı yuvarlanır;
+  yeni stratejilerdeki beklenmeyen hata taramayı düşürmez.
+- **Ö7** Gölge SELL sonuçları spread kadar iyimserdi (mumlar bid, SELL ask ile kapanır): açılıştaki spread kaydedilir
+  (`shadow_trades.spread`), stop/hedef denetimi ona göre kaydırılır.
+- **Ö8** Eksik testler eklendi (giriş tarafı, yuvarlama yönü, en küçük lot, canlı eşiği, komisyon); 15 mutasyonun
+  hepsi testlerce yakalanıyor.
+
+Android:
+- **K1** Geç gelen önizleme başka sembol/yöne yapışabiliyordu: yanıt yalnızca kendi isteğiyle eşleşirse kullanılır,
+  istek sürerken girdiler kilitli, onay metni önizlemenin kendi sembol/yönünden yazılır.
+- **K2/K3** "Sonucu kontrol et" emri yeniden gönderiyordu (ulaşmamışsa O AN açardı) ve kesin görünen bir hata kilidi
+  kaldırıyordu. Artık `POST /trades/{id}/resolve` yalnızca sorar: kayıt varsa durumunu döner, yoksa kimliği geçersiz
+  kılar (yolda kalmış istek sonradan ulaşsa da 409). Kilit yalnızca sunucunun kesin yanıtıyla kalkar.
+- **Ö1** Belirsiz emir kilidi cihazda saklanır; ekran/uygulama kapanıp açılsa da sürer.
+- **Ö2** `REJECTED`/`UNKNOWN`/`PENDING` durumları "gönderildi" diye gösterilmez.
+- **Ö3** Değişiklik isteklerinde her 5xx ve 408 "sonuç belirsiz" sayılır.
+- **Ö4/Ö5** Çift onay tek kimlik üretir; önizleme 60 sn sonra eskir, seviyeler "yaklaşık" yazılır.
+- **Ö6/Ö7** Ayarlar: yazılan değerler yeniden yüklemede silinmez; okunamayan ayarın üstüne kayıt yapılmaz; sunucudaki
+  değer onaylanan "eski" değerden farklıysa yazılmaz.
+- **Ö8/Ö9/Ö10** Hatalar uyarı penceresiyle de gösterilir; Raporlar/Ayarlar'da "Yenile" ve son güncelleme saati;
+  canlıya alma onayında gölge karnesi, duraklatma ve deneme modu bilgisi.
+- **Ö12/Ö13** İmzalama: yarım yapılandırma hata verir; README, yedek anahtarın herkesçe bilinen test anahtarı
+  olduğunu yazar.
+
+Bilerek ertelenenler: Ayarlar'da orta/yüksek puan eşikleri, kademeli stop anahtarları ve sembol seçimi; elle işlemde
+risk % girişi; dry-run'da aynı sembolde V9 + yeni strateji adayının ikisinin de `would_open` sayılması (canlıda
+ikincisini sembol kapısı engeller); `scan_summary` için `events.at` dizini; sinyal mumundan uzaklaşmış fiyatta
+giriş ("kovalama") sınırı.
+
+### Canlıya geçmeden / yeni strateji canlıya alınmadan önce
+
+- İmzalı APK için dört Secret (README) ve gerçek telefonda kurulum denemesi.
+- Yeni stratejiler en az 20 sonuçlanmış gölge işlem ve pozitif ortalama R olmadan canlıya alınamaz (sunucu zorlar).
+- Yukarıdaki "İlk gerçek emirden ÖNCE yapılacaklar" listesi geçerliliğini korur.

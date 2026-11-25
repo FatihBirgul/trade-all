@@ -23,6 +23,7 @@ HEARTBEAT_STALE = 120.0
 CLIENT_ID = re.compile(r"[A-Za-z0-9._~-]{8,64}")  # models.ManualTrade.client_id ile ayni
 MANUAL_VOID_KEY = "manual_void_ids"  # sonucu sorulup kaydi bulunmayan (gecersiz kilinan) elle emir kimlikleri
 MANUAL_VOID_KEEP = 200
+LIVE_MIN_SHADOW_TRADES = 20  # yeni strateji canliya alinmadan once en az bu kadar sonuclanmis golge islem
 
 
 def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
@@ -142,7 +143,7 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
         return {"order": key}
 
     # ------------------------------------------------------------------ elle islem
-    def _manual_plan(body, instrument) -> dict:
+    def _manual_plan(body, instrument, *, preview: bool = False) -> dict:
         """Elle islemin giris/stop/hedef/lot plani. Onizleme ve gercek emir AYNI hesabi kullanir:
         kullanicinin onayladigi sayilar gonderilecek emrin sayilaridir (fiyat degisimi disinda)."""
         quote = bot.quotes.quote(body.symbol)
@@ -163,18 +164,35 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
         if per_lot <= 0 or not math.isfinite(per_lot):
             raise HTTPException(status_code=409, detail="lot hesaplanamadı")
         # Sermaye ve marjin ortak oldugu icin gercek hesap equity'si kullanilir (spec §6.4).
-        risk_pct = getattr(body, "risk_pct", None) or repo.get_bot_settings().risk.risk_pct
+        settings_risk = repo.get_bot_settings().risk.risk_pct
+        risk_pct = getattr(body, "risk_pct", None) or settings_risk
         budget = bot.account.equity * risk_pct / 100.0
         step = Decimal(str(instrument.volume_step))
         units = (Decimal(str(budget / per_lot + 1e-9)) / step).to_integral_value(rounding=ROUND_FLOOR)
         suggested = float(min(units * step, Decimal(str(instrument.volume_max))))
-        lots = body.lots if body.lots is not None else suggested
-        if lots < instrument.volume_min - 1e-12:
-            raise HTTPException(status_code=422, detail="en küçük lot risk sınırını aşıyor")
+        below_min = False
+        if body.lots is not None:
+            # Lot adim izgarasinda olmali: adim disi lot gonderimde yuvarlanir ve onizlenenden BUYUK olabilirdi.
+            ratio = Decimal(str(body.lots)) / step
+            if ratio != ratio.to_integral_value():
+                raise HTTPException(status_code=422, detail=f"lot {instrument.volume_step:g} adımının katı olmalı")
+            lots = body.lots
+            if lots < instrument.volume_min - 1e-12:
+                raise HTTPException(status_code=422, detail=f"lot en küçük lotun ({instrument.volume_min:g}) altında")
+        elif suggested < instrument.volume_min - 1e-12:
+            # Kucuk hesap: risk butcesi en kucuk lota yetmiyor. Onizleme en kucuk lotu UYARIYLA gosterir;
+            # emir ise lot acikca verilmeden (kullanici o sayiyi gorup onaylamadan) gonderilmez.
+            if not preview:
+                raise HTTPException(status_code=422, detail="en küçük lot risk sınırını aşıyor; lotu açıkça belirtin")
+            lots, below_min = instrument.volume_min, True
+        else:
+            lots = suggested
         if lots > instrument.volume_max + 1e-12:
             raise HTTPException(status_code=422, detail="lot en büyük lotu aşıyor")
         return {"entry": entry, "sl": sl, "tp": tp, "lots": lots, "suggested_lots": suggested, "per_lot": per_lot,
-                "risk_pct": risk_pct, "budget": budget, "spread": quote["spread"]}
+                "risk_pct": risk_pct, "budget": budget, "spread": quote["spread"], "below_min": below_min,
+                "settings_risk_pct": settings_risk,
+                "settings_budget": bot.account.equity * settings_risk / 100.0}
 
     @private.post("/trades/preview")
     async def manual_preview(body: ManualPreview):
@@ -185,12 +203,15 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
             raise HTTPException(status_code=404, detail="sembol bulunamadı") from None
         if not instrument.tradable:
             raise HTTPException(status_code=409, detail="sembol işleme kapalı")
-        plan = _manual_plan(body, instrument)
+        plan = _manual_plan(body, instrument, preview=True)
         loss = plan["per_lot"] * plan["lots"]
         equity = bot.account.equity
         warnings = []
-        if loss > plan["budget"] * 1.0001:
-            warnings.append(f"Bu lotla zarar, risk sınırınızın (%{plan['risk_pct']:g}) üstünde")
+        if plan["below_min"]:
+            warnings.append(f"Hesap küçük: en küçük lot ({instrument.volume_min:g}) bile risk sınırınızı aşıyor")
+        # Uyari her zaman AYARLARDAKI risk sinirina goredir; istekteki risk_pct uyariyi susturamaz.
+        if loss > plan["settings_budget"] * 1.0001:
+            warnings.append(f"Bu lotla zarar, risk sınırınızın (%{plan['settings_risk_pct']:g}) üstünde")
         if body.sl_distance < 3 * plan["spread"]:
             warnings.append("SL mesafesi alış-satış farkına çok yakın; hemen tetiklenebilir")
         if body.tp_distance is not None and body.tp_distance < body.sl_distance:
@@ -204,7 +225,8 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
                 "lots": plan["lots"], "suggested_lots": plan["suggested_lots"], "loss": loss, "profit": profit,
                 "loss_pct": loss / equity * 100.0 if equity > 0 else None,
                 "rr": body.tp_distance / body.sl_distance if body.tp_distance is not None else None,
-                "risk_pct": plan["risk_pct"], "currency": bot.account.currency, "volume_min": instrument.volume_min,
+                "risk_pct": plan["risk_pct"], "settings_risk_pct": plan["settings_risk_pct"],
+                "currency": bot.account.currency, "volume_min": instrument.volume_min,
                 "volume_step": instrument.volume_step, "volume_max": instrument.volume_max, "warnings": warnings}
 
     @private.get("/symbols")
@@ -402,8 +424,15 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
         """Yeni (V9 disi) strateji ancak golge karnesi olumluysa canliya alinabilir (spec §6.2)."""
         if strategy_id not in custom.strategy_ids():
             return None
-        stats = ShadowBook(repo).stats(strategy_id, "shadow")
-        need = settings.fusion.pause_min_trades
+        held = scorecard.paused(repo).get(strategy_id)
+        if held is not None:
+            # Bot bu stratejiyi kotu sonuc nedeniyle duraklatti: eski karne degil, duraklatmadan SONRAKI
+            # golge sonuclari olumlu olmali.
+            stats = ShadowBook(repo).stats(strategy_id, "paused", since=held.get("at"))
+        else:
+            stats = ShadowBook(repo).stats(strategy_id, "shadow")
+        # Esik ayarla DUSURULEMEZ: ayar yalnizca yukseltebilir.
+        need = max(LIVE_MIN_SHADOW_TRADES, settings.fusion.pause_min_trades)
         if stats["trades"] < need:
             return (f"yeni strateji canlıya alınamaz: en az {need} sonuçlanmış gölge işlem gerekli "
                     f"(şu an {stats['trades']})")

@@ -41,10 +41,10 @@ def h1_down():
     return trending(230, -0.0004, 1.2000, NOW - H1, H1)
 
 
-def pullback_m15(up=True):
+def pullback_m15(up=True, count=80):
     """Egilim, sonra EMA20'ye dokunup egilim yonunde kapanan son mum."""
     sign = 1 if up else -1
-    bars = trending(80, sign * 0.0003, 1.1000, LAST, M15, wick=0.0008)
+    bars = trending(count, sign * 0.0003, 1.1000 - sign * 0.0003 * (count - 80), LAST, M15, wick=0.0008)
     average = ema([b["close"] for b in bars[:-1]], 20)[-1]
     previous = bars[-2]["close"]
     close = previous + sign * 0.0001
@@ -68,10 +68,10 @@ def breakout_m15(up=True):
 
 
 class Provider:
-    def __init__(self, m15, h1, bid=None, spread=0.00002):
+    def __init__(self, m15, h1, bid=None, spread=0.00002, time=NOW):
         self.bars = {"M15": m15, "H1": h1}
         bid = m15[-1]["close"] if bid is None else bid
-        self._quote = {"bid": bid, "ask": bid + spread, "spread": spread, "time": NOW}
+        self._quote = {"bid": bid, "ask": bid + spread, "spread": spread, "time": time}
         self.calls = []
 
     def quote(self, symbol):
@@ -90,9 +90,11 @@ def eurusd():
     return instrument("EURUSD", kind="forex", tick_size=0.00001, contract_size=100_000.0, digits=5, calc_mode="forex")
 
 
-def run(m15, h1, *, equity=10_000.0, risk_pct=0.5, modes=None, report=None, now=NOW, **quote):
-    return custom.evaluate(Provider(m15, h1, **quote), eurusd(), equity=equity, risk_pct=risk_pct,
-                           modes=modes or {}, now=now, report=report)
+def run(m15, h1, *, equity=10_000.0, risk_pct=0.5, modes=None, report=None, now=NOW, v9_decisions=(),
+        commission_per_lot=0.0, item=None, **quote):
+    return custom.evaluate(Provider(m15, h1, **quote), item or eurusd(), equity=equity, risk_pct=risk_pct,
+                           modes=modes or {}, now=now, report=report, v9_decisions=v9_decisions,
+                           commission_per_lot=commission_per_lot)
 
 
 def only(results, strategy_id):
@@ -218,12 +220,74 @@ def test_context_is_read_only_for_strategies():
         context.side = "BUY"
 
 
+def test_stale_or_future_quote_gives_no_candidate():
+    """Inceleme C1: bayat fiyatla giris stopa yaklasir, lot butcenin katlarina cikar. Fiyat taze degilse aday yok."""
+    m15, h1 = pullback_m15(), h1_up()
+    stop = only(run(m15, h1), PULLBACK)[0].candidate.stop_loss
+    near_stop = stop + 0.0005  # 2 saat once kalmis, stopun hemen ustunde bir fiyat
+    assert run(m15, h1, bid=near_stop, time=NOW - 7200) == []
+    assert run(m15, h1, time=NOW - 61) == []
+    assert run(m15, h1, time=NOW + 6) == []  # saat kaymasi: gelecekten fiyat
+    assert only(run(m15, h1, time=NOW - 59), PULLBACK) != []
+
+
+def test_v9_data_verdict_limits_new_strategies():
+    m15, h1 = pullback_m15(), h1_up()
+    for verdict in ("STALE_DATA", "PROVIDER_UNAVAILABLE"):
+        assert run(m15, h1, report={}, v9_decisions=(verdict,)) == []  # V9 veriyi reddetti: sinyal yok
+    live = {PULLBACK: "live"}
+    assert only(run(m15, h1, modes=live, report={}, v9_decisions=("WAIT",)), PULLBACK)[0].mode == "live"
+    # Rapor yok ya da veri yetersiz: guven puani anlamsiz; canli strateji de yalnizca golgede izlenir.
+    assert only(run(m15, h1, modes=live, report=None), PULLBACK)[0].mode == "shadow"
+    assert only(run(m15, h1, modes=live, report={}, v9_decisions=("INSUFFICIENT_DATA",)), PULLBACK)[0].mode == "shadow"
+
+
+@pytest.mark.parametrize("up", [True, False])
+def test_entry_side_rounding_and_budget(up):
+    """Giris: BUY ask, SELL bid. Stop zarar yonunde, hedef yakina yuvarlanir; risk butceyi asmaz."""
+    m15, h1 = pullback_m15(up), (h1_up() if up else h1_down())
+    close, spread = m15[-1]["close"], 0.00004
+    odd = instrument("EURUSD", kind="forex", tick_size=0.0005, contract_size=100_000.0, digits=5, calc_mode="forex")
+    signal_stop = next(m for m in modules("strategy") if m.id == PULLBACK).evaluate(
+        Context(symbol="EURUSD", now=NOW, kind="forex", report={}, bars={"M15": m15, "H1": h1},
+                quote={"bid": close, "ask": close + spread, "spread": spread, "time": NOW}, instrument=odd)).stop
+    c = only(run(m15, h1, spread=spread, item=odd), PULLBACK)[0].candidate
+    sign = 1 if up else -1
+    assert c.entry == pytest.approx(close + spread if up else close)
+    assert (signal_stop - c.stop_loss) * sign >= -1e-12  # stop sinyalden daha UZAKTA ya da ayni
+    assert abs(signal_stop - c.stop_loss) < 0.0005
+    distance = (c.entry - c.stop_loss) * sign
+    assert (c.take_profit_1 - c.entry) * sign <= 2.0 * distance + 1e-12  # hedef 2R'den uzaga yuvarlanmaz
+    assert (c.take_profit_2 - c.entry) * sign <= 3.0 * distance + 1e-12
+    assert 0 < c.risk_amount <= 10_000 * 0.5 / 100 + 1e-9
+    assert c.risk_amount == pytest.approx(distance * c.lots * 100_000)
+
+
+def test_lot_never_below_minimum_or_off_the_step_grid():
+    m15, h1 = pullback_m15(), h1_up()
+    big_min = instrument("EURUSD", kind="forex", tick_size=0.00001, contract_size=100_000.0, digits=5,
+                         calc_mode="forex", volume_min=5.0, volume_step=0.01)
+    assert run(m15, h1, item=big_min) == []  # butce 0.01'in katlarina yetiyor ama en kucuk lotun altinda
+    capped = instrument("EURUSD", kind="forex", tick_size=0.00001, contract_size=100_000.0, digits=5,
+                        calc_mode="forex", volume_min=0.01, volume_step=0.01, volume_max=0.015)
+    assert only(run(m15, h1, item=capped), PULLBACK)[0].candidate.lots == pytest.approx(0.01)  # 0.015 degil
+
+
+def test_commission_is_part_of_risk_and_net_rr():
+    m15, h1 = pullback_m15(), h1_up()
+    free = only(run(m15, h1), PULLBACK)[0].candidate
+    paid = only(run(m15, h1, commission_per_lot=40.0), PULLBACK)[0].candidate
+    assert paid.lots < free.lots and paid.net_rr < free.net_rr
+    assert paid.risk_amount <= 10_000 * 0.5 / 100 + 1e-9  # komisyon dahil zarar butceyi asmaz
+    assert run(m15, h1, commission_per_lot=400.0) == []  # komisyon net R/R'yi 1.5'in altina indiriyor
+
+
 # ------------------------------------------------------------------ bot ve API
 async def pullback_app(tmp_path, **kwargs):
     """EURUSD'de EMA geri cekilme sinyali ureten piyasa ile baslatilmis bot (XAUUSD'de V9 adayi da var)."""
     from tests.app_helpers import feed_ticks
     app = await started(tmp_path, **kwargs)
-    m15 = pullback_m15()
+    m15 = pullback_m15(count=230)  # canlidaki gibi: V9'un da degerlendirebilecegi kadar mum
     app.fake.set_candles("EURUSD", "M15", m15)
     app.fake.set_candles("EURUSD", "H1", h1_up())
     app.fake.set_candles("EURUSD", "H4", trending(230, 0.0016, 0.8, NOW - 4 * H1, 4 * H1))
@@ -306,3 +370,58 @@ async def test_new_strategy_in_dry_run_sends_nothing(tmp_path):
     app.repo.set_bot_settings(settings)
     summary = await app.bot.on_bar_close()
     assert app.fake.calls("POST", "/positions") == [] and summary.would_open == 2
+
+
+async def test_go_live_bar_cannot_be_lowered_by_settings(tmp_path):
+    """Inceleme I1: pause_min_trades 5'e indirilse de canliya alma esigi 20'nin altina inmez."""
+    app = await pullback_app(tmp_path)
+    async with client(app) as http:
+        body = (await http.get("/settings")).json()
+        body["fusion"]["pause_min_trades"] = 5
+        assert (await http.put("/settings", json=body)).status_code == 200
+        for n in range(19):
+            app.repo.conn.execute(
+                "INSERT INTO shadow_trades (symbol, side, strategy_id, setup_id, reason, entry, sl, tp, score, opened_at,"
+                " closed_at, result_r) VALUES ('EURUSD','BUY',?,?,'shadow',1.1,1.09,1.12,NULL,?,?,2.0)",
+                (PULLBACK, f"k{n}", NOW - 5000 + n, NOW - 4000 + n))
+        refused = await http.post(f"/strategies/{PULLBACK}/mode", json={"mode": "live", "confirm": True})
+        assert refused.status_code == 409 and "en az 20" in refused.json()["detail"]
+
+
+async def test_paused_strategy_needs_good_results_after_the_pause(tmp_path):
+    """Inceleme I2: botun duraklattigi strateji eski golge karnesiyle yeniden canliya alinamaz."""
+    from tradebot.signals import scorecard
+    app = await pullback_app(tmp_path)
+
+    def add(n, reason, result, at):
+        app.repo.conn.execute(
+            "INSERT INTO shadow_trades (symbol, side, strategy_id, setup_id, reason, entry, sl, tp, score, opened_at,"
+            " closed_at, result_r) VALUES ('EURUSD','BUY',?,?,?,1.1,1.09,1.12,NULL,?,?,?)",
+            (PULLBACK, f"{reason}{n}", reason, at + n, at + n + 1, result))
+    for n in range(30):
+        add(n, "shadow", 2.0, NOW - 90_000)  # duraklatmadan onceki parlak karne
+    scorecard.mark_paused(app.repo, PULLBACK, NOW - 50_000, {"trades": 20, "avg_r": -0.5})
+    path = f"/strategies/{PULLBACK}/mode"
+    async with client(app) as http:
+        blocked = await http.post(path, json={"mode": "live", "confirm": True})
+        assert blocked.status_code == 409 and "gölge işlem" in blocked.json()["detail"]
+        for n in range(25):
+            add(n, "paused", -1.0, NOW - 40_000)  # duraklatmadan sonra da kaybediyor
+        still = await http.post(path, json={"mode": "live", "confirm": True})
+        assert still.status_code == 409 and "olumlu değil" in still.json()["detail"]
+        for n in range(25, 80):
+            add(n, "paused", 2.0, NOW - 40_000)
+        assert (await http.post(path, json={"mode": "live", "confirm": True})).status_code == 200
+
+
+async def test_stale_quote_never_reaches_an_order_or_the_shadow_record(tmp_path):
+    from tests.app_helpers import feed_ticks
+    app = await pullback_app(tmp_path)
+    settings = app.repo.get_bot_settings()
+    settings.strategy_modes[PULLBACK] = "live"
+    app.repo.set_bot_settings(settings)
+    await feed_ticks(app, "EURUSD", 1.0, 1.00002, NOW)  # son fiyat kaydi
+    app.bot.quotes._last["EURUSD"] = type(app.bot.quotes._last["EURUSD"])("EURUSD", 1.0, 1.00002, NOW - 7200)
+    await app.bot.on_bar_close()
+    assert [p[2]["instrument"] for p in app.fake.calls("POST", "/positions")] == ["XAUUSD"]
+    assert app.repo.conn.execute("SELECT COUNT(*) FROM shadow_trades WHERE symbol='EURUSD'").fetchone()[0] == 0

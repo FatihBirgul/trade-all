@@ -169,3 +169,24 @@ async def test_off_strategy_produces_no_candidate(tmp_path):
     app.repo.set_bot_settings(BotSettings(dry_run=False, strategy_modes={"fx_trend_momentum_v6": "off"}))
     summary = await app.bot.on_bar_close()
     assert summary.candidates == 0 and summary.opened == 0 and summary.shadowed == 0
+
+
+def test_sell_shadow_is_resolved_on_the_ask_side(tmp_path):
+    """Mumlar bid fiyatidir; SELL ask ile kapanir. Spread sayilmazsa stop gec, hedef erken gorulur."""
+    spread = 0.0010
+    sell = candidate(side="SELL", entry=1.1000, sl=1.1030, tp1=1.0940, tp2=1.0910)
+    shadow = book(tmp_path)
+    shadow.open(sell, "shadow", None, NOW, spread)
+    # bid en yuksek 1.1022: ask 1.1032 stopu (1.1030) gecti -> zarar. Spread yok sayilsa acik kalirdi.
+    closed = shadow.resolve("EURUSD", [bar(0, 1.0990, 1.1022)], NOW + M15)
+    assert len(closed) == 1 and closed[0]["result_r"] == pytest.approx(-1.0)
+
+    other = ShadowBook(Repo(tmp_path / "other.db"))
+    other.open(sell, "shadow", None, NOW, spread)
+    # bid en dusuk 1.0935: ask 1.0945 hedefe (1.0940) ulasmadi -> acik kalir.
+    assert other.resolve("EURUSD", [bar(0, 1.0935, 1.1000)], NOW + M15) == []
+    assert len(other.resolve("EURUSD", [bar(1, 1.0925, 1.1000)], NOW + 2 * M15)) == 1  # ask 1.0935 <= hedef
+
+    buy = ShadowBook(Repo(tmp_path / "buy.db"))
+    buy.open(candidate(), "shadow", None, NOW, spread)  # BUY bid ile kapanir: kaydirma yok
+    assert buy.resolve("EURUSD", [bar(0, 1.0990, 1.1062)], NOW + M15)[0]["result_r"] == pytest.approx(2.0)

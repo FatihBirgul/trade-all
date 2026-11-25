@@ -64,8 +64,20 @@ async def test_preview_warns_instead_of_hiding_risk(tmp_path):
 async def test_preview_refuses_what_the_order_would_refuse(tmp_path):
     app = await started(tmp_path, balance=20.0)
     async with client(app) as http:
+        # Kucuk hesap: onizleme reddetmez, en kucuk lotu ve gercek zarari UYARIYLA gosterir.
         tiny = await http.post("/trades/preview", json={"symbol": "XAUUSD", "side": "BUY", "sl_distance": 5.0})
-        assert tiny.status_code == 422 and "en küçük lot" in tiny.json()["detail"]
+        assert tiny.status_code == 200
+        shown = tiny.json()
+        assert shown["lots"] == shown["volume_min"] and shown["suggested_lots"] < shown["volume_min"]
+        assert any("en küçük lot" in w for w in shown["warnings"]) and any("üstünde" in w for w in shown["warnings"])
+        assert shown["loss_pct"] > shown["settings_risk_pct"]
+        # Emir ise lot acikca verilmeden gonderilmez; kullanici onizlenen lotu onaylayip gonderirse acilir.
+        blind = await http.post("/trades", json={"symbol": "XAUUSD", "side": "BUY", "sl_distance": 5.0})
+        assert blind.status_code == 422 and "açıkça" in blind.json()["detail"]
+        assert app.fake.calls("POST", "/positions") == []
+        below = await http.post("/trades/preview", json={"symbol": "XAUUSD", "side": "BUY", "sl_distance": 5.0,
+                                                        "lots": shown["volume_min"] / 10})
+        assert below.status_code == 422
         assert (await http.post("/trades/preview", json={"symbol": "EURUSD", "side": "BUY", "sl_distance": 0.001})
                 ).status_code == 409  # fiyat akisi yok
         assert (await http.post("/trades/preview", json={"symbol": "YOKYOK", "side": "BUY", "sl_distance": 1})
@@ -130,3 +142,20 @@ async def test_resolve_voids_an_order_that_never_arrived_so_a_late_request_canno
     async with client(app, authed=False) as http:
         assert (await http.post("/trades/yolda-kaldi-0001/resolve", json={})).status_code in (401, 403)
     assert len(app.fake.calls("POST", "/positions")) == 1
+
+
+async def test_lot_must_be_on_the_step_grid_and_risk_pct_cannot_silence_the_warning(tmp_path):
+    """Inceleme I3: adim disi lot gonderimde yukari yuvarlanabilirdi; istekteki risk_pct uyariyi susturabilirdi."""
+    app = await started(tmp_path)
+    base = {"symbol": "XAUUSD", "side": "BUY", "sl_distance": 5.0}
+    async with client(app) as http:
+        assert (await http.post("/trades/preview", json={**base, "lots": 0.015})).status_code == 422
+        off_grid = await http.post("/trades", json={**base, "lots": 0.015})
+        assert off_grid.status_code == 422 and "adım" in off_grid.json()["detail"]
+        assert app.fake.calls("POST", "/positions") == []
+        double = (await http.post("/trades/preview", json={**base, "risk_pct": 2.0})).json()
+        assert double["risk_pct"] == 2.0 and double["settings_risk_pct"] == 0.5
+        assert any("risk sınırınızın (%0.5) üstünde" in w for w in double["warnings"])
+        sent = await http.post("/trades", json={**base, "lots": 0.02})
+        assert sent.status_code == 200 and sent.json()["lots"] == 0.02
+    assert float(app.fake.calls("POST", "/positions")[0][2]["volume"]) == 0.02

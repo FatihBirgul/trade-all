@@ -60,7 +60,8 @@ CREATE TABLE IF NOT EXISTS shadow_trades (
     score REAL,
     opened_at REAL NOT NULL,
     closed_at REAL,
-    result_r REAL
+    result_r REAL,
+    spread REAL
 );
 CREATE INDEX IF NOT EXISTS shadow_open ON shadow_trades (symbol) WHERE closed_at IS NULL;
 
