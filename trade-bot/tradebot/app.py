@@ -56,6 +56,7 @@ BALANCE_SEEN_LOOKBACK = 2 * 86400.0  # taban alinirken "zaten icinde" sayilacak 
 BALANCE_HISTORY_DAYS = 29  # gecmis sorgusu sinirinin (30 gun) icinde kalinir
 CAPITAL_SEEN = "capital_seen"  # ayar anahtari: deneme modunda ilk okunan varlik kaydedildi mi
 BASE_LIVE = "capital_base_live"  # ayar anahtari: sermaye tabani canli moda geciste alindi mi
+CLOCK_SKEW_LIMIT = 5.0  # V9 fiyat saati "simdi"den bu kadar ilerideyse veriyi reddeder
 MAINTENANCE_INTERVAL = 1800.0  # gunluk yedek ve temizlik denetimi (is gunde bir kez yapilir)
 RECONCILE_INTERVAL = 300.0  # olay kacirilmis olabilir: broker durumu duzenli olarak yeniden okunur
 AUTH_BACKOFF_START = 30.0  # kimlik reddinden sonra yonetim isteklerinin durdugu sure (art arda redde katlanir)
@@ -131,6 +132,9 @@ class Bot:
         self._subscribed: set[str] = set()
         self._connection_alerted = False
         self._daily_blocked = False
+        self._account_alerted = False
+        self._tick_lead = float("-inf")
+        self._clock_alerted = False
         self._last_equity_sample = 0.0
         self._balance_synced_at = 0.0
         self.last_scan: ScanSummary | None = None
@@ -251,6 +255,8 @@ class Bot:
                 self.tick_error = {"code": code, "message": (message or "")[:80],
                                    "id": request_id[:40] if isinstance(request_id, str) else None}
             return
+        # Tick saati sunucu saatinden ilerideyse sunucu saati geri kalmistir (V9 boyle veriyi "bayat" sayar).
+        self._tick_lead = max(self._tick_lead, tick.time - self._clock())
         instrument = self.catalog.by_broker(tick.symbol)
         self.quotes.on_tick(dataclasses.replace(tick, symbol=instrument.symbol) if instrument else tick)
 
@@ -914,7 +920,23 @@ class Bot:
             return False
         report = await self.executor.reconcile()
         if report is not None:
+            try:
+                # Hesap ayarlari (durum, kaldirac) calisirken degisebilir: marjin kisiti, yalnizca-kapat kipi.
+                # Yalnizca acilista okunursa bot bunu emir reddedilene kadar ogrenemezdi. Mutabakat basarili
+                # olduktan SONRA okunur: kimlik/baglanti hatalarinin ele alinisi mutabakat yolunda kalir.
+                self._details = await self.client.get(schema.account_path(self.client.account_id))
+            except ExnessError as exc:
+                log.warning("hesap ayarlari yenilenemedi: %s", exc)
             self._set_account(report.account)
+            blocked = self.account is not None and not self.account.can_open
+            if blocked and not self._account_alerted:
+                self._account_alerted = True
+                await self._record("warning", "account_blocked",
+                                   "Hesap yeni işleme kapalı; bot yeni işlem açmıyor, açık işlemler yönetiliyor.",
+                                   notify=True, title="Hesap yeni işleme kapalı")
+            elif not blocked and self._account_alerted:
+                self._account_alerted = False
+                await self._record("info", "account_open", "Hesap yeniden yeni işleme açık.")
         return report is not None
 
     async def resolve_orders(self) -> None:
@@ -975,6 +997,16 @@ class Bot:
         elif self._connection_alerted and self.streams_up():
             self._connection_alerted = False
             await self._record("info", "connection_restored", "Exness bağlantısı geri geldi.")
+        lead, self._tick_lead = self._tick_lead, float("-inf")  # son kalp atisindan beri gorulen en buyuk fark
+        if lead > CLOCK_SKEW_LIMIT and not self._clock_alerted:
+            self._clock_alerted = True
+            await self._record("warning", "clock_skew",
+                               f"Sunucu saati fiyat akışının {lead:.0f} sn gerisinde; analiz veriyi bayat sayabilir. "
+                               "Sunucuda saat eşitlemesini kontrol edin (timedatectl status).",
+                               {"seconds": round(lead, 1)}, notify=True, title="Sunucu saati kaymış")
+        elif self._clock_alerted and float("-inf") < lead < CLOCK_SKEW_LIMIT / 2:
+            self._clock_alerted = False
+            await self._record("info", "clock_ok", "Sunucu saati yeniden fiyat akışıyla uyumlu.")
         if now - self._balance_synced_at >= BALANCE_SYNC_INTERVAL:
             self._balance_synced_at = now
             await self.sync_balance_ops()

@@ -68,6 +68,7 @@ class FakeExness:
         self.lose_next_ack = False  # istek islenir ama yanit kaybolur
         self.reject_next: tuple[int, str] | None = None  # bir sonraki operasyon asenkron reddedilir
         self.account_status = "active"
+        self.fill_fraction = 1.0  # < 1: emir kismen dolar (istenen hacmin bu orani)
         self.last_ok_at = 0.0
         self.mid_request = None  # async cagri: istek kaydedildikten sonra, yanit donmeden once calisir
         self.omit_sltp_in_event = False  # dolum olayinda SL/TP emri gelmesin (broker'da yine vardir)
@@ -305,8 +306,9 @@ class FakeExness:
         now = iso(self.clock())
         position_id, order_id = self._id(), self._id()
         digits = self.instruments[name]["point_digits"]
+        filled = f"{float(body['volume']) * self.fill_fraction:.2f}" if self.fill_fraction < 1 else body["volume"]
         position = {"position_id": position_id, "direction": body["side"], "instrument": name,
-                    "initial_volume": body["volume"], "volume": body["volume"],
+                    "initial_volume": filled, "volume": filled,
                     "open_price": f"{price:.{digits}f}", "state": "open", "create_time": now,
                     "commission": "0", "swap": "0"}
         self.positions[position_id] = position
@@ -314,7 +316,7 @@ class FakeExness:
                   "direction": body["side"], "instrument": name, "price": position["open_price"],
                   "volume": body["volume"], "create_time": now}
         deal = {"deal_id": self._id(), "order_id": order_id, "position_id": position_id, "type": "open",
-                "direction": body["side"], "instrument": name, "volume": body["volume"],
+                "direction": body["side"], "instrument": name, "volume": filled,
                 "price": position["open_price"], "create_time": now}
         self.deals.append(deal)
         orders = [market]
