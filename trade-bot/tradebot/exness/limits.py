@@ -14,12 +14,16 @@ from collections.abc import Awaitable, Callable, Iterable
 
 
 TRADING_RESERVE = 0.1  # genel kotanin bu orani emir istekleri (GET olmayanlar) icin ayrilir
+# Sunucu istekleri VARIS anina gore sayar, biz GONDERIM anina gore. Ag gecikmesindeki oynama yuzunden
+# pencereyi tam doldurmak (or. mumda 2 istek/sn) canlida 429 uretti ve tarama yarida kesildi. Pencere bu
+# oranda genis tutulur: 2 istek/sn yerine 2 istek/1.25 sn.
+SAFETY = 1.25
 
 
 class _Window:
-    def __init__(self, limit: int, seconds: float):
+    def __init__(self, limit: int, seconds: float, safety: float = 1.0):
         self.limit = max(1, int(limit))
-        self.seconds = float(seconds)
+        self.seconds = float(seconds) * max(1.0, safety)
         self.stamps: deque[float] = deque()
 
     def wait_time(self, now: float, reserve: int = 0) -> float:
@@ -36,7 +40,8 @@ class _Window:
 
 class RateLimiter:
     def __init__(self, *, clock: Callable[[], float] = time.monotonic,
-                 sleep: Callable[[float], Awaitable[None]] = asyncio.sleep):
+                 sleep: Callable[[float], Awaitable[None]] = asyncio.sleep, safety: float = SAFETY):
+        self._safety = safety
         self._clock = clock
         self._sleep = sleep
         self._global: _Window | None = None
@@ -49,12 +54,12 @@ class RateLimiter:
     def configure(self, *, global_rate: tuple[int, float] | None,
                   methods: Iterable[tuple[str, str, int, float]]) -> None:
         """methods: (HTTP metodu, OpenAPI yol sablonu, limit, pencere_sn)."""
-        self._global = _Window(*global_rate) if global_rate else None
+        self._global = _Window(*global_rate, self._safety) if global_rate else None
         self._methods = []
         for http_method, template, limit, seconds in methods:
             pattern = "".join("[^/]+" if part.startswith("{") else re.escape(part)
                               for part in re.split(r"(\{[^}]*\})", template))
-            self._methods.append((http_method.upper(), re.compile("^" + pattern + "$"), _Window(limit, seconds)))
+            self._methods.append((http_method.upper(), re.compile("^" + pattern + "$"), _Window(limit, seconds, self._safety)))
 
     def _windows(self, method: str, path: str) -> list[tuple[_Window, int]]:
         bare = path.split("?", 1)[0]

@@ -63,6 +63,9 @@ STOP_RECHECK_UNKNOWN = 300.0  # seviye bilinmiyorsa (elle mudahale gerekir) daha
 REARM_LIMIT = 3  # stop bu kadar denemede kurulamazsa pozisyon kapatilir
 ATR_MAX_AGE_BARS = 3
 TICK_CHUNK = 20
+RATE_PAUSE_LIMIT = 2  # bir taramada 429 sonrasi en cok bu kadar kisa bekleme; sonra tarama birakilir
+RATE_PAUSE_DEFAULT = 2.0
+RATE_PAUSE_MAX = 10.0
 
 
 @dataclass
@@ -525,6 +528,7 @@ class Bot:
         scanned: set[str] = set()
         news_events = self.news.events() if self.news is not None and settings.news.enabled else []
         retries_before = self.candles.transient_rejections
+        rate_pauses = 0
         for instrument in self.catalog.universe(settings.enabled_symbols):
             symbol = instrument.symbol
             if not self._is_open(instrument, now):
@@ -551,11 +555,20 @@ class Bot:
                 summary.skipped = "auth_error"
                 return summary
             except ExnessRateLimited as exc:
-                # Limit asildi: bu turu birak, dongude tekrar deneme.
+                # Limit asildi. Reddedilen istek YINELENMEZ (bu sembol bu mumda atlanir); kisa bir beklemeden
+                # sonra siradaki sembollerle devam edilir. Art arda olursa tarama birakilir: dongu yok.
                 summary.errors += 1
-                summary.skipped = "rate_limited"
-                await self._record("warning", "rate_limited", f"İstek limiti doldu; tarama yarıda kesildi ({exc})")
-                return summary
+                rate_pauses += 1
+                if rate_pauses > RATE_PAUSE_LIMIT:
+                    summary.skipped = "rate_limited"
+                    await self._record("warning", "rate_limited",
+                                       f"İstek limiti doldu; tarama yarıda kesildi ({exc})")
+                    return summary
+                if rate_pauses == 1:
+                    await self._record("warning", "rate_limited",
+                                       f"İstek limiti doldu; {symbol} bu mumda atlandı, tarama sürüyor ({exc})")
+                await self._sleep(min(max(exc.retry_after or RATE_PAUSE_DEFAULT, 0.5), RATE_PAUSE_MAX))
+                continue
             except (ExnessError, ValueError) as exc:
                 summary.errors += 1
                 log.warning("mumlar alinamadi %s: %s", symbol, exc)
