@@ -1,0 +1,24 @@
+[Unit]
+Description=Trade Bot (Exness Trading API)
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tradebot
+Group=tradebot
+WorkingDirectory=/opt/tradebot/trade-bot
+EnvironmentFile=/etc/tradebot/tradebot.env
+Environment=PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/tradebot/.venv/bin/python -m tradebot
+Restart=always
+RestartSec=5
+# Servis yalnizca kendi veri klasorune yazabilir.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/tradebot
+
+[Install]
+WantedBy=multi-user.target
