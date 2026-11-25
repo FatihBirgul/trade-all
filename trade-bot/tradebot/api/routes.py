@@ -360,6 +360,17 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
         unknown = sorted(set(body.strategy_modes) - _strategy_ids())
         if unknown:
             raise HTTPException(status_code=422, detail="bilinmeyen strateji: " + ", ".join(unknown))
+        if body.enabled_symbols is not None:
+            known = {instrument.symbol for instrument in bot.catalog.universe()}
+            # Yalnizca YENI eklenenler denetlenir: listede kalmis, artik evrende olmayan eski bir sembol
+            # baska bir ayarin kaydedilmesini engellemesin (o sembol zaten taranmaz).
+            strangers = sorted(body.enabled_symbols - known - (previous.enabled_symbols or set()))
+            if strangers:
+                raise HTTPException(status_code=422, detail="bilinmeyen sembol: " + ", ".join(strangers[:10]))
+            if not body.enabled_symbols:
+                # Bos liste "hicbir sembol" demektir: bot sessizce hicbir sey yapmaz. Bunun acik yolu durdurmaktir.
+                raise HTTPException(status_code=422,
+                                    detail="en az bir sembol açık olmalı; botu durdurmak için Durdur'u kullanın")
         repo.set_bot_settings(body)
         if previous.dry_run != body.dry_run:
             repo.add_event("warning", "mode_changed",

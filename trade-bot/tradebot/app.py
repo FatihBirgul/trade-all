@@ -72,6 +72,8 @@ TICK_CHUNK = 20
 VETO_REASON_CHARS = 80
 DATA_DECISIONS = frozenset({"INSUFFICIENT_DATA", "STALE_DATA", "PROVIDER_UNAVAILABLE"})
 DATA_REJECTS_MAX = 40
+HEAL_PER_SCAN = 4  # tarama basina en cok bu kadar bosluk onarim istegi
+HEAL_RETRY = 6 * 3600.0  # borsanin da vermedigi bosluk icin yeniden deneme araligi
 PUBLIC_NUMBER = re.compile(r"\d+[.,]\d+|\d{3,}")  # ondalikli ya da 3+ haneli sayilar
 SUMMARY_SAMPLES = 5
 RATE_PAUSE_LIMIT = 2  # bir taramada 429 sonrasi en cok bu kadar kisa bekleme; sonra tarama birakilir
@@ -135,6 +137,7 @@ class Bot:
         self._account_alerted = False
         self._tick_lead = float("-inf")
         self._clock_alerted = False
+        self._heal_tried: dict[tuple[str, str, int], float] = {}
         self._last_equity_sample = 0.0
         self._balance_synced_at = 0.0
         self.last_scan: ScanSummary | None = None
@@ -465,7 +468,11 @@ class Bot:
         return status["status"] in ("OPEN", "CLOSING_SOON")
 
     def _gap_note(self, instrument: Instrument) -> str | None:
-        """Mum serisinde, beyan edilen islem saatlerine gore ACIK gorunen ilk eksik dakikayi bulur (tanilama)."""
+        gap = self._gap(instrument)
+        return None if gap is None else f"{gap[0]} {datetime.fromtimestamp(gap[1], timezone.utc):%Y-%m-%dT%H:%MZ} {gap[2]}"
+
+    def _gap(self, instrument: Instrument) -> tuple[str, int, str] | None:
+        """Mum serisinde, beyan edilen islem saatlerine gore ACIK gorunen ilk eksik dakika -> (cerceve, an, durum)."""
         from forex.sessions import broker_status
 
         if not instrument.trading_hours:
@@ -478,8 +485,43 @@ class Bot:
                     moment = datetime.fromtimestamp(minute, timezone.utc)
                     status = broker_status(moment, "", True, instrument.trading_hours)["status"]
                     if status not in ("CLOSED", "OPENING_SOON"):
-                        return f"{frame} {moment:%Y-%m-%dT%H:%MZ} {status}"
+                        return frame, minute, status
         return None
+
+    async def _heal_gaps(self, summary: ScanSummary) -> None:
+        """V9'un "eksik mum" diye reddettigi sembollerde boslugu borsadan yeniden ister (tarama basina sinirli).
+
+        Mum gelirse bir sonraki taramada sembol yeniden degerlendirilebilir. Gelmezse bosluk gercektir; ayni
+        bosluk icin HEAL_RETRY suresince yeniden istek yapilmaz (istek limiti korunur).
+        """
+        now = self._clock()
+        healed = 0
+        for symbol, note in list(summary.data_rejects.items()):
+            if healed >= HEAL_PER_SCAN or "missing candle" not in note:
+                continue
+            try:
+                gap = self._gap(self.catalog.get(symbol))
+            except KeyError:
+                continue
+            if gap is None:
+                continue
+            frame, minute, _ = gap
+            key = (symbol, frame, minute // FRAME_SECONDS[frame])
+            if now - self._heal_tried.get(key, float("-inf")) < HEAL_RETRY:
+                summary.data_rejects[symbol] = note + " (onarım denendi: borsada da yok)"
+                continue
+            self._heal_tried[key] = now
+            healed += 1
+            try:
+                filled = await self.candles.heal(symbol, frame, minute)
+            except (ExnessError, ValueError) as exc:
+                log.warning("mum onarimi basarisiz %s %s: %s", symbol, frame, exc)
+                continue
+            summary.data_rejects[symbol] = note + (" (onarıldı: mum geldi)" if filled
+                                                   else " (onarım denendi: borsada da yok)")
+            log.info("mum onarimi %s %s: %s", symbol, frame, "geldi" if filled else "borsada da yok")
+        for key in [k for k, at in self._heal_tried.items() if now - at > 2 * HEAL_RETRY]:
+            del self._heal_tried[key]
 
     def _spread(self, symbol: str) -> float:
         quote = self.quotes.quote(symbol)
@@ -672,6 +714,7 @@ class Bot:
             except (ExnessError, ValueError, KeyError):
                 continue
         await self._refresh_open_candles(scanned)
+        await self._heal_gaps(summary)
         summary.candle_retries = self.candles.transient_rejections - retries_before
         if summary.candle_retries:
             log.warning("tarama: %d mum istegi ilk denemede reddedildi, ikincide gecti", summary.candle_retries)

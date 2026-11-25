@@ -337,3 +337,34 @@ def test_websocket_stream_requires_token_and_pushes_status(tmp_path):
             app.repo.add_event("info", "trade_opened", "test")
             seen = [socket.receive_json() for _ in range(6)]
             assert any(m["type"] == "event" and m["event"]["kind"] == "trade_opened" for m in seen)
+
+
+async def test_put_settings_validates_symbols_thresholds_and_manage_switches(tmp_path):
+    app, http = await authed(tmp_path)
+    async with http:
+        current = (await http.get("/settings")).json()
+        assert current["manage"]["be_enabled"] is current["manage"]["partial_enabled"] is True
+        assert current["manage"]["trail_enabled"] is True
+        unknown = await http.put("/settings", json={**current, "enabled_symbols": ["XAUUSD", "YOKYOK"]})
+        assert unknown.status_code == 422 and "YOKYOK" in unknown.json()["detail"]
+        empty = await http.put("/settings", json={**current, "enabled_symbols": []})
+        assert empty.status_code == 422 and "en az bir sembol" in empty.json()["detail"]
+        # Esik sirasi: en dusuk <= orta <= yuksek
+        for fusion in ({"min_score": 70, "mid_score": 60}, {"mid_score": 90, "high_score": 80}):
+            bad = await http.put("/settings", json={**current, "fusion": {**current["fusion"], **fusion}})
+            assert bad.status_code == 422, fusion
+        assert app.repo.get_bot_settings().enabled_symbols is None
+
+        body = {**current, "enabled_symbols": ["XAUUSD"], "manage": {**current["manage"], "trail_enabled": False},
+                "fusion": {**current["fusion"], "mid_score": 55, "high_score": 85}}
+        assert (await http.put("/settings", json=body)).status_code == 200
+        # Listede kalmis, artik evrende olmayan eski sembol baska ayarin kaydini engellemez.
+        stale = app.repo.get_bot_settings()
+        stale.enabled_symbols = {"XAUUSD", "ESKISYM"}
+        app.repo.set_bot_settings(stale)
+        again = (await http.get("/settings")).json()
+        assert (await http.put("/settings", json={**again, "news": {**again["news"], "window_minutes": 45}})
+                ).status_code == 200
+    saved = app.repo.get_bot_settings()
+    assert saved.manage.trail_enabled is False and saved.manage.be_enabled is True
+    assert saved.fusion.mid_score == 55 and saved.fusion.high_score == 85 and saved.news.window_minutes == 45

@@ -5,6 +5,8 @@ import { BotInput, BotPage, Disconnected } from "../src/bot/BotPage";
 import { parsePrice } from "../src/bot/PositionCard";
 import {
   PREVIEW_MAX_AGE_MS,
+  RISK_PCT_MAX,
+  RISK_PCT_MIN,
   clearPending,
   loadPending,
   previewMatches,
@@ -16,7 +18,7 @@ import {
 import { REAL_ACTION_NOTE, amountText, priceText } from "../src/bot/presentation";
 import { useBot } from "../src/bot/state";
 import { useResource } from "../src/resource";
-import type { BotSymbol, TradePreview, TradeRequest } from "../src/bot/types";
+import type { BotSymbol, PreviewRequest, TradePreview, TradeRequest } from "../src/bot/types";
 import { useTheme } from "../src/theme";
 import { Button, Card, Choices, Failure, Heading, Label, Loading, Row, ScreenHeader } from "../src/ui";
 
@@ -31,8 +33,9 @@ export default function ManualTrade() {
   const [sl, setSl] = useState("");
   const [tp, setTp] = useState("");
   const [lots, setLots] = useState("");
+  const [risk, setRisk] = useState("");
   // Önizleme, hangi istek için ve ne zaman alındığıyla birlikte tutulur.
-  const [preview, setPreview] = useState<{ data: TradePreview; trade: TradeRequest; at: number } | null>(null);
+  const [preview, setPreview] = useState<{ data: TradePreview; trade: PreviewRequest; at: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ text: string; bad: boolean } | null>(null);
   // Sonucu bilinmeyen emir. Cihazda saklanır: ekran kapanıp açılsa da kilit kalkmaz.
@@ -62,7 +65,7 @@ export default function ManualTrade() {
 
   const tradable = (symbols ?? []).filter((row) => row.open && row.quoted);
 
-  function request(): TradeRequest | string {
+  function request(): PreviewRequest | string {
     if (!symbol) return "Bir sembol seçin.";
     const slDistance = parsePrice(sl);
     if (slDistance === undefined || slDistance === null) return "Zarar durdurma mesafesi zorunludur (pozitif sayı).";
@@ -70,12 +73,17 @@ export default function ManualTrade() {
     if (tpDistance === null) return "Kâr al mesafesi pozitif bir sayı olmalı.";
     const volume = parsePrice(lots);
     if (volume === null) return "Lot pozitif bir sayı olmalı.";
+    const riskPct = parsePrice(risk);
+    if (riskPct === null || (riskPct !== undefined && (riskPct < RISK_PCT_MIN || riskPct > RISK_PCT_MAX)))
+      return "Risk yüzdesi 0,05 ile 2 arasında olmalı.";
+    if (volume !== undefined && riskPct !== undefined) return "Lot ya da risk yüzdesinden yalnızca birini girin.";
     return {
       symbol,
       side: SIDES[side],
       sl_distance: slDistance,
       ...(tpDistance !== undefined ? { tp_distance: tpDistance } : {}),
       ...(volume !== undefined ? { lots: volume } : {}),
+      ...(riskPct !== undefined ? { risk_pct: riskPct } : {}),
     };
   }
   function edited<T>(setter: (value: T) => void) {
@@ -181,8 +189,14 @@ export default function ManualTrade() {
       return setNotice({ text: "Önizleme eskidi (1 dakikadan eski); fiyat değişmiş olabilir. Yeniden önizleyin.", bad: true });
     }
     const shown = preview.data;
-    // Onaylanan lot, önizlemede gösterilen lottur.
-    const order: TradeRequest = { ...trade, lots: shown.lots };
+    // Onaylanan lot, önizlemede gösterilen lottur. Risk yüzdesi yalnızca öneri içindir; emirde lot gider.
+    const order: TradeRequest = {
+      symbol: trade.symbol,
+      side: trade.side,
+      sl_distance: trade.sl_distance,
+      ...(trade.tp_distance !== undefined ? { tp_distance: trade.tp_distance } : {}),
+      lots: shown.lots,
+    };
     Alert.alert(
       shown.symbol + " " + SIDE_TEXT[shown.side] + " emri gönderilsin mi?",
       [
@@ -221,6 +235,7 @@ export default function ManualTrade() {
               <BotInput accessibilityLabel="Zarar durdurma mesafesi" placeholder="SL mesafesi (fiyat farkı, zorunlu)" keyboardType="decimal-pad" editable={!busy && !locked} value={sl} onChangeText={edited(setSl)} />
               <BotInput accessibilityLabel="Kâr al mesafesi" placeholder="TP mesafesi (isteğe bağlı)" keyboardType="decimal-pad" editable={!busy && !locked} value={tp} onChangeText={edited(setTp)} />
               <BotInput accessibilityLabel="Lot" placeholder="Lot (boşsa risk yüzdesine göre önerilir)" keyboardType="decimal-pad" editable={!busy && !locked} value={lots} onChangeText={edited(setLots)} />
+              <BotInput accessibilityLabel="Risk yüzdesi" placeholder="Risk % (isteğe bağlı; boşsa ayardaki risk)" keyboardType="decimal-pad" editable={!busy && !locked} value={risk} onChangeText={edited(setRisk)} />
               <Button title="Önizle" onPress={() => void runPreview()} disabled={busy || locked} secondary />
             </Card>
           )}
@@ -232,6 +247,13 @@ export default function ManualTrade() {
               <Row name="Zarar durdur (yaklaşık)" value={priceText(preview.data.sl)} />
               <Row name="Kâr al (yaklaşık)" value={priceText(preview.data.tp)} />
               <Row name="En çok zarar" value={"−" + amountText(preview.data.loss, preview.data.currency) + (preview.data.loss_pct != null ? " (%" + String(Number(preview.data.loss_pct.toFixed(2))).replace(".", ",") + ")" : "")} />
+              <Row
+                name="Hesabın yüzdesi"
+                value={
+                  (preview.data.loss_pct != null ? "%" + String(Number(preview.data.loss_pct.toFixed(2))).replace(".", ",") : "—") +
+                  (preview.data.settings_risk_pct != null ? " (ayardaki sınır: %" + String(preview.data.settings_risk_pct).replace(".", ",") + ")" : "")
+                }
+              />
               <Row name="Olası kâr" value={preview.data.profit != null ? "+" + amountText(preview.data.profit, preview.data.currency) : "—"} />
               <Row name="Kâr/zarar oranı" value={preview.data.rr != null ? String(Number(preview.data.rr.toFixed(2))).replace(".", ",") : "—"} />
               {preview.data.warnings.map((warning) => (

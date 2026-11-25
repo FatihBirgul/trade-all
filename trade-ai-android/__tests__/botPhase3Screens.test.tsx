@@ -46,6 +46,8 @@ const settings = (): BotSettings => ({
   risk: { risk_pct: 0.5, max_open_bot: 3, per_symbol: 1, per_currency_side: 2, daily_loss_pct: 5, total_loss_pct: 25 },
   news: { enabled: true, window_minutes: 30 },
   fusion: { enabled: true, min_score: 40, mid_score: 60, high_score: 80 },
+  manage: { be_enabled: true, partial_enabled: true, trail_enabled: true },
+  enabled_symbols: null,
   dry_run: true,
   strategy_modes: {},
 });
@@ -235,6 +237,58 @@ test("reports can be refreshed and show when they were read", async () => {
   expect(ui.getByText(/^Son güncelleme: \d/)).toBeTruthy();
   await fireEvent.press(ui.getByText("Yenile"));
   await waitFor(() => expect(api.reports).toHaveBeenCalledTimes(2));
+});
+
+test("settings: thresholds, stop stages and symbol list are saved through one confirmation", async () => {
+  const { api } = setBot();
+  const ui = await show(<SettingsBot />);
+  await waitFor(() => expect(ui.getByLabelText("Orta güven eşiği (altı yarım lot)")).toBeTruthy());
+  expect(ui.getByText(/^Hepsi açık \(3\)/)).toBeTruthy();
+  await fireEvent.changeText(ui.getByLabelText("Orta güven eşiği (altı yarım lot)"), "30"); // en düşük puanın (40) altı
+  await fireEvent.press(ui.getByText("Kaydet"));
+  expect(ui.getByText("Güven eşikleri sıralı olmalı: en düşük ≤ orta ≤ yüksek.")).toBeTruthy();
+  expect(alert).not.toHaveBeenCalled();
+  await fireEvent.changeText(ui.getByLabelText("Orta güven eşiği (altı yarım lot)"), "70");
+  await fireEvent(ui.getByLabelText("İz süren stop"), "valueChange", false);
+  await fireEvent.press(ui.getByText("BTCUSD")); // sembolü kapat
+  expect(ui.getByText(/^2 \/ 3 açık/)).toBeTruthy();
+  await fireEvent.press(ui.getByText("Kaydet"));
+  expect(dialog().title).toBe("Dikkat: risk artıyor");
+  expect(dialog().message).toContain("Orta güven eşiği (altı yarım lot): 60 → 70");
+  expect(dialog().message).toContain("İz süren stop: Açık → Kapalı  ⚠ risk artar");
+  expect(dialog().message).toContain("Açık semboller: Hepsi → 2 (kapanan: BTCUSD)");
+  await pressDialog("Riski artır ve kaydet");
+  const apply = api.updateSettings.mock.calls[0][0] as (s: BotSettings) => BotSettings;
+  const saved = apply(settings());
+  expect(saved.fusion.mid_score).toBe(70);
+  expect(saved.manage).toEqual({ be_enabled: true, partial_enabled: true, trail_enabled: false });
+  expect(saved.enabled_symbols).toEqual(["EURUSD", "XAUUSD"]);
+});
+
+test("manual trade: a risk percentage sizes the preview; the order carries the previewed lot only", async () => {
+  const { api } = setBot({
+    previewTrade: jest.fn().mockResolvedValue({ ...preview, lots: 0.16, loss: 32, loss_pct: 0.98, risk_pct: 1, settings_risk_pct: 0.5,
+      warnings: ["Bu lotla zarar, risk sınırınızın (%0.5) üstünde"] }),
+  });
+  const ui = await show(<ManualTrade />);
+  await fillTrade(ui);
+  await fireEvent.changeText(ui.getByLabelText("Risk yüzdesi"), "3");
+  await fireEvent.press(ui.getByText("Önizle"));
+  expect(ui.getByText("Risk yüzdesi 0,05 ile 2 arasında olmalı.")).toBeTruthy();
+  await fireEvent.changeText(ui.getByLabelText("Risk yüzdesi"), "1");
+  await fireEvent.changeText(ui.getByLabelText("Lot"), "0,5");
+  await fireEvent.press(ui.getByText("Önizle"));
+  expect(ui.getByText("Lot ya da risk yüzdesinden yalnızca birini girin.")).toBeTruthy();
+  expect(api.previewTrade).not.toHaveBeenCalled();
+  await fireEvent.changeText(ui.getByLabelText("Lot"), "");
+  await fireEvent.press(ui.getByText("Önizle"));
+  await waitFor(() => expect(ui.getByText("Emri gönder")).toBeTruthy());
+  expect(api.previewTrade).toHaveBeenCalledWith({ symbol: "EURUSD", side: "BUY", sl_distance: 0.002, tp_distance: 0.004, risk_pct: 1 });
+  expect(within(ui.getByTestId("row-Hesabın yüzdesi")).getByText("%0,98 (ayardaki sınır: %0,5)")).toBeTruthy();
+  await fireEvent.press(ui.getByText("Emri gönder"));
+  expect(dialog().message).toContain("⚠ Bu lotla zarar, risk sınırınızın");
+  await pressDialog("Emri gönder");
+  expect(api.openTrade.mock.calls[0][0]).toEqual({ symbol: "EURUSD", side: "BUY", sl_distance: 0.002, tp_distance: 0.004, lots: 0.16 });
 });
 
 // ------------------------------------------------------------------ Elle işlem

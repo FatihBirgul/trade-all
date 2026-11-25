@@ -147,7 +147,8 @@ async def test_summary_names_symbols_whose_data_was_rejected_and_where_the_gap_i
     summary = await app.bot.on_bar_close()
     assert summary.would_open == 0
     note = summary.data_rejects["XAUUSD"]
-    assert note.startswith("missing candle") and "[H1 " in note and note.rstrip("]").endswith(("OPEN", "CLOSING_SOON"))
+    assert note.startswith("missing candle") and "[H1 " in note and ("OPEN]" in note or "CLOSING_SOON]" in note)
+    assert note.endswith("(onarım denendi: borsada da yok)")  # borsa da o mumu vermiyor: gercek bosluk
     body = (await public_get(app, "/health/summary")).json()
     assert body["last_data_rejects"]["XAUUSD"] == note
     assert set(body["last_data_rejects"]) <= {"XAUUSD", "EURUSD", "GBPUSD", "BTCUSD"}
@@ -156,3 +157,36 @@ async def test_summary_names_symbols_whose_data_was_rejected_and_where_the_gap_i
     # Liste her zaman EN SON taramaya aittir: atlanan taramadan sonra da eski liste kalmaz.
     app.repo.add_event("info", "scan", "tarama", {"scanned": 4})
     assert (await public_get(app, "/health/summary")).json()["last_data_rejects"] == {}
+
+
+def h1_requests(app):
+    return [c for c in app.fake.calls("GET", "/candles") if "instrument=XAUUSD&timeframe=H1" in c[1]]
+
+
+async def test_a_hole_in_the_candle_cache_is_healed_when_the_exchange_has_the_bar(tmp_path):
+    """Onbellek yalnizca son mumdan sonrasini ceker; arada kalan bosluk kendiliginden kapanmazdi."""
+    app = await started(tmp_path, dry_run=True)
+    assert (await app.bot.on_bar_close()).would_open == 1
+    hole = app.fake.candles[("XAUUSD", "H1")][-10]["time"]
+    deleted = app.bot.candles._db.execute(
+        "DELETE FROM candles WHERE symbol = 'XAUUSD' AND tf = 'H1' AND time = ?", (hole,)).rowcount
+    assert deleted == 1  # onbellekte bosluk; borsada mum var
+    broken = await app.bot.on_bar_close()
+    assert broken.would_open == 0 and "onarıldı: mum geldi" in broken.data_rejects["XAUUSD"]
+    healed = await app.bot.on_bar_close()
+    assert "XAUUSD" not in healed.data_rejects
+    assert healed.reasons.get("INSUFFICIENT_DATA", 0) == 0
+
+
+async def test_a_real_market_gap_is_asked_for_once_not_on_every_scan(tmp_path):
+    app = await started(tmp_path, dry_run=True)
+    rows = app.fake.candles[("XAUUSD", "H1")]
+    hole = rows[-10]["time"]
+    app.fake.set_candles("XAUUSD", "H1", [r for r in rows if r["time"] != hole])  # borsada da yok
+    first = await app.bot.on_bar_close()
+    assert "borsada da yok" in first.data_rejects["XAUUSD"]
+    asked = len(h1_requests(app))
+    for _ in range(3):
+        again = await app.bot.on_bar_close()
+        assert "borsada da yok" in again.data_rejects["XAUUSD"]
+    assert len(h1_requests(app)) == asked  # ayni bosluk icin yeniden istek yok (istek limiti korunur)

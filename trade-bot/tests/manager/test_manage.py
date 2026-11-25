@@ -136,3 +136,53 @@ def test_custom_thresholds():
     assert run(staged, bid=1.10300, settings=settings) == [PartialClose(0.03)]
     trailing = buy(sl=1.10003, be_done=True, partial_done=True)
     assert run(trailing, bid=1.10700, settings=settings) == [MoveSL(1.10500, "trail")]
+
+
+def test_stages_can_be_switched_off_one_by_one():
+    """Asama anahtarlari: kapatilan asama atlanir, digerleri calisir; stop asla gevsemez."""
+    no_be = ManageSettings(be_enabled=False)
+    assert run(buy(), bid=1.10300, settings=no_be) == []  # 1R: basa bas kapali
+    jump = run(buy(), bid=1.10600, settings=no_be)  # 2R: kismi kapatma yine yapilir, basa bas yok
+    assert moves(jump) == [] and any(isinstance(a, PartialClose) for a in jump)
+
+    no_partial = ManageSettings(partial_enabled=False)
+    actions = run(buy(be_done=True, sl=1.10003), bid=1.10600, settings=no_partial)
+    assert not any(isinstance(a, (PartialClose, NoOp)) for a in actions)
+    # Kismi kapatma kapaliyken iz suren stop ayni esikte (2R) baslar.
+    assert moves(actions) == [MoveSL(pytest.approx(1.10500), "trail")]
+    assert moves(run(buy(be_done=True, sl=1.10003), bid=1.10590, settings=no_partial)) == []  # 2R'den once iz yok
+
+    no_trail = ManageSettings(trail_enabled=False)
+    after_partial = buy(be_done=True, partial_done=True, sl=1.10003, volume=0.05)
+    assert moves(run(after_partial, bid=1.10900, settings=no_trail)) == []
+    assert moves(run(after_partial, bid=1.10900)) != []  # acikken izler
+
+    all_off = ManageSettings(be_enabled=False, partial_enabled=False, trail_enabled=False)
+    assert run(buy(), bid=1.11500, settings=all_off) == []  # hicbir asama yok; ilk stop yerinde kalir
+
+
+def test_switches_on_the_sell_side_and_after_price_falls_back():
+    no_be = ManageSettings(be_enabled=False)
+    assert run(sell(), bid=1.09698, settings=no_be) == []  # 1R kârda: basa bas kapali
+    no_partial = ManageSettings(partial_enabled=False)
+    trade = sell(be_done=True, sl=1.09997)
+    at_2r = run(trade, bid=1.09398, settings=no_partial)  # ask 1.09400 = 2R
+    assert not any(isinstance(a, (PartialClose, NoOp)) for a in at_2r)
+    assert moves(at_2r) == [MoveSL(pytest.approx(1.09500), "trail")]
+    # Fiyat 2R'nin altina geri donunce hicbir hareket yok: stop oldugu yerde kalir, gevsemez.
+    trailed = sell(be_done=True, sl=1.09500)
+    assert run(trailed, bid=1.09450, settings=no_partial) == []
+    assert run(trailed, bid=1.09700, settings=no_partial) == []
+
+
+def test_switching_a_stage_off_mid_trade_never_loosens_the_stop():
+    done = buy(be_done=True, partial_done=True, sl=1.10400, volume=0.05)
+    for settings in (ManageSettings(be_enabled=False), ManageSettings(partial_enabled=False),
+                     ManageSettings(trail_enabled=False),
+                     ManageSettings(be_enabled=False, partial_enabled=False, trail_enabled=False)):
+        for bid in (1.10100, 1.10450, 1.10600, 1.11500):
+            for action in moves(run(done, bid=bid, settings=settings)):
+                assert action.price > done.sl, (settings, bid, action)  # yalnizca siklastirma
+    # Kismi kapatma islem ortasinda yeniden acilirsa bir kez yapilir.
+    late = buy(be_done=True, sl=1.10400)
+    assert any(isinstance(a, PartialClose) for a in run(late, bid=1.10700))
