@@ -17,6 +17,8 @@ import sys
 
 BLOCK = re.compile(r"-----BEGIN ([A-Z0-9 ]*PRIVATE KEY)-----(.*?)-----END \1-----", re.S)
 BODY = re.compile(r"^[A-Za-z0-9+/=]+$")
+MARKER = re.compile(r"-----(?:BEGIN|END) [A-Z0-9 ]+-----")
+OPENSSH_MAGIC = "b3BlbnNzaC1rZXktdjEA"  # base64("openssh-key-v1\0")
 
 
 class KeyError_(ValueError):
@@ -27,13 +29,21 @@ def diagnose(raw: str) -> str:
     """Anahtarin kendisini iceremeyen, yalnizca bicimi anlatan ozet."""
     return (f"uzunluk={len(raw)} satir={raw.count(chr(10)) + 1} CR={'var' if chr(13) in raw else 'yok'} "
             f"BEGIN={'var' if '-----BEGIN ' in raw else 'yok'} END={'var' if '-----END ' in raw else 'yok'} "
-            f"acik_anahtar={'evet' if raw.lstrip().startswith(('ssh-ed25519 ', 'ssh-rsa ', 'ecdsa-')) else 'hayir'}")
+            f"acik_anahtar={'evet' if raw.lstrip().startswith(('ssh-ed25519 ', 'ssh-rsa ', 'ecdsa-')) else 'hayir'} "
+            f"openssh_govdesi={'evet' if re.sub(r'\\s+', '', raw).startswith(OPENSSH_MAGIC) else 'hayir'}")
 
 
 def normalize(raw: str) -> str:
     text = raw.replace("\r", "").replace("\\n", "\n")
     match = BLOCK.search(text)
     if match is None:
+        # Baslik/bitis satirlari olmadan (ya da yalnizca biri ile) yapistirilmis govde: OpenSSH ozel
+        # anahtarinin govdesi her zaman "openssh-key-v1\0" imzasiyla baslar. Imza tutuyorsa satirlar eklenir.
+        bare = re.sub(r"\s+", "", MARKER.sub("", text))
+        if bare.startswith(OPENSSH_MAGIC) and BODY.match(bare):
+            lines = [bare[i:i + 70] for i in range(0, len(bare), 70)]
+            return "\n".join(["-----BEGIN OPENSSH PRIVATE KEY-----", *lines,
+                              "-----END OPENSSH PRIVATE KEY-----"]) + "\n"
         raise KeyError_("ozel anahtar blogu bulunamadi (-----BEGIN ... PRIVATE KEY----- ile "
                         "-----END ... PRIVATE KEY----- satirlari dahil tamami yapistirilmali)")
     label, body = match.group(1), re.sub(r"\s+", "", match.group(2))
