@@ -624,6 +624,10 @@ def parse_deals(raw: Any) -> tuple[list[Deal], str | None]:
         if deal:
             deals.append(deal)
     cursor = _text(raw.get("next_cursor")) if isinstance(raw, dict) else None
+    if cursor is None and isinstance(raw, dict) and raw.get("has_more") is True:
+        # Devami var ama imlec okunamadi: sessizce eksik gecmisle devam etmek (kapanis ya da para
+        # yatirma/cekme kacirmak) yerine acik hata.
+        raise ValueError("deal gecmisinin devami var ama next_cursor okunamadi")
     return deals, cursor
 
 
@@ -655,6 +659,8 @@ def snapshot_path(account_id: str) -> str:
 def operation_path(account_id: str, operation_id: str) -> str:
     return f"/v1/trading/accounts/{_check_id(account_id, 'hesap')}/operations/{_check_id(operation_id, 'operasyon')}"
 
+
+DEAL_BALANCE = "balance"  # para yatirma/cekme deal turu
 
 # Kimlik hatasi kodlari (Trading Error Codes).
 AUTH_INVALID_API_KEY = 1000

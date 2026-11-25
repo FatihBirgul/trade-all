@@ -17,6 +17,8 @@ from . import schema
 
 log = logging.getLogger(__name__)
 
+STABLE_SECONDS = 30.0  # baglanti bu kadar ayakta kaldiysa "saglam" sayilir
+
 Connect = Callable[[str, dict[str, str]], Awaitable[Any]]
 
 
@@ -76,7 +78,7 @@ class Stream:
         start, maximum = self._backoff
         delay = start
         while not self._stopped:
-            received = False
+            connected_at = None
             socket = None
             try:
                 url, headers = await self.client.ws_endpoint(self.path)
@@ -87,11 +89,11 @@ class Stream:
                         await self._sleep(self.subscription_delay)
                     await socket.send(json.dumps(message))
                 self.connected = True
+                connected_at = self._clock()
                 self.connections += 1
                 self.disconnected_since = None
                 log.info("akis baglandi: %s", self.name)
                 async for raw in socket:
-                    received = True
                     self.last_message_at = self._clock()
                     try:
                         message = json.loads(raw)
@@ -120,7 +122,10 @@ class Stream:
                         pass
             if self._stopped:
                 break
-            if received:
+            # Bekleme yalnizca baglanti bir sure ayakta kaldiysa sifirlanir. Sunucu baglantiyi kabul edip
+            # bir mesajdan sonra kapatiyorsa (or. reddedilen abonelik) saniyede bir yeniden baglanmak
+            # baglanti/abonelik limitlerini ve ihlal sayacini doldururdu.
+            if connected_at is not None and self._clock() - connected_at >= STABLE_SECONDS:
                 delay = start
             await self._sleep(delay)
             delay = min(delay * 2, maximum)

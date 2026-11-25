@@ -93,6 +93,7 @@ async def run(settings: Settings, out_root: Path | None = None, *, client: Exnes
             _write(folder, name + ".json", data)
             if attempt == 2:
                 retried.append(name)
+                summary.setdefault("retried_errors", {})[name] = errors.pop(name)  # gecici: hata sayilmaz
             return data
         return None
 
