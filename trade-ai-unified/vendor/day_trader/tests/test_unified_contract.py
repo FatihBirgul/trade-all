@@ -18,10 +18,22 @@ class SnapshotContract(unittest.TestCase):
                          original['frames']['M15'][-1]['close'])
 
     def test_missing_open_bar_rejected(self):
+        # Two consecutive bars, or a gap near the newest bar, are still data errors.
+        for drop in ((10, 11), (-3,)):
+            with self.subTest(drop=drop):
+                p = fixture()
+                rows = p.data['XAUUSD']['candles']['M15']
+                for index in sorted((i % len(rows) for i in drop), reverse=True):
+                    del rows[index]
+                with self.assertRaisesRegex(DataError, 'missing candle'):
+                    capture(p, 'XAUUSD', 'M15', NOW)
+
+    def test_single_quiet_m15_bar_tolerated(self):
+        # One M15 bar without ticks while the schedule says open (daily rollover) is not a data error.
         p = fixture()
         del p.data['XAUUSD']['candles']['M15'][10]
-        with self.assertRaisesRegex(DataError, 'missing candle'):
-            capture(p, 'XAUUSD', 'M15', NOW)
+        frames = capture(p, 'XAUUSD', 'M15', NOW).payload()['frames']['M15']
+        self.assertEqual(frames[10]['time'] - frames[9]['time'], 1800)
 
     def test_real_volume_unfinished_and_boolean_rejected(self):
         for fields in ({'volume_kind': 'real', 'volume': 10}, {'is_final': False},

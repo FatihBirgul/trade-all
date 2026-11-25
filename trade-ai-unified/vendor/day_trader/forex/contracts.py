@@ -34,10 +34,16 @@ class Snapshot:
         return json.loads(self.payload_json)
 
 
+QUIET_BAR_TIMEFRAME = 'M15'
+QUIET_BAR_LIMIT = 4  # 256 M15 bars span under three days: at most a few rollovers
+QUIET_BAR_MIN_AGE_BARS = 16  # no tolerated gap within the newest four hours of the series
+
+
 def _bars(rows, timeframe, as_of, metadata, symbol, provider_name):
     if not isinstance(rows, (list, tuple)) or not 200 <= len(rows) <= 256:
         raise DataError('insufficient or excessive closed candles')
     result = []
+    quiet = []  # open times of bars that follow a tolerated single-bar gap
     duration = TIMEFRAMES[timeframe]
     for raw in rows:
         if not isinstance(raw, dict):
@@ -92,8 +98,17 @@ def _bars(rows, timeframe, as_of, metadata, symbol, provider_name):
                 status = broker_status(datetime.fromtimestamp(missing, timezone.utc), '',
                                        metadata.get('trade_allowed'), metadata.get('broker_hours'))
                 if status['status'] not in ('CLOSED','OPENING_SOON'):
+                    # A single M15 bar with no ticks while the schedule says open happens at
+                    # the daily rollover (trade bot live dry-run, 2026-11-25: the exchange
+                    # itself has no such bar). Tolerated only on M15, only one bar wide, at
+                    # most QUIET_BAR_LIMIT per series and never near the newest bar.
+                    if timeframe == QUIET_BAR_TIMEFRAME and gap == duration and len(quiet) < QUIET_BAR_LIMIT:
+                        quiet.append(t)
+                        break
                     raise DataError('missing candle during open or unknown broker hours')
         result.append(bar)
+    if quiet and result[-1]['time'] - quiet[-1] < QUIET_BAR_MIN_AGE_BARS * duration:
+        raise DataError('missing candle during open or unknown broker hours')
     validate_bars(result, timeframe, as_of)
     if as_of - result[-1]['close_time_utc'] > duration * 2:
         raise DataError('stale candles')
