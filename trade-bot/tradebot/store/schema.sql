@@ -45,6 +45,15 @@ CREATE TABLE IF NOT EXISTS realized (
 );
 CREATE INDEX IF NOT EXISTS realized_at ON realized (at);
 
+-- Para yatirma/cekme (balance turu deal): her biri tam bir kez islenir (WS olayi ve gecmis ayni deal'i
+-- getirebilir). applied = 1 ise tutar kayip siniri tabanina (start_capital) eklenmistir.
+CREATE TABLE IF NOT EXISTS balance_ops (
+    deal_id TEXT PRIMARY KEY,
+    at REAL NOT NULL,
+    amount REAL NOT NULL,
+    applied INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS orders (
     idempotency_key TEXT PRIMARY KEY,
     setup_id TEXT,

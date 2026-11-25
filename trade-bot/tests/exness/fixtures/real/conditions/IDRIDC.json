@@ -1,0 +1,87 @@
+{
+ "base_currency": "IDR",
+ "calc_mode": "forex",
+ "category": "Other",
+ "contract_size": "100000",
+ "description": "Indonesian Rupieh vs Indonesian sen",
+ "exec_mode": "market",
+ "instrument": "IDRIDC",
+ "international_name": "IDR/IDC",
+ "margin_currency": "IDR",
+ "margin_percent": "1",
+ "point_digits": 3,
+ "quote_currency": "IDC",
+ "swap_long": "0",
+ "swap_multipliers": [
+  {
+   "day": "FRI",
+   "multiplier": 1
+  },
+  {
+   "day": "MON",
+   "multiplier": 1
+  },
+  {
+   "day": "SAT",
+   "multiplier": 0
+  },
+  {
+   "day": "SUN",
+   "multiplier": 0
+  },
+  {
+   "day": "THU",
+   "multiplier": 1
+  },
+  {
+   "day": "TUE",
+   "multiplier": 1
+  },
+  {
+   "day": "WED",
+   "multiplier": 3
+  }
+ ],
+ "swap_short": "0",
+ "trade_mode": "trading_disabled",
+ "trade_sessions": [
+  {
+   "trade_mode": "trading_disabled",
+   "week_end_time": "Sun, 23:59:59",
+   "week_start_time": "Sun, 00:00:00"
+  },
+  {
+   "trade_mode": "trading_disabled",
+   "week_end_time": "Mon, 23:59:59",
+   "week_start_time": "Mon, 00:00:00"
+  },
+  {
+   "trade_mode": "trading_disabled",
+   "week_end_time": "Tue, 23:59:59",
+   "week_start_time": "Tue, 00:00:00"
+  },
+  {
+   "trade_mode": "trading_disabled",
+   "week_end_time": "Wed, 23:59:59",
+   "week_start_time": "Wed, 00:00:00"
+  },
+  {
+   "trade_mode": "trading_disabled",
+   "week_end_time": "Thu, 23:59:59",
+   "week_start_time": "Thu, 00:00:00"
+  },
+  {
+   "trade_mode": "trading_disabled",
+   "week_end_time": "Fri, 23:59:59",
+   "week_start_time": "Fri, 00:00:00"
+  },
+  {
+   "trade_mode": "trading_disabled",
+   "week_end_time": "Sat, 23:59:59",
+   "week_start_time": "Sat, 00:00:00"
+  }
+ ],
+ "volume_max": "0",
+ "volume_min": "0",
+ "volume_step": "0"
+}

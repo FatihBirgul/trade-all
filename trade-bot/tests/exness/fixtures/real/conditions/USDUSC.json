@@ -1,0 +1,50 @@
+{
+ "base_currency": "USD",
+ "calc_mode": "forex",
+ "category": "Other",
+ "contract_size": "100000",
+ "description": "US Dollar vs US cent",
+ "exec_mode": "market",
+ "instrument": "USDUSC",
+ "international_name": "USD/USC",
+ "margin_currency": "USD",
+ "margin_percent": "1",
+ "point_digits": 0,
+ "quote_currency": "USC",
+ "swap_long": "0",
+ "swap_multipliers": [
+  {
+   "day": "FRI",
+   "multiplier": 1
+  },
+  {
+   "day": "MON",
+   "multiplier": 1
+  },
+  {
+   "day": "SAT",
+   "multiplier": 0
+  },
+  {
+   "day": "SUN",
+   "multiplier": 0
+  },
+  {
+   "day": "THU",
+   "multiplier": 1
+  },
+  {
+   "day": "TUE",
+   "multiplier": 1
+  },
+  {
+   "day": "WED",
+   "multiplier": 3
+  }
+ ],
+ "swap_short": "0",
+ "trade_mode": "trading_disabled",
+ "volume_max": "0",
+ "volume_min": "0",
+ "volume_step": "0"
+}

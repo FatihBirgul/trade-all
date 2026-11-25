@@ -205,7 +205,7 @@ async def test_non_candidates_do_not_notify(tmp_path):
         summary = await app.bot.on_bar_close()
     assert summary.candidates == 0 and summary.reasons["NO_TRADE"] == 1  # diger sembollerde veri yok
     assert app.notifier.sent == [] and posts(app) == []
-    assert set(app.kinds()) == {"bot_started", "scan"}
+    assert set(app.kinds()) == {"capital_base", "bot_started", "scan"}
 
 
 async def test_auth_error_stops_scan_with_single_notification(tmp_path):

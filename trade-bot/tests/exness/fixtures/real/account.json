@@ -1,0 +1,16 @@
+{
+ "account_id": "123456",
+ "account_name": "test",
+ "create_date": "2026-11-24T00:00:00Z",
+ "is_demo": false,
+ "settings": {
+  "account_status": "active",
+  "currency": "USC",
+  "execution_mode": "market",
+  "leverage": "2000",
+  "margin_call_level": "60",
+  "stopout_level": "0",
+  "trade_mode": "enabled"
+ },
+ "stream_id": "dx.2.real.cent"
+}

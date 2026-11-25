@@ -100,3 +100,35 @@ Kod tarafi tamam (Task 1–14 adim 5). Kullanicidan beklenenler:
 - Task 1: `setup-https.sh` Caddy'yi kurar ve yalnizca `127.0.0.1:8090`'a vekillik eden bir Caddyfile yazar (erisim logu yok: `/stream` token'i diske dusmesin; admin API kapali; 64 KB govde siniri; HSTS). Genel adres `/etc/tradebot/public-url` dosyasina yazilir. `tradebot-pair` komutu (`/usr/local/bin`) eslestirme kodunu ve adresi gosterir.
 - `bootstrap.sh` kesfi servisten ONCE calistirir ve o sirada servisi durdurur: WebSocket baglanti siniri ve istek kotasi ortak. Exness degerleri gorunmeden okunur, 128 hex anahtar gercek Ed25519 dogrulamasindan gecer, env dosyasina yalnizca guvenli karakterler yazilir.
 - **VPS'te dogrulanacak:** `sslip.io` icin Let's Encrypt sertifikasinin alinabildigi (hiz siniri) ve 80/443'un disaridan erisilebildigi.
+
+## İlk canlı keşif (2026-11-25) ve düzeltmeler
+
+- Gerçek yanıtlar `tests/exness/fixtures/real/` altında (hesap no maskeli); ayrıştırıcılar değişmeden geçti. Cent hesap: semboller eksiz (`EURUSD`), EURUSD `contract_size` 1000, para birimi USC, evren 30 enstrüman.
+- WebSocket: sunucu `exness-ws-protocol` alt-protokolünü seçiyor; istemci artık öneriyor (`schema.WS_SUBPROTOCOL`).
+- Mum: 9 istekten yalnızca ilki `AUTH_INVALID_API_KEY` (1000) ile reddedildi → `CandleStore._fetch` yalnızca bu kodda bir kez yineler; REST istemcisi hâlâ hiçbir isteği yinelemez.
+- Limitler (gerçek): mum 2 istek/sn, genel 15/sn, emir 4/sn, en çok 5 WebSocket bağlantısı.
+- Sermaye tabanı (kontrolcü kararı): deneme modunda geçici (varlığı izler); bot ilk kez canlıya geçtiğinde o andaki varlıktan alınır ve ölçüm o andan başlar (`capital_base_live`). Deneme moduna gidip dönmek tabanı sıfırlamaz. Boş hesapla taban kurulmaz.
+- Para yatırma/çekme (`balance` türü deal): bot K/Z'sine girmez; canlı tabanı tutar kadar kaydırır, her deal bir kez (`balance_ops`). Kaynak: olay akışı + 5 dakikada bir deal geçmişi. Tabandan önceki işlemler yalnızca kaydedilir.
+- `/health` son taramanın sayılarını verir (hesap bilgisi yok); `deploy/status.sh` ve iş akışının `status` kipi dağıtım sonrası doğrulama içindir.
+- Hâlâ gerçek örneği olmayanlar: pozisyon, emir, deal, tick, WS olayları, ACK, operasyon durumu → ilk asgari lot işleminde doğrulanacak.
+- Canlıya geçiş onayı (kontrolcü kararı): `PUT /settings` ile `dry_run: true → false` yalnızca `?confirm_live=true` ile kabul edilir (yoksa 409); gövdeye gömülü onay kabul edilmez. Deneme moduna dönüş onay istemez. Canlıya tekrar dönüşte taban sıfırlanmaz (onaylandı).
+
+## Üçüncü bağımsız inceleme (2026-11-25; ikinci tur düzeltmeleri + canlı keşif düzeltmeleri)
+
+Kritik bulgu yok; "deneme modunda dağıtılabilir". İkinci tur düzeltmeleri (N1–N6) doğru bulundu. Düzeltilenler:
+- I-1: stop doğrulaması yapılamadıysa 15 sn sonra yeniden denenir (her 2 sn'lik turda değil; 429'u döngüde yinelemiyoruz).
+- I-2: TP geri yüklenirken SL de birlikte gönderilir (verilmeyen alan siliniyorsa stop silinmesin).
+- I-4: taban alınırken geçmişteki para yatırma/çekme işlemleri kimlikle "görüldü" işaretlenir (broker/sunucu saat farkı çifte saymaya yol açamaz).
+- I-5: taban 0'dan yeniden kurulurken ölçüm başlangıcı korunur (hesabı boşaltıp doldurmak önceki bot zararını silmez).
+- I-6: akış beklemesi yalnızca bağlantı 30 sn ayakta kaldıysa sıfırlanır (kabul-et-kapat döngüsü saniyede bir yeniden bağlanmaz).
+- I-7: fiyat akışının döndürdüğü hata loglanır; `/health` `last_scan.quoted` (taze fiyatlı sembol) ve `tick_errors` verir.
+- I-8: mum servisinin art arda 1000 reddi taramayı bırakır ama yönetim isteklerini kilitlemez (`market_data_rejected`); imza/yetki reddi kilitler.
+- I-9: deal geçmişi 29 günle sınırlandı. Ayrıca `has_more` var ama imleç yoksa açık hata.
+- Kontrolcü: deneme modunda ilk okunan varlık `capital_seen` olayıyla, para yatırma/çekme `balance_change` olayıyla kayda geçer (biçim `/events` üzerinden doğrulanacak).
+
+İlk gerçek emirden ÖNCE yapılacaklar (inceleme kararı: "henüz değil"):
+1. Gerçek fixture'lar: balance deal, pozisyon, sltp emri, deal, tick, WS olayları (I-3, I-10). Deneme modunda terminalden elle 0.01 lot pozisyon açıp `/positions` içinde `sl`/`tp` göründüğünü doğrula; yoksa stop koruması sağlıklı pozisyonu ~96 sn'de kapatır.
+2. Kapanan elle işlemde `trade_closed` K/Z'sinin terminaldekiyle (USC, komisyon işareti) aynı olduğunu doğrula.
+3. İlk bot emrinde: PATCH verilmeyen TP'yi koruyor mu (I7), dolum olayı sltp emrini taşıyor mu, ACK/operasyon biçimleri, yeniden bağlanmada snapshot, `client_request_id` yankısı.
+4. Cuma 21:45 UTC girişleri (kapanıştan 13 dk önce) isteniyor mu: kullanıcı kararı.
+- Ertelenen (Minor): WS yönlendirmesinde imzalı başlıklar, hız sınırında pay, seansların yalnızca açılışta okunması (yaz saati), tick aboneliklerinde tek hatalı sembolün grubunu düşürmesi, N5 testlerinin eksikleri.

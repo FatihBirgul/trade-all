@@ -34,8 +34,16 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
     async def health():
         state = repo.bot_state()
         fresh = state.heartbeat_at is not None and clock() - state.heartbeat_at <= HEARTBEAT_STALE
+        scan = getattr(bot, "last_scan", None)
+        # Herkese acik: yalnizca calisma durumu ve sayilar. Bakiye, pozisyon ya da sinyal icermez.
+        last_scan = None if scan is None else {
+            "at": scan.at, "scanned": scan.scanned, "closed": scan.closed, "errors": scan.errors,
+            "skipped": scan.skipped,
+            # quoted: taranan sembollerden taze fiyati olanlar. 0 ise akis "bagli" gorunse de fiyat gelmiyor.
+            "quoted": scan.quoted, "candle_retries": scan.candle_retries}
         return {"status": "ok" if fresh else "stale", "last_scan_at": state.last_scan_at,
-                "heartbeat_at": state.heartbeat_at, "stream_connected": bot.streams_up(), "halted": state.halted}
+                "heartbeat_at": state.heartbeat_at, "stream_connected": bot.streams_up(), "halted": state.halted,
+                "last_scan": last_scan, "tick_errors": getattr(bot, "tick_errors", 0)}
 
     @public.post("/pair")
     async def pair(body: PairRequest):
@@ -194,9 +202,22 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
         return repo.get_bot_settings().model_dump(mode="json")
 
     @private.put("/settings")
-    async def put_settings(body: BotSettings):
+    async def put_settings(body: BotSettings, confirm_live: bool = Query(default=False)):
+        previous = repo.get_bot_settings()
+        if previous.dry_run and not body.dry_run and not confirm_live:
+            # Canli mod gercek para ile emir gonderir. Bu gecis, ayar govdesinden ayri ve acik bir onay
+            # ister: eski bir ayar kopyasini geri gonderen ya da baska bir alani degistiren istek botu
+            # farkinda olmadan canliya alamaz.
+            raise HTTPException(
+                status_code=409,
+                detail="canlı moda geçiş gerçek emir gönderir; onay için confirm_live=true ile gönderin")
         repo.set_bot_settings(body)
+        if previous.dry_run != body.dry_run:
+            repo.add_event("warning", "mode_changed",
+                           "Canlı moda geçildi: bot gerçek emir gönderecek" if not body.dry_run
+                           else "Deneme moduna geçildi: bot emir göndermeyecek", {"dry_run": body.dry_run})
         repo.add_event("info", "settings_changed", "Ayarlar güncellendi", body.model_dump(mode="json"))
+        await bot.settings_changed()  # canli moda ilk geciste kayip siniri tabani o andaki varliktan alinir
         return body.model_dump(mode="json")
 
     # ------------------------------------------------------------------ raporlar ve olaylar

@@ -10,6 +10,7 @@ from tests.execution.helpers import candidate, make_world
 from tests.fakes.exness import DEFAULT_INSTRUMENTS, conditions
 from tradebot.api.auth import issue_token
 from tradebot.api.server import create_app
+from tradebot.app import STOP_VERIFY_RETRY
 from tradebot.config import BotSettings, RiskSettings
 from tradebot.execution.reconcile import reconcile, risk_distance
 from tradebot.exness import schema
@@ -524,6 +525,13 @@ async def test_start_capital_is_set_later_if_account_was_unreadable_at_start(tmp
     assert app.repo.bot_state().start_capital == 10_000.0
 
 
+async def test_scan_on_an_empty_account_reads_real_market_data_and_opens_nothing(tmp_path):
+    app = await started(tmp_path, balance=0.0)
+    summary = await app.bot.on_bar_close()
+    assert summary.opened == 0 and app.fake.calls("POST", "/positions") == []
+    assert len(app.fake.calls("GET", "/candles")) > 0  # tarama yine de gercek veriyi okur
+
+
 def test_revoke_removes_all_tokens(tmp_path):
     from tests.exness.test_client import settings
     from tradebot.api.auth import verify_token
@@ -552,9 +560,34 @@ async def test_n1_guard_sends_nothing_when_it_cannot_verify(tmp_path):
     await app.bot.manage_tick()
     assert app.fake.calls("POST", "/orders") == [] and app.fake.calls("DELETE") == []
     assert app.fake.calls("PATCH") == [] and "sl_missing" not in app.kinds()
-    await app.bot.manage_tick()  # kontrol hakki harcanmadi: hemen yeniden dogrulanir
+    # Hemen (her 2 sn'lik turda) yeniden denenmez: 429 almis bir istegi dongude yinelemek olurdu.
+    snapshots = len(app.fake.calls("GET", "/snapshot"))
+    for _ in range(5):
+        app.advance(2)
+        await app.bot.manage_tick()
+    assert len(app.fake.calls("GET", "/snapshot")) == snapshots
+    app.advance(STOP_VERIFY_RETRY)  # kisa bir beklemeden sonra yeniden dogrulanir (30 sn'lik tam aralik beklenmez)
+    await _tick(app)
+    await app.bot.manage_tick()
+    assert len(app.fake.calls("GET", "/snapshot")) == snapshots + 1
     assert app.repo.get_trade(trade.position_id).sltp_order_id is not None
     assert app.fake.calls("POST", "/orders") == []
+
+
+async def test_guard_does_not_hammer_the_snapshot_while_rate_limited(tmp_path):
+    """Ucuncu inceleme I-1: 60 sn'de 30 anlik goruntu istegi olculmustu."""
+    app = await started(tmp_path)
+    app.fake.omit_sltp_in_event = True
+    await open_one(app)
+    app.advance(10)
+    before = len(app.fake.calls("GET", "/snapshot"))
+    for _ in range(30):  # 60 saniye boyunca her yonetim turu
+        app.fake.fail_next = ExnessRateLimited("REQUEST_RATE_LIMIT", retry_after=30, code=3015)
+        await _tick(app)
+        await app.bot.manage_tick()
+        app.advance(2)
+    assert len(app.fake.calls("GET", "/snapshot")) - before <= 5
+    assert app.fake.calls("POST", "/orders") == [] and app.fake.calls("DELETE") == []
 
 
 async def test_n2_rearm_uses_last_confirmed_stop_and_restores_take_profit(tmp_path):
@@ -853,3 +886,91 @@ def test_existing_database_gains_new_columns(tmp_path):
     saved = repo.upsert_trade(Trade(position_id="1", origin="bot", symbol="EURUSD", side="BUY", volume=0.1,
                                     entry=1.1, last_sl=1.09, planned_tp=1.13))
     assert (saved.last_sl, saved.planned_tp) == (1.09, 1.13)
+
+
+# ---------------------------------------------------------------- ucuncu inceleme (canli oncesi)
+async def test_take_profit_restore_sends_the_stop_too(tmp_path):
+    """I-2: verilmeyen alan siliniyorsa yalnizca TP gondermek stopu silerdi."""
+    app = await started(tmp_path)
+    app.fake.patch_replaces = True
+    trade = await open_one(app)
+    risk = trade.initial_risk_r_price
+    await app.fake.set_price("XAUUSD", round(trade.entry + risk, 2), round(trade.entry + risk + 0.2, 2))
+    await app.bot.manage_tick()  # SL girise cekilir; sahte broker TP'yi siler
+    await app.fake.flush()
+    assert "tp_lost" in app.kinds()
+    restore = app.fake.calls("PATCH")[-1][2]
+    assert restore.get("take_profit_price") is not None and restore.get("stop_loss_price") is not None
+    await app.fake.flush()
+    order = next(o for o in app.fake.orders.values()
+                 if o.get("order_type") == "sltp" and o["position_id"] == trade.position_id
+                 and o["state"] in ("placed", "pending_new"))
+    assert order.get("stop_loss_price") is not None and order.get("take_profit_price") is not None
+
+
+async def test_single_candle_rejection_does_not_cost_the_scan(tmp_path):
+    """Canli kesif: ilk mum istegi AUTH_INVALID_API_KEY ile reddedildi. Tarama surmeli, kilit kurulmamali."""
+    app = await started(tmp_path)
+
+    async def no_sleep(seconds):
+        pass
+    app.bot.candles._sleep = no_sleep
+    app.fake.fail_next = ExnessAuthError("AUTH_INVALID_API_KEY", code=1000, status=401)
+    summary = await app.bot.on_bar_close()
+    assert summary.skipped is None and summary.scanned == 4 and summary.opened == 1
+    assert summary.candle_retries == 1
+    assert "auth_error" not in app.kinds() and "auth_error" not in app.notifier.kinds()
+    assert app.bot._auth_blocked() is False
+
+
+async def test_repeated_candle_rejection_stops_the_scan_but_not_position_management(tmp_path):
+    """I-8: piyasa verisi reddi stop takibini ve mutabakati durdurmamali, bildirim yagdirmamali."""
+    app = await started(tmp_path)
+    trade = await open_one(app)
+
+    async def no_sleep(seconds):
+        pass
+    app.bot.candles._sleep = no_sleep
+    app.advance(900)
+    bid, ask = load_market(app.fake, "XAUUSD", app.clock["now"])
+    await feed_ticks(app, "XAUUSD", bid, ask, app.clock["now"])
+    real_get = app.fake.get
+
+    async def rejecting(path):
+        if "/candles" in path:
+            app.fake.requests.append(("GET", path, None, ""))
+            raise ExnessAuthError("AUTH_INVALID_API_KEY", code=1000, status=401)
+        return await real_get(path)
+    app.fake.get = rejecting
+    before = len(app.fake.calls("GET", "/candles"))
+    summary = await app.bot.on_bar_close()
+    assert summary.skipped == "market_data_rejected" and summary.opened == 0
+    assert len(app.fake.calls("GET", "/candles")) - before == 2  # bir istek ve tek yinelemesi; dongu yok
+    assert "auth_error" not in app.kinds() and "market_data_rejected" in app.kinds()
+    assert "auth_error" not in app.notifier.kinds()
+    assert app.bot._auth_blocked() is False
+    assert await app.bot.reconcile_now() is True  # yonetim istekleri kilitlenmedi
+    assert app.repo.get_trade(trade.position_id).is_open
+
+
+async def test_signature_rejection_on_candles_still_latches(tmp_path):
+    app = await started(tmp_path)
+    app.fake.fail_next = ExnessAuthError("AUTH_INVALID_SIGNATURE", code=1001, status=401)
+    summary = await app.bot.on_bar_close()
+    assert summary.skipped == "auth_error" and app.bot._auth_blocked() is True
+
+
+async def test_rejected_tick_subscription_is_visible(tmp_path):
+    """I-7: fiyat akisi 'bagli' gorunurken abonelik reddedilmis olabilir; saglik ciktisi bunu gostermeli."""
+    app = await started(tmp_path)
+    await app.bot.on_tick_message({"code": 3000, "error_message": "REQUEST_INVALID"})
+    assert app.bot.tick_errors == 1
+    summary = await app.bot.on_bar_close()
+    assert summary.scanned == 4 and summary.quoted == 1  # yalnizca fiyati gelen sembol
+
+
+def test_deal_history_with_more_pages_but_no_cursor_fails_loudly():
+    with pytest.raises(ValueError, match="next_cursor"):
+        schema.parse_deals({"items": [], "has_more": True})
+    assert schema.parse_deals({"items": [], "has_more": True, "next_cursor": "abc"}) == ([], "abc")
+    assert schema.parse_deals({"items": [], "has_more": False}) == ([], None)

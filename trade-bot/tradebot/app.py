@@ -17,7 +17,7 @@ from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 
 from .config import BotSettings, Settings
 from .execution.executor import Executor
-from .execution.reconcile import reconcile
+from .execution.reconcile import fetch_all_deals, reconcile
 from .store.repo import Trade
 from .exness import schema
 from .exness.errors import ExnessAuthError, ExnessError, ExnessRateLimited, ExnessUnavailable
@@ -44,12 +44,18 @@ RESOLVE_INTERVAL = 10.0
 STREAM_ALERT_AFTER = 60.0
 QUOTE_MAX_AGE = 60.0
 EQUITY_SAMPLE_INTERVAL = 300.0
+BALANCE_SYNC_INTERVAL = 300.0  # para yatirma/cekme icin deal gecmisi bu aralikla taranir (olay kacmis olabilir)
+BALANCE_SEEN_LOOKBACK = 2 * 86400.0  # taban alinirken "zaten icinde" sayilacak yakin gecmis
+BALANCE_HISTORY_DAYS = 29  # gecmis sorgusu sinirinin (30 gun) icinde kalinir
+CAPITAL_SEEN = "capital_seen"  # ayar anahtari: deneme modunda ilk okunan varlik kaydedildi mi
+BASE_LIVE = "capital_base_live"  # ayar anahtari: sermaye tabani canli moda geciste alindi mi
 RECONCILE_INTERVAL = 300.0  # olay kacirilmis olabilir: broker durumu duzenli olarak yeniden okunur
 AUTH_BACKOFF_START = 30.0  # kimlik reddinden sonra yonetim isteklerinin durdugu sure (art arda redde katlanir)
 AUTH_BACKOFF_MAX = 300.0
 AUTH_ALERT_TTL = 3600.0  # bu sureden sonra yeni bir kimlik reddi yeniden bildirilir
 STOP_GRACE = 5.0  # dolumdan sonra SL/TP emrinin gorulmesi icin taninan sure
 STOP_RECHECK = 30.0
+STOP_VERIFY_RETRY = 15.0  # stop dogrulamasi yapilamadiysa yeniden deneme araligi
 STOP_RECHECK_UNKNOWN = 300.0  # seviye bilinmiyorsa (elle mudahale gerekir) daha seyrek kontrol
 REARM_LIMIT = 3  # stop bu kadar denemede kurulamazsa pozisyon kapatilir
 ATR_MAX_AGE_BARS = 3
@@ -66,6 +72,8 @@ class ScanSummary:
     blocked: int = 0
     errors: int = 0
     skipped: str | None = None
+    quoted: int = 0  # taranan sembollerden taze fiyati (tick) olanlar; 0 ise fiyat akisi calismiyor demektir
+    candle_retries: int = 0  # ikinci denemede gecen mum istekleri (gecici AUTH_INVALID_API_KEY)
     reasons: dict[str, int] = field(default_factory=dict)
     blocked_reasons: dict[str, int] = field(default_factory=dict)
 
@@ -86,7 +94,7 @@ class Bot:
         self._stream_factory = stream_factory or _default_stream_factory
         self.catalog = InstrumentCatalog(client)
         self.quotes = QuoteBook(clock=clock)
-        self.candles = CandleStore(repo.conn, client, self.catalog, clock=clock)
+        self.candles = CandleStore(repo.conn, client, self.catalog, clock=clock, sleep=sleep)
         self.account: Account | None = None
         self.provider = ExnessV9Provider(self.catalog, self.candles, self.quotes, lambda: self.account)
         self.executor = Executor(client, repo, notifier, self.catalog, clock=clock,
@@ -99,6 +107,9 @@ class Bot:
         self._connection_alerted = False
         self._daily_blocked = False
         self._last_equity_sample = 0.0
+        self._balance_synced_at = 0.0
+        self.last_scan: ScanSummary | None = None
+        self.tick_errors = 0  # fiyat akisinin dondurdugu hata sayisi (reddedilen abonelik vb.)
         self._limits = schema.Limits()
         self._events_stream = None
         self._event_connections = 0
@@ -140,9 +151,7 @@ class Bot:
         self._set_account(snapshot.account)
         now = self._clock()
         state = self.repo.bot_state()
-        if state.start_capital is None and self.account is not None:
-            # Toplam kayip siniri botun ilk calistigi andaki sermayeye gore olculur (spec §6.3).
-            self.repo.set_bot_state(start_capital=self.account.equity, start_at=now)
+        await self._ensure_base(self.repo.get_bot_settings())
         report = await reconcile(self.client, self.repo, self.catalog, clock=self._clock, snapshot=snapshot)
         await self.executor.publish(report)
         self._open_streams()
@@ -197,6 +206,11 @@ class Bot:
     async def on_tick_message(self, raw: dict) -> None:
         tick = schema.parse_tick(raw)
         if tick is None:
+            # Abonelik yaniti ya da hata: reddedilen abonelik sessiz kalmamali (fiyat hic gelmez).
+            code, message = schema.parse_error(raw)
+            if code is not None:
+                log.warning("fiyat akisi hata dondurdu: %s (kod %s)", message, code)
+                self.tick_errors += 1
             return
         instrument = self.catalog.by_broker(tick.symbol)
         self.quotes.on_tick(dataclasses.replace(tick, symbol=instrument.symbol) if instrument else tick)
@@ -205,6 +219,8 @@ class Bot:
         kind, data = schema.parse_ws_event(raw)
         if kind == "transaction":
             self._set_account(data.account)
+            for deal in data.deals:
+                await self._apply_balance_deal(deal)  # para yatirma/cekme: tabani kaydirir, K/Z degildir
             await self.executor.on_transaction(data)
         elif kind == "snapshot":
             # Her (yeniden) baglanmada gelir: kacirilan olaylar icin durum buradan toparlanir.
@@ -245,12 +261,138 @@ class Bot:
         await self._record("error", "bot_halted", f"Bot durdu: {reason}. Devam için uygulamadan onay gerekli.",
                            {"reason": reason}, notify=True, title="Bot durdu")
 
-    async def _check_limits(self, settings: BotSettings) -> None:
+    def _base_is_live(self) -> bool:
+        return bool(self.repo.get_setting(BASE_LIVE, False))
+
+    async def _ensure_base(self, settings: BotSettings) -> None:
+        """Kayip sinirlarinin tabani (start_capital, start_at).
+
+        - Deneme modunda (ve bot henuz hic canli calismadiysa) taban GECICIdir: guncel varligi izler.
+          Deneme modunda bot islemi olmadigi icin bunun kayip olcumune etkisi yoktur.
+        - Bot ilk kez canli moda (dry_run=False) gectiginde taban o andaki gercek varliktan alinir ve
+          olcum o andan baslar. Sonrasinda taban yalnizca para yatirma/cekme ile ya da kullanicinin
+          kayip siniri durmasini bilincli onaylamasiyla degisir; deneme moduna gecip donmek tabani
+          sifirlamaz (aksi halde kayip siniri bir dugmeyle silinebilirdi).
+        - Varlik bilinmiyorsa ya da pozitif degilse taban kurulmaz: 0 taban hem yeni islemi hem
+          sinirlari kalici olarak devre disi birakirdi.
+        """
+        account = self.account
+        if account is None or account.equity <= 0:
+            return
         state = self.repo.bot_state()
-        if state.start_capital is None and self.account is not None:
-            # Acilista hesap okunamadiysa taban ilk firsatta kurulur; yoksa bot hic islem acamaz.
-            self.repo.set_bot_state(start_capital=self.account.equity, start_at=self._clock())
-            state = self.repo.bot_state()
+        now = self._clock()
+        if self._base_is_live():
+            if state.start_capital is None or state.start_capital <= 0:
+                # Taban tumuyle cekilmis ya da bozulmus: guncel varliktan yeniden kurulur. Olcum baslangici
+                # KORUNUR; yoksa hesabi bosaltip yeniden doldurmak onceki bot zararlarini silerdi.
+                self.repo.set_bot_state(start_capital=account.equity,
+                                        start_at=state.start_at if state.start_at is not None else now)
+                await self._mark_balance_history_seen()
+            return
+        if settings.dry_run:
+            if state.start_capital != account.equity or state.start_at is None:
+                self.repo.set_bot_state(start_capital=account.equity,
+                                        start_at=state.start_at if state.start_at is not None else now)
+            if not self.repo.get_setting(CAPITAL_SEEN, False):
+                # Canliya gecmeden once botun hesapta ilk okudugu (pozitif) varlik kayda gecer.
+                self.repo.set_setting(CAPITAL_SEEN, True)
+                await self._record(
+                    "info", "capital_seen",
+                    f"Deneme modu: hesapta okunan ilk varlık {account.equity:.2f} {account.currency} "
+                    f"(bakiye {account.balance:.2f}). Kayıp sınırı tabanı canlıya geçişte o andaki "
+                    "varlıktan alınacak.",
+                    {"equity": account.equity, "balance": account.balance, "currency": account.currency})
+            return
+        self.repo.set_bot_state(start_capital=account.equity, start_at=now)
+        self.repo.set_setting(BASE_LIVE, True)
+        self._balance_synced_at = now
+        await self._mark_balance_history_seen()
+        await self._record(
+            "info", "capital_base",
+            f"Canlı mod: kayıp sınırları {account.equity:.2f} {account.currency} üzerinden ölçülecek "
+            f"(günlük %{settings.risk.daily_loss_pct:g}, toplam %{settings.risk.total_loss_pct:g}).",
+            {"start_capital": account.equity, "currency": account.currency}, notify=True,
+            title="Canlı mod başladı")
+
+    async def _mark_balance_history_seen(self) -> None:
+        """Taban az once guncel varliktan alindi: gecmisteki tum para yatirma/cekme islemleri o varligin
+        icindedir. Kimlikleriyle "goruldu, uygulanmadi" diye kaydedilir; boylece broker saati ile sunucu
+        saati arasindaki fark yuzunden ayni tutar tabana ikinci kez eklenemez. Gecmis okunamazsa zaman
+        karsilastirmasi (deal zamani > taban ani) yine korur."""
+        now = self._clock()
+        try:
+            deals = await fetch_all_deals(self.client, now - BALANCE_SEEN_LOOKBACK)
+        except (ExnessError, ValueError) as exc:
+            log.warning("taban icin bakiye gecmisi okunamadi: %s", exc)
+            return
+        for deal in deals:
+            if deal.type == schema.DEAL_BALANCE and deal.profit:
+                self.repo.apply_balance_op(deal.id, deal.time if deal.time is not None else now, deal.profit,
+                                           apply=False)
+
+    async def settings_changed(self) -> None:
+        """Ayarlar degisti. Canli moda ilk geciste taban, taze okunan varliktan hemen alinir."""
+        settings = self.repo.get_bot_settings()
+        if not settings.dry_run and not self._base_is_live() and self.started:
+            await self.reconcile_now()  # varlik bayat olmasin (az once para yatirilmis olabilir)
+        await self._ensure_base(settings)
+
+    async def _apply_balance_deal(self, deal: schema.Deal) -> None:
+        """Para yatirma/cekme bot kari/zarari degildir; canli tabani tutar kadar kaydirir.
+
+        Tabandan onceki (ya da gecici taban donemindeki) islemler yalnizca kaydedilir: tutarlari zaten
+        tabanin alindigi varligin icindedir.
+        """
+        if deal.type != schema.DEAL_BALANCE or not deal.profit:
+            return
+        state = self.repo.bot_state()
+        at = deal.time if deal.time is not None else self._clock()
+        apply = (self._base_is_live() and state.start_capital is not None and state.start_at is not None
+                 and at > state.start_at)
+        new, base = self.repo.apply_balance_op(deal.id, at, deal.profit, apply=apply)
+        if not new:
+            return
+        unit = f" {self.account.currency}" if self.account is not None else ""
+        kind = "Para yatırma" if deal.profit > 0 else "Para çekme"
+        if base is None:
+            # Taban gecici (deneme modu) ya da islem tabandan once: yalnizca kayda gecer.
+            await self._record(
+                "info", "balance_change",
+                f"{kind}: {deal.profit:+.2f}{unit}. Bot kârı/zararı sayılmaz; kayıp sınırı tabanı değişmedi "
+                "(taban bu tutarı zaten içeriyor ya da henüz canlıya geçilmedi).",
+                {"amount": deal.profit, "deal_id": deal.id, "at": at, "applied": False})
+            return
+        await self._record(
+            "info", "balance_change",
+            f"{kind}: {deal.profit:+.2f}{unit}. Kayıp sınırı tabanı {state.start_capital:.2f} → {base:.2f}{unit}; "
+            "bu tutar bot kârı/zararı sayılmaz.",
+            {"amount": deal.profit, "deal_id": deal.id, "at": at, "applied": True, "start_capital": base},
+            notify=True, title=kind)
+
+    async def sync_balance_ops(self) -> None:
+        """Deal gecmisinden para yatirma/cekme islemlerini toplar (olay akisi kacirmis olabilir)."""
+        state = self.repo.bot_state()
+        # Deneme modunda da okunur: islemler tabani degistirmez ama olay olarak kayda gecer.
+        if state.start_at is None or self._auth_blocked():
+            return
+        now = self._clock()
+        watermark = float(self.repo.get_setting("balance_synced_at", 0.0) or 0.0)
+        since = max(state.start_at, watermark - 600.0, now - BALANCE_HISTORY_DAYS * 86400.0)
+        try:
+            deals = await fetch_all_deals(self.client, since)
+        except ExnessAuthError as exc:
+            await self._auth_error(exc)
+            return
+        except (ExnessError, ValueError) as exc:
+            log.warning("bakiye islemleri okunamadi: %s", exc)
+            return
+        for deal in deals:
+            await self._apply_balance_deal(deal)
+        self.repo.set_setting("balance_synced_at", now)
+
+    async def _check_limits(self, settings: BotSettings) -> None:
+        await self._ensure_base(settings)
+        state = self.repo.bot_state()
         capital = state.start_capital
         if not capital or capital <= 0:
             return
@@ -342,6 +484,11 @@ class Bot:
         return self._clock() < self._auth_blocked_until
 
     async def on_bar_close(self, tf: str = "M15") -> ScanSummary:
+        summary = await self._scan(tf)
+        self.last_scan = summary  # /health icin: son taramanin sayilari (hesap bilgisi icermez)
+        return summary
+
+    async def _scan(self, tf: str = "M15") -> ScanSummary:
         now = self._clock()
         summary = ScanSummary(at=now)
         self.repo.set_bot_state(last_scan_at=now)
@@ -360,6 +507,7 @@ class Bot:
             return await self._skip(summary, "daily_limit")
 
         scanned: set[str] = set()
+        retries_before = self.candles.transient_rejections
         for instrument in self.catalog.universe(settings.enabled_symbols):
             symbol = instrument.symbol
             if not self._is_open(instrument, now):
@@ -369,6 +517,15 @@ class Bot:
                 for frame in FRAMES:
                     await self.candles.get(symbol, frame, 256)
             except ExnessAuthError as exc:
+                if exc.code == schema.AUTH_INVALID_API_KEY:
+                    # Mum servisi iki kez ust uste reddetti. Bu kod canlida piyasa verisi icin gecici olarak
+                    # goruldu; pozisyon yonetimini (stop takibi, mutabakat) durdurmak icin yeterli kanit
+                    # degil. Tarama birakilir; anahtar gercekten gecersizse diger istekler kilidi kurar.
+                    summary.errors += 1
+                    summary.skipped = "market_data_rejected"
+                    await self._record("warning", "market_data_rejected",
+                                       f"Mum verisi reddedildi; tarama yarıda kesildi ({exc})", {"code": exc.code})
+                    return summary
                 await self._auth_error(exc)
                 summary.skipped = "auth_error"
                 return summary
@@ -383,6 +540,9 @@ class Bot:
                 log.warning("mumlar alinamadi %s: %s", symbol, exc)
                 continue
             scanned.add(symbol)
+            age = self.quotes.age(symbol)
+            if age is not None and age <= QUOTE_MAX_AGE:
+                summary.quoted += 1
             await self._auth_ok()
             result = evaluate(self.provider, symbol, equity=self.account.equity, risk_pct=settings.risk.risk_pct,
                               commission_per_lot=self._commission(instrument, settings),
@@ -397,6 +557,9 @@ class Bot:
             await self._consider(result.candidate, instrument, settings, summary)
 
         await self._refresh_open_candles(scanned)
+        summary.candle_retries = self.candles.transient_rejections - retries_before
+        if summary.candle_retries:
+            log.warning("tarama: %d mum istegi ilk denemede reddedildi, ikincide gecti", summary.candle_retries)
         await self._record(
             "info", "scan",
             f"Tarama: {summary.scanned} sembol, {summary.candidates} aday, {summary.opened} emir"
@@ -507,7 +670,10 @@ class Bot:
             return True
         report = await self.executor.reconcile()  # goruntu SL/TP emirlerini de getirir
         if report is None:
-            return True  # dogrulanamadi: bir sonraki turda yeniden dene (kontrol hakki harcanmaz)
+            # Dogrulanamadi: hicbir sey gonderilmez ve kisa bir sure sonra yeniden denenir. Her yonetim
+            # turunda (2 sn) denemek, 429 almis bir istegi dongude yinelemek olurdu.
+            self._stop_checked[position_id] = now - interval + STOP_VERIFY_RETRY
+            return True
         self._stop_checked[position_id] = now
         fresh = self.repo.get_trade(position_id)
         if fresh is None or not fresh.is_open or (fresh.sl is not None and fresh.sltp_order_id):
@@ -617,6 +783,9 @@ class Bot:
         elif self._connection_alerted and self.streams_up():
             self._connection_alerted = False
             await self._record("info", "connection_restored", "Exness bağlantısı geri geldi.")
+        if now - self._balance_synced_at >= BALANCE_SYNC_INTERVAL:
+            self._balance_synced_at = now
+            await self.sync_balance_ops()
         await self._check_limits(self.repo.get_bot_settings())
         connections = getattr(self._events_stream, "connections", 0)
         await self._auth_ok()
@@ -709,4 +878,4 @@ class Bot:
 
 _SKIP = {"halted": "bot durduruldu (toplam kayıp sınırı)", "stopped": "kullanıcı durdurdu",
          "stream_down": "Exness bağlantısı yok", "account_blocked": "hesap yeni işleme kapalı",
-         "daily_limit": "günlük kayıp sınırı doldu"}
+         "daily_limit": "günlük kayıp sınırı doldu", "market_data_rejected": "mum verisi reddedildi"}

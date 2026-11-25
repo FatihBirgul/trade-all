@@ -22,10 +22,11 @@ from pathlib import Path
 from .config import Settings, load_settings
 from .exness import schema
 from .exness.client import ExnessClient
-from .exness.errors import ExnessError
+from .exness.errors import ExnessError, ExnessRateLimited
 
 SAMPLE_PREFIXES = ("EURUSD", "XAUUSD", "BTCUSD")
 SAMPLE_TIMEFRAMES = ("M15", "H1", "H4")
+RETRY_DELAY = 2.0
 
 WsListen = Callable[[ExnessClient, str, list[dict], float], Awaitable[list]]
 
@@ -36,7 +37,8 @@ async def listen_ws(client: ExnessClient, path: str, subscriptions: list[dict], 
 
     url, headers = await client.ws_endpoint(path)
     messages: list = []
-    async with connect(url, additional_headers=headers, open_timeout=15) as socket:
+    async with connect(url, additional_headers=headers, subprotocols=[schema.WS_SUBPROTOCOL],
+                       open_timeout=15) as socket:
         for message in subscriptions:
             await socket.send(json.dumps(message))
         deadline = time.monotonic() + seconds
@@ -59,7 +61,8 @@ def _write(folder: Path, name: str, data) -> None:
 
 
 async def run(settings: Settings, out_root: Path | None = None, *, client: ExnessClient | None = None,
-              seconds: float = 30.0, ws_listen: WsListen = listen_ws, now: float | None = None) -> Path:
+              seconds: float = 30.0, ws_listen: WsListen = listen_ws, now: float | None = None,
+              sleep: Callable[[float], Awaitable[None]] = asyncio.sleep) -> Path:
     now = time.time() if now is None else now
     stamp = datetime.fromtimestamp(now, timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     folder = (out_root or settings.db_path.parent / "discovery") / stamp
@@ -67,16 +70,32 @@ async def run(settings: Settings, out_root: Path | None = None, *, client: Exnes
     client = client or ExnessClient(settings)
     account_id = client.account_id
     errors: dict[str, str] = {}
-    summary: dict = {"started_at": stamp, "errors": errors}
+    retried: list[str] = []  # ilk denemede reddedilip ikincide basarili olan istekler (gecici hata)
+    summary: dict = {"started_at": stamp, "errors": errors, "retried_ok": retried}
 
-    async def fetch(name: str, path: str):
-        try:
-            data = await client.get(path)
-        except (ExnessError, ValueError) as exc:
-            errors[name] = f"{type(exc).__name__}: {exc}"
-            return None
-        _write(folder, name + ".json", data)
-        return data
+    async def fetch(name: str, path: str, *, retry: bool = False):
+        """Tek GET. `retry` verilirse basarisiz istek kisa bir beklemeden sonra BIR kez yinelenir
+        (yalnizca salt-okuma mum istekleri icin); ilk hata her durumda kaydedilir ki gecici mi kalici mi
+        oldugu gorulsun."""
+        for attempt in (1, 2):
+            try:
+                data = await client.get(path)
+            except (ExnessError, ValueError) as exc:
+                key = name if attempt == 1 else name + "#retry"
+                errors[key] = f"{type(exc).__name__}: {exc}"
+                status = getattr(exc, "status", None)
+                if status is not None:
+                    errors[key] += f" [http {status}]"
+                if not retry or attempt == 2 or isinstance(exc, (ExnessRateLimited, ValueError)):
+                    return None
+                await sleep(RETRY_DELAY)
+                continue
+            _write(folder, name + ".json", data)
+            if attempt == 2:
+                retried.append(name)
+                summary.setdefault("retried_errors", {})[name] = errors.pop(name)  # gecici: hata sayilmaz
+            return data
+        return None
 
     try:
         try:
@@ -134,7 +153,7 @@ async def run(settings: Settings, out_root: Path | None = None, *, client: Exnes
         for symbol in samples:
             for timeframe in SAMPLE_TIMEFRAMES:
                 await fetch(f"candles/{symbol}_{timeframe}",
-                            schema.candles_path(account_id, symbol, timeframe, now, count=-20))
+                            schema.candles_path(account_id, symbol, timeframe, now, count=-20), retry=True)
         await fetch("deals", schema.deals_path(account_id, start=now - 86400, end=now, limit=200))
 
         for name, path, subscriptions in (
@@ -184,6 +203,8 @@ def main(argv: list[str] | None = None) -> int:
           f"  Hata: {len(summary.get('errors', {}))}")
     for name, message in summary.get("errors", {}).items():
         print(f"  ! {name}: {message}")
+    for name in summary.get("retried_ok", []):
+        print(f"  ~ {name}: ilk deneme reddedildi, ikinci deneme basarili (gecici hata)")
     return 0 if not summary.get("errors") else 1
 
 

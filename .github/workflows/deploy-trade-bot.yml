@@ -7,6 +7,12 @@ on:
       - 'trade-ai-unified/**'
       - '.github/workflows/deploy-trade-bot.yml'
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'deploy: test + dagitim. status: yalnizca botun saglik ciktisini oku (dagitim yok).'
+        type: choice
+        options: [deploy, status]
+        default: deploy
 permissions:
   contents: read
 concurrency:
@@ -17,6 +23,7 @@ env:
   PYTHONUTF8: '1'
 jobs:
   test:
+    if: inputs.mode != 'status'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,11 +39,14 @@ jobs:
           python scripts/run_suite.py engine
   deploy:
     needs: test
+    # status kipinde test atlanir; dagitim yalnizca testler gectiyse yapilir.
+    if: ${{ !cancelled() && (needs.test.result == 'success' || (needs.test.result == 'skipped' && inputs.mode == 'status')) }}
     runs-on: ubuntu-latest
     environment: production
     steps:
       - name: Deploy over SSH
         env:
+          MODE: ${{ inputs.mode }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_PORT: ${{ secrets.VPS_PORT }}
@@ -58,8 +68,13 @@ jobs:
             echo "::warning::VPS_KNOWN_HOSTS tanimli degil; sunucu anahtari bu calismada ssh-keyscan ile alindi"
             ssh-keyscan -p "$port" "$VPS_HOST" > ~/.ssh/known_hosts 2>/dev/null
           fi
+          if [ "$MODE" = "status" ]; then
+            remote='/opt/tradebot/trade-bot/deploy/status.sh'
+          else
+            remote='/opt/tradebot/trade-bot/deploy/deploy.sh'
+          fi
           ssh -i ~/.ssh/deploy_key -p "$port" -o BatchMode=yes -o StrictHostKeyChecking=yes \
-            "$VPS_USER@$VPS_HOST" '/opt/tradebot/trade-bot/deploy/deploy.sh'
+            "$VPS_USER@$VPS_HOST" "$remote"
       - name: Remove key
         if: always()
         run: rm -f ~/.ssh/deploy_key

@@ -109,3 +109,64 @@ async def test_fetch_failure_propagates_and_cache_survives():
     with pytest.raises(ExnessUnavailable):
         await candles.get("EURUSD", "M15", 256)
     assert len(candles.cached("EURUSD", "M15", 256)) == 256
+
+
+class FlakyClient(CandleClient):
+    """Ilk `failures` istegi verilen hatayla reddeder."""
+
+    def __init__(self, *args, failures=1, error=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.failures, self.error = failures, error
+
+    async def get(self, path):
+        if self.failures > 0:
+            self.failures -= 1
+            self.paths.append(path)
+            raise self.error
+        return await super().get(path)
+
+
+def flaky_store(error, failures, now=T0 + 5 * M15 + 300):
+    from tradebot.exness.errors import ExnessAuthError  # noqa: F401  (hata turleri cagirandan gelir)
+    client = FlakyClient(T0 - 400 * M15, T0 + 5 * M15, failures=failures, error=error)
+    sleeps = []
+
+    async def sleep(seconds):
+        sleeps.append(seconds)
+    candles, _ = store(client, now, sleep=sleep)
+    return candles, client, sleeps
+
+
+async def test_one_off_invalid_api_key_on_candles_is_retried_once():
+    """Canli kesif: 9 mum isteginden yalnizca ilki AUTH_INVALID_API_KEY (1000) ile reddedildi."""
+    from tradebot.exness.errors import ExnessAuthError
+    from tradebot.market.candles import RETRY_DELAY
+
+    candles, client, sleeps = flaky_store(ExnessAuthError("AUTH_INVALID_API_KEY", code=1000, status=401), 1)
+    rows = await candles.get("EURUSD", "M15", 256)
+    assert len(rows) == 256
+    assert len(client.paths) == 2 and client.paths[0] == client.paths[1]  # ayni salt-okuma istegi
+    assert sleeps == [RETRY_DELAY] and candles.transient_rejections == 1
+
+
+async def test_repeated_invalid_api_key_reaches_the_caller_after_one_retry():
+    from tradebot.exness.errors import ExnessAuthError
+
+    candles, client, sleeps = flaky_store(ExnessAuthError("AUTH_INVALID_API_KEY", code=1000, status=401), 2)
+    with pytest.raises(ExnessAuthError):
+        await candles.get("EURUSD", "M15", 256)
+    assert len(client.paths) == 2 and len(sleeps) == 1 and candles.transient_rejections == 0
+    assert candles.cached("EURUSD", "M15") == []  # yarim veri yazilmaz
+
+
+async def test_other_candle_errors_are_never_retried():
+    from tradebot.exness.errors import ExnessAuthError, ExnessRateLimited, ExnessUnavailable
+
+    for error in (ExnessAuthError("AUTH_INVALID_SIGNATURE", code=1001, status=401),
+                  ExnessAuthError("AUTH_PERMISSION_DENIED", code=1002, status=403),
+                  ExnessRateLimited("REQUEST_RATE_LIMIT", code=3015),
+                  ExnessUnavailable("ag hatasi")):
+        candles, client, sleeps = flaky_store(error, 1)
+        with pytest.raises(type(error)):
+            await candles.get("EURUSD", "M15", 256)
+        assert len(client.paths) == 1 and sleeps == [], error

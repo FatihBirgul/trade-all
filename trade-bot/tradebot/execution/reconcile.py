@@ -16,7 +16,7 @@ from ..exness.schema import AccountState, Deal, Position, Snapshot
 from ..store.repo import Repo, Trade
 
 OPEN_STATES = ("PENDING", "ACKED", "UNKNOWN")
-HISTORY_DAYS = 30
+HISTORY_DAYS = 29  # gecmis sorgusu siniri 30 gun (limits: history_age_days); sinirin icinde kalinir
 FRESH_SECONDS = 120.0  # bu kadar yeni bir islem, tek bir anlik goruntuye dayanarak kapatilmaz
 MISSING_CONFIRM_SECONDS = 60.0  # kapanis deal'i yoksa: en az bu kadar arayla iki kez "yok" gorulmeli
 ADOPT_WINDOW = 300.0  # birakilmis bir acma emrine baglanabilecek pozisyonun acilis penceresi
@@ -144,8 +144,8 @@ def _set_by_bot(repo: Repo, position_id: str, sl: float) -> bool:
     return False
 
 
-async def fetch_deals(client, since: float) -> list[Deal]:
-    """`since` anindan bugune pozisyona bagli tum deal'lar (eskiden yeniye)."""
+async def fetch_all_deals(client, since: float) -> list[Deal]:
+    """`since` anindan bugune tum deal'lar (islem ve bakiye; eskiden yeniye)."""
     deals: list[Deal] = []
     cursor = None
     for _ in range(50):
@@ -154,10 +154,15 @@ async def fetch_deals(client, since: float) -> list[Deal]:
         else:
             path = schema.deals_path(client.account_id, cursor=cursor, limit=200)
         page, cursor = schema.parse_deals(await client.get(path))
-        deals += [d for d in page if d.position_id]
+        deals += page
         if not cursor:
             break
     return sorted(deals, key=lambda d: d.time or 0.0)
+
+
+async def fetch_deals(client, since: float) -> list[Deal]:
+    """`since` anindan bugune pozisyona bagli tum deal'lar (eskiden yeniye)."""
+    return [d for d in await fetch_all_deals(client, since) if d.position_id]
 
 
 async def _close_deals(client, since: float) -> list[Deal]:
