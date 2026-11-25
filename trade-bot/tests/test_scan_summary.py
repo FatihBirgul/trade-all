@@ -1,4 +1,6 @@
 """Canliya gecis karari icin deneme modu ozeti: yalnizca sayilar ve nedenler, hesap bilgisi yok."""
+import json
+
 import httpx
 
 from tests.app_helpers import NOW, feed_ticks, load_market, restart, started
@@ -134,3 +136,23 @@ async def test_public_reasons_hide_numbers(tmp_path):
                                                                                  "V2 QC: stale_data": 2}})
     reasons = (await public_get(app, "/health/summary")).json()["veto_reasons"]
     assert reasons == {"spread # above #": 1, "V2 QC: stale_data": 2}
+
+
+async def test_summary_names_symbols_whose_data_was_rejected_and_where_the_gap_is(tmp_path):
+    """Tanilama: hangi sembolun verisi reddedildi, eksik mum nerede. Yalnizca piyasa bilgisi; hesap verisi yok."""
+    app = await started(tmp_path, dry_run=True)
+    rows = app.fake.candles[("XAUUSD", "H1")]
+    hole = rows[-10]["time"]
+    app.fake.set_candles("XAUUSD", "H1", [r for r in rows if r["time"] != hole])  # piyasa acikken eksik bir H1 mumu
+    summary = await app.bot.on_bar_close()
+    assert summary.would_open == 0
+    note = summary.data_rejects["XAUUSD"]
+    assert note.startswith("missing candle") and "[H1 " in note and note.rstrip("]").endswith(("OPEN", "CLOSING_SOON"))
+    body = (await public_get(app, "/health/summary")).json()
+    assert body["last_data_rejects"]["XAUUSD"] == note
+    assert set(body["last_data_rejects"]) <= {"XAUUSD", "EURUSD", "GBPUSD", "BTCUSD"}
+    for secret in ("10000", "equity", "balance", "123456"):
+        assert secret not in json.dumps(body["last_data_rejects"])
+    # Liste her zaman EN SON taramaya aittir: atlanan taramadan sonra da eski liste kalmaz.
+    app.repo.add_event("info", "scan", "tarama", {"scanned": 4})
+    assert (await public_get(app, "/health/summary")).json()["last_data_rejects"] == {}

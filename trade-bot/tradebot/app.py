@@ -40,6 +40,7 @@ from .store.repo import BotState, Repo
 log = logging.getLogger(__name__)
 
 FRAMES = ("M15", "H1", "H4")
+FRAME_SECONDS = {"M15": 900, "H1": 3600, "H4": 14400}
 BAR_SECONDS = 900
 BAR_DELAY = 5.0  # mumun broker tarafinda kesinlesmesi icin kapanistan sonra bekleme
 MANAGE_INTERVAL = 2.0
@@ -65,6 +66,8 @@ REARM_LIMIT = 3  # stop bu kadar denemede kurulamazsa pozisyon kapatilir
 ATR_MAX_AGE_BARS = 3
 TICK_CHUNK = 20
 VETO_REASON_CHARS = 80
+DATA_DECISIONS = frozenset({"INSUFFICIENT_DATA", "STALE_DATA", "PROVIDER_UNAVAILABLE"})
+DATA_REJECTS_MAX = 40
 PUBLIC_NUMBER = re.compile(r"\d+[.,]\d+|\d{3,}")  # ondalikli ya da 3+ haneli sayilar
 SUMMARY_SAMPLES = 5
 RATE_PAUSE_LIMIT = 2  # bir taramada 429 sonrasi en cok bu kadar kisa bekleme; sonra tarama birakilir
@@ -91,6 +94,8 @@ class ScanSummary:
     reasons: dict[str, int] = field(default_factory=dict)
     blocked_reasons: dict[str, int] = field(default_factory=dict)
     veto_reasons: dict[str, int] = field(default_factory=dict)  # aday cikmayan sembollerde V9'un ilk nedeni
+    # V9'un VERIYI reddettigi semboller -> neden (+ eksik mumun yeri). Tanilama icindir; yalnizca piyasa bilgisi.
+    data_rejects: dict[str, str] = field(default_factory=dict)
 
 
 def _default_stream_factory(client, path, on_message, name):
@@ -447,6 +452,23 @@ class Bot:
                                instrument.trading_hours)
         return status["status"] in ("OPEN", "CLOSING_SOON")
 
+    def _gap_note(self, instrument: Instrument) -> str | None:
+        """Mum serisinde, beyan edilen islem saatlerine gore ACIK gorunen ilk eksik dakikayi bulur (tanilama)."""
+        from forex.sessions import broker_status
+
+        if not instrument.trading_hours:
+            return None
+        for frame in FRAMES:
+            size = FRAME_SECONDS[frame]
+            rows = self.candles.cached(instrument.symbol, frame, 256)
+            for before, after in zip(rows, rows[1:]):
+                for minute in range(before["time"] + size, after["time"], 60):
+                    moment = datetime.fromtimestamp(minute, timezone.utc)
+                    status = broker_status(moment, "", True, instrument.trading_hours)["status"]
+                    if status not in ("CLOSED", "OPENING_SOON"):
+                        return f"{frame} {moment:%Y-%m-%dT%H:%MZ} {status}"
+        return None
+
     def _spread(self, symbol: str) -> float:
         quote = self.quotes.quote(symbol)
         return float(quote["spread"]) if quote else 0.0
@@ -605,6 +627,9 @@ class Bot:
                     summary.reasons[result.decision] = summary.reasons.get(result.decision, 0) + 1
                     veto = (result.reasons[0] if result.reasons else result.decision)[:VETO_REASON_CHARS]
                     summary.veto_reasons[veto] = summary.veto_reasons.get(veto, 0) + 1
+                    if result.decision in DATA_DECISIONS and len(summary.data_rejects) < DATA_REJECTS_MAX:
+                        note = self._gap_note(instrument) if "missing candle" in veto else None
+                        summary.data_rejects[symbol] = PUBLIC_NUMBER.sub("#", veto) + (f" [{note}]" if note else "")
                     log.info("aday yok %s: %s (%s)", symbol, result.decision, "; ".join(result.reasons))
                     continue
                 summary.candidates += 1
@@ -971,7 +996,8 @@ class Bot:
         out = {"hours": round((now - since) / 3600.0, 2), "dry_run": self.repo.get_bot_settings().dry_run,
                "scans": 0, "scans_skipped": {}, "symbols_scanned": 0, "candidates": 0, "would_open": 0, "opened": 0,
                "observed": 0, "shadowed": 0, "news_blocked": 0, "portfolio_blocked": 0, "errors": 0,
-               "decisions": {}, "veto_reasons": {}, "portfolio_reasons": {}, "observed_reasons": {}, "samples": []}
+               "decisions": {}, "veto_reasons": {}, "portfolio_reasons": {}, "observed_reasons": {}, "samples": [],
+               "last_data_rejects": {}}
 
         def add(target: dict, source: object) -> None:
             for key, count in (source.items() if isinstance(source, dict) else ()):
@@ -992,6 +1018,9 @@ class Bot:
                     out[key] += value if isinstance(value, int) else 0
                 add(out["decisions"], data.get("reasons"))
                 add(out["veto_reasons"], data.get("veto_reasons"))
+                rejects = data.get("data_rejects")  # en son taramaninki kalir
+                out["last_data_rejects"] = ({str(k)[:16]: str(v)[:160] for k, v in rejects.items()}
+                                            if isinstance(rejects, dict) else {})
                 add(out["portfolio_reasons"], data.get("blocked_reasons"))
             elif event["kind"] == "scan_skipped":
                 add(out["scans_skipped"], {data.get("reason") or "?": 1})
