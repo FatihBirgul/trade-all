@@ -1182,11 +1182,12 @@
     "license": "MIT; Jake Schincariol copyright retained in vendor/day_trader/LICENSE",
     "modifications": [
       "Explicit simulation-only zero-spread option; default strict quote rule unchanged; V10 canonical broker-symbol predicate replaces the four-symbol whitelist in capture",
-      "Candle gap validation treats OPENING_SOON like CLOSED (weekend gaps under real broker hours); trade gates unchanged"
+      "Candle gap validation treats OPENING_SOON like CLOSED (weekend gaps under real broker hours); trade gates unchanged",
+      "A single missing M15 bar is tolerated at the daily rollover: only when the schedule status is OPEN/CLOSING_SOON, M15 only, one bar wide, inside the 16:00-17:59 New York hours, at most 4 per series, and followed by at least 16 bars; trade gates unchanged"
     ],
     "test_provenance": "423 source tests retained verbatim",
     "status": "ADAPTED",
-    "destination_sha256": "04ba6c376e203a54b6b6ef64c1dddeeee13aefa87b25c54a873362cdc28d7a13",
+    "destination_sha256": "4cdac640d8939318368513841783b5f9128b699862a53e03366798d1a7e98605",
     "integration_status": "ADAPTED_AND_REGRESSION_TESTED"
   },
   {
@@ -2383,11 +2384,13 @@
     "destination": "vendor/day_trader/tests/test_unified_contract.py",
     "original_sha256": "20e7d4b05b3b79fde4d3be38b4a0baf34d91890da31a9cd9ef1e88dc2b856229",
     "license": "MIT; Jake Schincariol copyright retained in vendor/day_trader/LICENSE",
-    "modifications": [],
-    "test_provenance": "423 source tests retained verbatim",
-    "status": "PRESERVED",
-    "destination_sha256": "20e7d4b05b3b79fde4d3be38b4a0baf34d91890da31a9cd9ef1e88dc2b856229",
-    "integration_status": "PRESERVED_AND_REGRESSION_TESTED"
+    "modifications": [
+      "test_missing_open_bar_rejected now covers gaps outside the rollover hour, consecutive, recent and confirmation-frame gaps; test_single_quiet_m15_bar_tolerated added for the single quiet M15 bar rule (owner decision 2026-11-25)"
+    ],
+    "test_provenance": "source tests retained; one test adapted and one added for the quiet M15 bar rule",
+    "status": "ADAPTED",
+    "destination_sha256": "cc833d89d83d7cf738bd95200083e4dba52e491fd54b03da5e5a3928543acbc1",
+    "integration_status": "ADAPTED_AND_REGRESSION_TESTED"
   },
   {
     "source_repository": "FatihBirgul/day-trader-skill",

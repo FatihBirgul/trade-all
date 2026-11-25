@@ -17,11 +17,38 @@ class SnapshotContract(unittest.TestCase):
         self.assertEqual(SnapshotProvider(snap).candles('XAUUSD', 'M15')[-1]['close'],
                          original['frames']['M15'][-1]['close'])
 
+    @staticmethod
+    def _rollover_index(rows):
+        # A bar in the 17:00 New York hour that is old enough to be tolerated.
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        return next(i for i, row in enumerate(rows[:-40])
+                    if i > 5 and datetime.fromtimestamp(row['time'], ZoneInfo('America/New_York')).hour == 17)
+
     def test_missing_open_bar_rejected(self):
+        # Outside the rollover hour, two consecutive bars, a gap near the newest bar, or a gap on the
+        # confirmation timeframe are still data errors.
+        probe = fixture().data['XAUUSD']['candles']
+        roll = self._rollover_index(probe['M15'])
+        outside = next(i for i in range(6, 60) if abs(i - roll) > 8)
+        for frame, drop in (('M15', (outside,)), ('M15', (roll, roll + 1)), ('M15', (-3,)), ('H4', (10,))):
+            with self.subTest(frame=frame, drop=drop):
+                p = fixture()
+                rows = p.data['XAUUSD']['candles'][frame]
+                for index in sorted((i % len(rows) for i in drop), reverse=True):
+                    del rows[index]
+                with self.assertRaisesRegex(DataError, 'missing candle'):
+                    capture(p, 'XAUUSD', 'M15', NOW)
+
+    def test_single_quiet_m15_bar_tolerated(self):
+        # One M15 bar without ticks in the New York rollover hour, while the schedule says open,
+        # is not a data error.
         p = fixture()
-        del p.data['XAUUSD']['candles']['M15'][10]
-        with self.assertRaisesRegex(DataError, 'missing candle'):
-            capture(p, 'XAUUSD', 'M15', NOW)
+        rows = p.data['XAUUSD']['candles']['M15']
+        roll = self._rollover_index(rows)
+        del rows[roll]
+        frames = capture(p, 'XAUUSD', 'M15', NOW).payload()['frames']['M15']
+        self.assertEqual(frames[roll]['time'] - frames[roll - 1]['time'], 1800)
 
     def test_real_volume_unfinished_and_boolean_rejected(self):
         for fields in ({'volume_kind': 'real', 'volume': 10}, {'is_final': False},
