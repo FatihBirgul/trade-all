@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { Alert } from "react-native";
-import { router } from "expo-router";
-import { BotPage } from "../../src/bot/BotPage";
+import { BotPage, Disconnected, StaleNotice } from "../../src/bot/BotPage";
 import { agoText, amountText, botStateText, pnlText } from "../../src/bot/presentation";
 import { useBot } from "../../src/bot/state";
 import { useTheme } from "../../src/theme";
@@ -97,25 +96,11 @@ export default function Panel() {
     );
   }
 
-  if (bot.phase === "loading")
-    return (
-      <BotPage>
-        <ScreenHeader title="Panel" badge="TRADE BOT" />
-        <Loading />
-      </BotPage>
-    );
   if (bot.phase !== "ready")
     return (
       <BotPage>
         <ScreenHeader title="Panel" badge="TRADE BOT" />
-        <Card>
-          <Label>
-            {bot.phase === "revoked"
-              ? "Bu telefonun bağlantı anahtarı artık geçerli değil."
-              : "Bot ile bağlantı kurulmadı."}
-          </Label>
-          <Button title="Bağlantı sekmesine git" onPress={() => router.push("/connection")} />
-        </Card>
+        <Disconnected />
       </BotPage>
     );
 
@@ -127,17 +112,7 @@ export default function Panel() {
   return (
     <BotPage>
       <ScreenHeader title="Panel" badge="TRADE BOT" />
-      {bot.heartbeatStale ? (
-        <Card elevated>
-          <Label style={{ color: colors.red, fontWeight: "700" }}>Bottan 5 dakikadır haber yok</Label>
-          <Label muted>
-            Aşağıdaki bilgiler eski olabilir. Açık pozisyonların zarar durdurma (SL) emirleri Exness tarafında durur;
-            sunucuyu kontrol edin.
-          </Label>
-        </Card>
-      ) : bot.error ? (
-        <Label style={{ color: colors.red, fontSize: 12 }}>{bot.error} Son bilinen bilgiler gösteriliyor.</Label>
-      ) : null}
+      <StaleNotice />
       {!status || !state ? (
         bot.error ? null : (
           <Loading />

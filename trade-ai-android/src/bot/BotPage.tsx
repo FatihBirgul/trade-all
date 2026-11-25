@@ -1,7 +1,8 @@
 import React, { type PropsWithChildren } from "react";
 import { ScrollView, TextInput, View, type TextInputProps } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { Label, s } from "../ui";
+import { router } from "expo-router";
+import { Button, Card, Label, Loading, s } from "../ui";
 import { design, useTheme } from "../theme";
 import { useBot } from "./state";
 
@@ -68,4 +69,37 @@ export function BotInput(props: TextInputProps) {
       ]}
     />
   );
+}
+
+// Bağlantı yokken bot ekranlarının ortak boş durumu. Bağlıysa null döner.
+export function Disconnected() {
+  const { phase } = useBot();
+  if (phase === "ready") return null;
+  if (phase === "loading") return <Loading />;
+  return (
+    <Card>
+      <Label>
+        {phase === "revoked" ? "Bu telefonun bağlantı anahtarı artık geçerli değil." : "Bot ile bağlantı kurulmadı."}
+      </Label>
+      <Button title="Bağlantı sekmesine git" onPress={() => router.push("/connection")} />
+    </Card>
+  );
+}
+
+export function StaleNotice() {
+  const { colors } = useTheme();
+  const { heartbeatStale, error } = useBot();
+  if (heartbeatStale)
+    return (
+      <Card elevated>
+        <Label style={{ color: colors.red, fontWeight: "700" }}>Bottan 5 dakikadır haber yok</Label>
+        <Label muted>
+          Aşağıdaki bilgiler eski olabilir. Açık pozisyonların zarar durdurma (SL) emirleri Exness tarafında durur;
+          sunucuyu kontrol edin.
+        </Label>
+      </Card>
+    );
+  if (error)
+    return <Label style={{ color: colors.red, fontSize: 12 }}>{error} Son bilinen bilgiler gösteriliyor.</Label>;
+  return null;
 }
