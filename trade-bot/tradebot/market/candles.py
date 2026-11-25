@@ -6,13 +6,19 @@ gunluk ara) uydurulmaz; V9 bosluklari broker saatlerine gore kendisi dogrular.
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import sqlite3
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 from ..exness import schema
+from ..exness.errors import ExnessAuthError
 from ..store.db import transaction
 
+log = logging.getLogger(__name__)
+
+RETRY_DELAY = 1.0  # tek seferlik mum reddinden sonra yineleme oncesi bekleme (sn)
 DURATIONS = {"M5": 300, "M15": 900, "M30": 1800, "H1": 3600, "H4": 14400, "D1": 86400}
 DEFAULT_MAX_CANDLES = 500  # limit bilinmiyorsa temkinli deger; gercegi /limits'ten gelir
 KEEP = 1500
@@ -28,11 +34,13 @@ CREATE TABLE IF NOT EXISTS candles (
 
 class CandleStore:
     def __init__(self, db: sqlite3.Connection, client, catalog, *, clock: Callable[[], float] = time.time,
-                 max_candles: int | None = None):
+                 max_candles: int | None = None, sleep: Callable[[float], Awaitable[None]] = asyncio.sleep):
         self._db = db
         self._client = client
         self._catalog = catalog
         self._clock = clock
+        self._sleep = sleep
+        self.transient_rejections = 0  # ikinci denemede gecen AUTH_INVALID_API_KEY retleri
         self.max_candles = max_candles or DEFAULT_MAX_CANDLES
         self._db.executescript(_SCHEMA)
 
@@ -50,6 +58,22 @@ class CandleStore:
         row = self._db.execute("SELECT MAX(time) FROM candles WHERE symbol = ? AND tf = ?", (symbol, tf)).fetchone()
         return int(row[0]) if row and row[0] is not None else None
 
+    async def _fetch(self, path: str) -> dict:
+        """Mum istegi. Canli sunucu ilk mum istegini ara sira AUTH_INVALID_API_KEY (1000) ile reddediyor,
+        ayni bicimdeki sonraki istekler geciyor (kesif 2026-11-25: 9 istekten yalnizca ilki). Bu yuzden
+        bu salt-okuma istegi yalnizca bu kod icin BIR kez yinelenir; ikinci ret cagirana aynen gider
+        (kimlik kilidi devreye girer). Emir istekleri bu yoldan gecmez ve asla yinelenmez."""
+        try:
+            return await self._client.get(path)
+        except ExnessAuthError as exc:
+            if exc.code != schema.AUTH_INVALID_API_KEY:
+                raise
+            log.warning("mum istegi reddedildi (%s); bir kez yinelenecek", exc)
+        await self._sleep(RETRY_DELAY)
+        data = await self._client.get(path)
+        self.transient_rejections += 1
+        return data
+
     async def get(self, symbol: str, tf: str, count: int = 256) -> list[dict]:
         """Gerekirse yalnizca eksik araligi ceker, sonra onbellekten son `count` kapanmis mumu dondurur."""
         duration = DURATIONS[tf]
@@ -65,7 +89,7 @@ class CandleStore:
         if start is not None:
             broker_symbol = self._catalog.get(symbol).broker_symbol
             path = schema.candles_path(self._client.account_id, broker_symbol, tf, start, now)
-            rows = schema.parse_candles(await self._client.get(path))
+            rows = schema.parse_candles(await self._fetch(path))
             closed = [(symbol, tf, r["time"], r["open"], r["high"], r["low"], r["close"], r["tick_volume"])
                       for r in rows if r["time"] + duration <= now]
             with transaction(self._db):

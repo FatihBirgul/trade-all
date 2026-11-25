@@ -140,7 +140,7 @@ class Bot:
         self._set_account(snapshot.account)
         now = self._clock()
         state = self.repo.bot_state()
-        if state.start_capital is None and self.account is not None:
+        if _needs_base(state.start_capital, self.account):
             # Toplam kayip siniri botun ilk calistigi andaki sermayeye gore olculur (spec §6.3).
             self.repo.set_bot_state(start_capital=self.account.equity, start_at=now)
         report = await reconcile(self.client, self.repo, self.catalog, clock=self._clock, snapshot=snapshot)
@@ -247,8 +247,9 @@ class Bot:
 
     async def _check_limits(self, settings: BotSettings) -> None:
         state = self.repo.bot_state()
-        if state.start_capital is None and self.account is not None:
-            # Acilista hesap okunamadiysa taban ilk firsatta kurulur; yoksa bot hic islem acamaz.
+        if _needs_base(state.start_capital, self.account):
+            # Acilista hesap okunamadiysa (ya da bakiye henuz yatirilmamissa) taban ilk firsatta kurulur;
+            # yoksa bot hic islem acamaz.
             self.repo.set_bot_state(start_capital=self.account.equity, start_at=self._clock())
             state = self.repo.bot_state()
         capital = state.start_capital
@@ -705,6 +706,13 @@ class Bot:
             self._every(RESOLVE_INTERVAL, self.resolve_orders, "emir cozumleme"),
             self._every(RECONCILE_INTERVAL, self.reconcile_now, "mutabakat"),
         )
+
+
+def _needs_base(start_capital: float | None, account: Account | None) -> bool:
+    """Sermaye tabani yalnizca pozitif bir varlikla kurulur. Bos hesapla baslatilan bot tabani 0
+    kaydederse (canli kurulum: para yatirilmadan once) taban para gelince kurulmali; 0 taban hem
+    yeni islemi hem kayip sinirlarini kalici olarak devre disi birakirdi."""
+    return (start_capital is None or start_capital <= 0) and account is not None and account.equity > 0
 
 
 _SKIP = {"halted": "bot durduruldu (toplam kayıp sınırı)", "stopped": "kullanıcı durdurdu",
