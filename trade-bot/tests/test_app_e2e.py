@@ -138,9 +138,10 @@ async def test_halt_at_total_loss_blocks_entries_but_manages_open(tmp_path):
     _, trade = await open_one(app)
     assert app.repo.bot_state().start_capital == 10_000.0
     # Botun baska bir isleminde baslangic sermayesinin %25'inden fazla kayip
-    loser = app.repo.upsert_trade(Trade(position_id="9", origin="bot", symbol="EURUSD", side="BUY", volume=0.0,
-                                        entry=1.1, opened_at=NOW - 50, closed_at=NOW - 10))
-    app.repo.add_realized("9", "deal-loss", NOW, -2600.0)  # bot basladiktan sonra
+    app.advance(60)  # kayip, bot basladiktan sonra gerceklesir
+    app.repo.upsert_trade(Trade(position_id="9", origin="bot", symbol="EURUSD", side="BUY", volume=0.0,
+                                entry=1.1, opened_at=NOW + 10, closed_at=NOW + 60))
+    app.repo.add_realized("9", "deal-loss", NOW + 60, -2600.0)
 
     summary = await app.bot.on_bar_close()
     state = app.repo.bot_state()

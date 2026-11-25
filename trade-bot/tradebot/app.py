@@ -213,7 +213,7 @@ class Bot:
         state = state or self.repo.bot_state()
         floating = self._unrealized("bot")
         return (self.repo.bot_realized_pnl(since=self._day_start()) + floating,
-                self.repo.bot_realized_pnl(since=state.start_at) + floating)
+                self.repo.realized_pnl("bot", after=state.start_at) + floating)  # taban anindan sonrasi
 
     async def _halt(self, reason: str) -> None:
         if self.repo.bot_state().halted:

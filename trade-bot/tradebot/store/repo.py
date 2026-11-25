@@ -143,9 +143,14 @@ class Repo:
                 "WHERE id = ?", (trade.id, trade.id))
         return True
 
-    def realized_pnl(self, origin: Origin | None = None, since: float | None = None) -> float:
+    def realized_pnl(self, origin: Origin | None = None, since: float | None = None, *,
+                     after: float | None = None) -> float:
+        """`since` dahil (>=), `after` haric (>) alt sinirdir."""
         sql = "SELECT COALESCE(SUM(r.pnl), 0) FROM realized r JOIN trades t ON t.id = r.trade_id WHERE r.at >= ?"
         args: list = [since if since is not None else 0.0]
+        if after is not None:
+            sql += " AND r.at > ?"
+            args.append(after)
         if origin is not None:
             sql += " AND t.origin = ?"
             args.append(origin)
@@ -289,3 +294,43 @@ class Repo:
         rows = self.conn.execute("SELECT at, balance, equity FROM equity WHERE at >= ? ORDER BY at",
                                  (since if since is not None else 0.0,))
         return [{"at": r[0], "balance": r[1], "equity": r[2]} for r in rows]
+
+    def realized_rows(self, origin: Origin | None = None) -> list[tuple[float, float]]:
+        """(zaman, tutar) sirali gerceklesen kar/zarar kayitlari."""
+        sql = "SELECT r.at, r.pnl FROM realized r JOIN trades t ON t.id = r.trade_id"
+        args: tuple = ()
+        if origin is not None:
+            sql, args = sql + " WHERE t.origin = ?", (origin,)
+        return [(row[0], row[1]) for row in self.conn.execute(sql + " ORDER BY r.at, r.rowid", args)]
+
+    # ---------------------------------------------------------------- API erisimi ve cihazlar
+    def add_token(self, token_hash: str, label: str | None = None, *, at: float | None = None) -> None:
+        self.conn.execute("INSERT OR IGNORE INTO api_tokens (token_hash, created_at, label) VALUES (?, ?, ?)",
+                          (token_hash, at if at is not None else self._clock(), label))
+
+    def has_token(self, token_hash: str) -> bool:
+        return self.conn.execute("SELECT 1 FROM api_tokens WHERE token_hash = ?", (token_hash,)).fetchone() is not None
+
+    def add_pair_code(self, code_hash: str, expires_at: float) -> None:
+        self.conn.execute("INSERT OR REPLACE INTO pair_codes (code_hash, expires_at, used) VALUES (?, ?, 0)",
+                          (code_hash, float(expires_at)))
+
+    def take_pair_code(self, code_hash: str, now: float) -> bool:
+        """Kodu tek seferlik kullanir; gecerliyse True."""
+        cursor = self.conn.execute(
+            "UPDATE pair_codes SET used = 1 WHERE code_hash = ? AND used = 0 AND expires_at >= ?",
+            (code_hash, float(now)))
+        return cursor.rowcount == 1
+
+    def clear_pair_codes(self) -> None:
+        self.conn.execute("DELETE FROM pair_codes")
+
+    def add_device(self, expo_token: str) -> None:
+        self.conn.execute("INSERT OR IGNORE INTO devices (expo_token, created_at) VALUES (?, ?)",
+                          (expo_token, self._clock()))
+
+    def remove_device(self, expo_token: str) -> None:
+        self.conn.execute("DELETE FROM devices WHERE expo_token = ?", (expo_token,))
+
+    def devices(self) -> list[str]:
+        return [row[0] for row in self.conn.execute("SELECT expo_token FROM devices ORDER BY created_at, expo_token")]

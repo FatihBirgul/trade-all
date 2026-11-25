@@ -1,9 +1,13 @@
-"""Surecin parcalarini birbirine baglar: istemci, depo, bildirimci, bot (ve kontrol API'si)."""
+"""Surecin parcalarini birbirine baglar: istemci, depo, bildirimci, bot ve kontrol API'si."""
 
 from __future__ import annotations
 
+import asyncio
+import time
 from dataclasses import dataclass
 
+from .api import auth
+from .api.server import serve
 from .app import Bot
 from .config import Settings
 from .exness.client import ExnessClient
@@ -19,19 +23,36 @@ class Runtime:
     bot: Bot
 
     async def run(self) -> None:
+        """Bot ve API ayni olay dongusunde calisir; biri durursa surec biter ve systemd yeniden baslatir."""
+        tasks = [asyncio.create_task(self.bot.run(), name="bot"),
+                 asyncio.create_task(serve(self.bot, self.settings.api_bind), name="api")]
         try:
-            await self.bot.run()
+            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+            for task in done:
+                task.result()  # hata varsa yukari tasinsin
         finally:
             await self.client.aclose()
             self.repo.close()
 
 
+def build_notifier(repo: Repo):
+    return NullNotifier()
+
+
 def build_runtime(settings: Settings) -> Runtime:
     client = ExnessClient(settings)
     repo = Repo(settings.db_path)
-    bot = Bot(settings, client, repo, NullNotifier())
+    bot = Bot(settings, client, repo, build_notifier(repo))
     return Runtime(settings, client, repo, bot)
 
 
 def create_pair_code(settings: Settings) -> str:
-    raise NotImplementedError("eslestirme kontrol API'si ile gelir")
+    """Sunucuda calistirilir; calisan servisle ayni veritabanina tek kullanimlik kod yazar."""
+    repo = Repo(settings.db_path)
+    try:
+        return auth.create_pair_code(repo, now=time.time())
+    finally:
+        repo.close()
