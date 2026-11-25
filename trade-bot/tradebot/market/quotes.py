@@ -42,6 +42,47 @@ class QuoteBook:
         tick = self._last.get(symbol)
         return None if tick is None else self._clock() - tick.time
 
+    def snapshot(self, limit: int = 200) -> dict[str, list[tuple[float, float]]]:
+        """Penceredeki spread orneklerinin kalici saklanacak ozeti: sembol basina en cok `limit` ornek.
+
+        Ornekler pencereye ESIT ARALIKLA yayilir (yalnizca son saniyeler degil), boylece medyan korunur.
+        Ornek sayisi `limit`ten azsa hepsi saklanir: geri yuklemede "en az min_ticks ornek" kurali, gercekte
+        o kadar ornek toplanmis sembol icin saglanir, toplanmamis sembol icin saglanmaz.
+        """
+        cutoff = self._clock() - self._window
+        out: dict[str, list[tuple[float, float]]] = {}
+        for symbol, samples in self._spreads.items():
+            recent = [item for item in samples if item[0] >= cutoff]
+            if not recent:
+                continue
+            if len(recent) > limit:
+                step = len(recent) / limit
+                recent = [recent[int(i * step)] for i in range(limit)]
+            out[symbol] = recent
+        return out
+
+    def restore(self, saved: dict[str, list[tuple[float, float]]]) -> int:
+        """Yeniden baslatmadan onceki spread orneklerini geri yukler -> yuklenen ornek sayisi.
+
+        Kural DEGISMEZ: `max_spread` yine yalnizca son `window` saniyenin orneklerine bakar ve en az
+        `min_ticks` ornek ister; pencereden eski ya da gelecekten gorunen ornekler hic yuklenmez. Yalnizca
+        spread ornekleri yuklenir; son fiyat (quote) yuklenmez, taze tick gelmeden islem degerlendirilmez.
+        """
+        now = self._clock()
+        cutoff = now - self._window
+        loaded = 0
+        for symbol, items in saved.items():
+            fresh = sorted((float(at), float(spread)) for at, spread in items
+                           if cutoff <= float(at) <= now and float(spread) >= 0)
+            if not fresh:
+                continue
+            samples = self._spreads.setdefault(symbol, deque(maxlen=8000))
+            existing = list(samples)
+            samples.clear()
+            samples.extend(sorted(fresh + existing))
+            loaded += len(fresh)
+        return loaded
+
     def max_spread(self, symbol: str) -> float | None:
         samples = self._spreads.get(symbol)
         if not samples:

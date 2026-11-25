@@ -51,3 +51,39 @@ def test_invalid_ticks_are_ignored_and_symbols_are_independent():
     feed(book, 100, 0.5, symbol="XAUUSD", bid=2000.0, start=900.0)
     assert book.max_spread("XAUUSD") == pytest.approx(1.5)
     assert book.max_spread("EURUSD") is None
+
+
+def test_snapshot_and_restore_keep_the_rule_unchanged():
+    """Yeniden baslatmada isinma beklenmez, ama kural gevsemez: en az 100 ornek, yalnizca son 30 dakika."""
+    now = {"t": 5000.0}
+    book = QuoteBook(clock=lambda: now["t"])
+    feed(book, 3000, 0.0002, start=2001.0, symbol="EURUSD")  # yogun sembol: 2001..5000
+    feed(book, 99, 0.0004, start=4000.0, symbol="USDHKD")  # henuz 100 ornegi yok
+    feed(book, 150, 0.0010, start=4800.0, symbol="GBPCHF")
+    saved = book.snapshot()
+    assert len(saved["EURUSD"]) == 200 and len(saved["USDHKD"]) == 99 and len(saved["GBPCHF"]) == 150
+    assert saved["EURUSD"][0][0] == 3200.0 and saved["EURUSD"][-1][0] > 4980.0  # 30 dk pencereye yayilmis
+
+    fresh = QuoteBook(clock=lambda: now["t"])
+    assert fresh.restore(saved) == 449
+    assert fresh.max_spread("EURUSD") == pytest.approx(book.max_spread("EURUSD"))
+    assert fresh.max_spread("GBPCHF") == pytest.approx(0.0030)
+    assert fresh.max_spread("USDHKD") is None  # 99 ornek: kural ayni
+    assert fresh.quote("EURUSD") is None  # son fiyat geri yuklenmez: taze tick gelmeden degerlendirme yok
+    fresh.on_tick(Tick("USDHKD", 7.8, 7.8004, 5000.0))  # yuzuncu ornek yeni tickle gelir
+    assert fresh.max_spread("USDHKD") == pytest.approx(0.0012)
+
+
+def test_restore_ignores_stale_future_and_invalid_samples():
+    now = {"t": 10_000.0}
+    book = QuoteBook(clock=lambda: now["t"])
+    stale = [(10_000.0 - 1801 - i, 0.0002) for i in range(300)]  # pencereden eski
+    future = [(10_001.0 + i, 0.0002) for i in range(300)]  # gelecekten
+    bad = [(9_990.0, -1.0)]
+    assert book.restore({"EURUSD": stale + future + bad}) == 0
+    assert book.max_spread("EURUSD") is None
+    # Geri yuklenen ornekler de zamanla eskir: 30 dakika sonra artik sayilmaz.
+    assert book.restore({"EURUSD": [(9_000.0 + i, 0.0002) for i in range(200)]}) == 200
+    assert book.max_spread("EURUSD") == pytest.approx(0.0006)
+    now["t"] += 1800 + 200
+    assert book.max_spread("EURUSD") is None

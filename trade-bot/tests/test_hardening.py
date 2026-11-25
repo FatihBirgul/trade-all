@@ -185,3 +185,26 @@ async def test_a_task_that_keeps_failing_is_reported_once(tmp_path):
         await app.bot._every(1.0, action, "yonetim")
     assert app.kinds().count("loop_failing") == 1 and "loop_failing" in app.notifier.kinds()
     assert app.bot._loop_failures == {}
+
+
+async def test_restart_does_not_wait_for_spread_samples_again(tmp_path):
+    """Canlida goruldu: her dagitim/yeniden baslatmadan sonra sessiz semboller "max_spread missing" ile
+    eleniyordu, cunku spread ornekleri sifirdan birikiyordu. Ornekler saklanir; kural degismez."""
+    from tests.app_helpers import restart
+
+    app = await started(tmp_path, dry_run=True)
+    limit = app.bot.quotes.max_spread("XAUUSD")
+    assert limit is not None
+    await app.bot.heartbeat()  # ornek ozeti saklanir
+    app.advance(20)  # dagitim: servis 20 sn kapali
+
+    again = restart(app)
+    await again.bot.start()
+    assert again.bot.quotes.max_spread("XAUUSD") == pytest.approx(limit)
+    assert again.bot.quotes.quote("XAUUSD") is None  # fiyat geri yuklenmez; taze tick beklenir
+
+    # Uzun kesintiden sonra eski ornekler kullanilmaz: isinma yeniden gerekir.
+    again.advance(1800 + 60)
+    later = restart(again)
+    await later.bot.start()
+    assert later.bot.quotes.max_spread("XAUUSD") is None

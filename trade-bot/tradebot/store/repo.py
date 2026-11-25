@@ -326,6 +326,20 @@ class Repo:
             "INSERT INTO settings (key, value_json) VALUES (?, ?) "
             "ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json", (key, json.dumps(value)))
 
+    def save_spreads(self, samples: dict[str, list[tuple[float, float]]]) -> None:
+        """Spread ornek ozetini bastan yazar (tek islem: yarim kayit kalmaz)."""
+        rows = [(symbol, float(at), float(spread)) for symbol, items in samples.items() for at, spread in items]
+        with transaction(self.conn):
+            self.conn.execute("DELETE FROM spread_samples")
+            self.conn.executemany("INSERT INTO spread_samples (symbol, at, spread) VALUES (?, ?, ?)", rows)
+
+    def load_spreads(self, since: float) -> dict[str, list[tuple[float, float]]]:
+        out: dict[str, list[tuple[float, float]]] = {}
+        for symbol, at, spread in self.conn.execute(
+                "SELECT symbol, at, spread FROM spread_samples WHERE at >= ? ORDER BY at", (float(since),)):
+            out.setdefault(symbol, []).append((at, spread))
+        return out
+
     def get_bot_settings(self) -> BotSettings:
         raw = self.get_setting("bot_settings")
         if raw is None:

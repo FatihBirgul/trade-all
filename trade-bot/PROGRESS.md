@@ -343,3 +343,12 @@ bilgisini içermiyor; kısmi dolumda `risk_amount` planlanan tutarda kalıyor (R
   (ilk sürümde "iki gece" doğrulaması boşa çalışıyordu).
 - Sonuç: devirden etkilenen sembol devirden sonraki 4 saat analiz dışı kalır, sonra geri döner (önceden 64 saat).
 - Testler: `tests/signals/test_weekend_gap.py` (gerçek Exness saatleriyle uçtan uca ve sınır değerleriyle).
+
+### Yeniden başlatmada spread ısınması (2026-11-25)
+
+Canlıda görüldü: her dağıtımdan sonra sessiz semboller bir süre `max_spread missing or invalid` ile eleniyordu,
+çünkü spread örnekleri süreç belleğindeydi ve sıfırdan birikiyordu (gece devrine denk gelen dağıtımda 6 sembol).
+Karar: örneklerin özeti dakikada bir SQLite'a yazılır (`spread_samples`; sembol başına en çok 200, pencereye eşit
+aralıkla yayılmış) ve açılışta geri yüklenir. **Kural değişmedi:** `max_spread` yine yalnızca son 30 dakikanın
+örneklerine bakar ve en az 100 örnek ister; pencereden eski ya da gelecekten görünen örnek yüklenmez; son fiyat
+geri yüklenmez (taze tick gelmeden değerlendirme yok). 30 dakikadan uzun kesintide ısınma yine gerekir.

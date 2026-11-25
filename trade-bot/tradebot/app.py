@@ -59,6 +59,8 @@ CAPITAL_SEEN = "capital_seen"  # ayar anahtari: deneme modunda ilk okunan varlik
 BASE_LIVE = "capital_base_live"  # ayar anahtari: sermaye tabani canli moda geciste alindi mi
 LOOP_ALERT_AFTER = 5  # bir gorev art arda bu kadar hata verirse kullaniciya haber verilir
 LOOP_LOG_EVERY = 100
+SPREAD_SAVE_INTERVAL = 60.0  # spread ornek ozeti bu aralikla saklanir (yeniden baslatmada isinma beklenmesin)
+SPREAD_RESTORE_WINDOW = 1800.0  # QuoteBook penceresiyle ayni: bundan eski ornek geri yuklenmez
 CLOCK_SKEW_LIMIT = 5.0  # V9 fiyat saati "simdi"den bu kadar ilerideyse veriyi reddeder
 MAINTENANCE_INTERVAL = 1800.0  # gunluk yedek ve temizlik denetimi (is gunde bir kez yapilir)
 RECONCILE_INTERVAL = 300.0  # olay kacirilmis olabilir: broker durumu duzenli olarak yeniden okunur
@@ -139,6 +141,7 @@ class Bot:
         self._daily_blocked = False
         self._account_alerted = False
         self._tick_lead = float("-inf")
+        self._spreads_saved_at = 0.0
         self._clock_alerted = False
         self._skew_beats = 0
         self._loop_failures: dict[str, int] = {}
@@ -193,6 +196,9 @@ class Bot:
         await self._ensure_base(self.repo.get_bot_settings())
         report = await reconcile(self.client, self.repo, self.catalog, clock=self._clock, snapshot=snapshot)
         await self.executor.publish(report)
+        restored = self.quotes.restore(self.repo.load_spreads(now - SPREAD_RESTORE_WINDOW))
+        if restored:
+            log.info("spread ornekleri geri yuklendi: %d ornek", restored)
         self._open_streams()
         await self._refresh_news()
         self.started = True
@@ -1059,6 +1065,9 @@ class Bot:
         elif self._connection_alerted and self.streams_up():
             self._connection_alerted = False
             await self._record("info", "connection_restored", "Exness bağlantısı geri geldi.")
+        if now - self._spreads_saved_at >= SPREAD_SAVE_INTERVAL:
+            self._spreads_saved_at = now
+            self.repo.save_spreads(self.quotes.snapshot())
         lead, self._tick_lead = self._tick_lead, float("-inf")  # son kalp atisindan beri gorulen en buyuk fark
         # Tek bir ileri tarihli tick uyari uretmez: fark art arda iki kalp atisinda surmeli.
         self._skew_beats = self._skew_beats + 1 if lead > CLOCK_SKEW_LIMIT else 0
