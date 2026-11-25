@@ -1,0 +1,107 @@
+"""Canliya gecis karari icin deneme modu ozeti: yalnizca sayilar ve nedenler, hesap bilgisi yok."""
+import httpx
+
+from tests.app_helpers import NOW, feed_ticks, load_market, restart, started
+from tradebot.api.server import create_app
+from tradebot.exness import schema
+
+M15 = 900
+
+
+async def next_bar(app, symbol="XAUUSD"):
+    app.advance(M15)
+    bid, ask = load_market(app.fake, symbol, app.clock["now"])
+    await feed_ticks(app, symbol, bid, ask, app.clock["now"])
+    return await app.bot.on_bar_close()
+
+
+async def public_get(app, path, **params):
+    api = create_app(app.bot, clock=lambda: app.clock["now"])
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api), base_url="http://bot") as http:
+        return await http.get(path, params=params)  # token yok: herkese acik
+
+
+async def test_summary_counts_scans_candidates_and_reasons_without_account_data(tmp_path):
+    app = await started(tmp_path, dry_run=True)  # sahte hesap: 10000 USD, hesap no 123456
+    first = await app.bot.on_bar_close()
+    assert first.would_open == 1 and first.opened == 0 and app.fake.calls("POST", "/positions") == []
+    assert sum(first.veto_reasons.values()) == 3 and sum(first.reasons.values()) == 3
+    for _ in range(2):
+        await next_bar(app)
+
+    response = await public_get(app, "/health/summary")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["dry_run"] is True and body["hours"] == 24
+    assert body["scans"] == 3 and body["symbols_scanned"] == 12
+    assert body["candidates"] == 3 and body["would_open"] == 3 and body["opened"] == 0
+    assert body["signals"] == 3 and len(body["samples"]) == 3
+    assert sum(body["veto_reasons"].values()) == 9 and sum(body["decisions"].values()) == 9
+    assert body["portfolio_blocked"] == 0 and body["errors"] == 0
+
+    sample = body["samples"][-1]
+    assert sample["symbol"] == "XAUUSD" and sample["side"] == "BUY" and sample["dry_run"] is True
+    assert sample["lots"] > 0 and 0 < sample["risk_pct"] <= 0.5 and sample["stop_pct"] > 0
+    assert set(sample) == {"at", "symbol", "side", "strategy_id", "lots", "score", "net_rr", "stop_pct",
+                           "risk_pct", "dry_run"}
+    # Herkese acik cikti: bakiye, varlik, para tutari, hesap numarasi, giris/stop fiyati yok.
+    text = response.text
+    assert sample["net_rr"] == round(sample["net_rr"], 2)
+    for secret in ("10000", "10 000", "account", "risk_amount", "equity", "balance", "currency", "entry",
+                   "stop_loss", "take_profit"):
+        assert secret not in text, secret
+
+
+async def test_summary_reports_gate_and_skip_reasons(tmp_path):
+    app = await started(tmp_path, dry_run=True)
+    await app.bot.on_bar_close()
+    # Puan esiginin altinda kalan aday: gozlem
+    real_score = app.bot._score
+    app.bot._score = lambda result, instrument, settings: (30.0, real_score(result, instrument, settings)[1], None)
+    await next_bar(app)
+    app.bot._score = real_score
+    # Portfoy kapisi: gunluk kayip siniri dolmus gibi
+    app.streams[0].go_down()
+    await next_bar(app)
+    body = (await public_get(app, "/health/summary")).json()
+    assert body["scans"] == 2 and body["scans_skipped"] == {"stream_down": 1}
+    assert body["observed"] == 1 and body["would_open"] == 1
+    assert list(body["observed_reasons"].values()) == [1]
+    assert "güven puanı" in next(iter(body["observed_reasons"]))
+
+
+async def test_summary_window_and_restart(tmp_path):
+    app = await started(tmp_path, dry_run=True)
+    await app.bot.on_bar_close()
+    app.advance(30 * 3600)  # 30 saat sonra: 24 saatlik pencerenin disinda
+    assert (await public_get(app, "/health/summary")).json()["scans"] == 0
+    assert (await public_get(app, "/health/summary", hours=48)).json()["scans"] == 1
+    assert (await public_get(app, "/health/summary", hours=1000)).status_code == 422
+    again = restart(app)  # ozet olay kayitlarindan hesaplanir: yeniden baslatmada kaybolmaz
+    assert again.bot.scan_summary(48)["scans"] == 1 and again.bot.scan_summary(48)["would_open"] == 1
+
+
+async def test_live_signals_are_marked_as_not_dry_run(tmp_path):
+    app = await started(tmp_path)  # canli
+    await app.bot.on_bar_close()
+    body = app.bot.scan_summary()
+    assert body["dry_run"] is False and body["opened"] == 1 and body["would_open"] == 0
+    assert body["samples"][0]["dry_run"] is False
+
+
+async def test_subscription_ack_is_not_counted_as_an_error(tmp_path):
+    """Canli: fiyat akisi her abonelik icin {"id": "ticks-1", "code": 200, "error_message": ""} dondurdu."""
+    app = await started(tmp_path)
+    ack = {"id": "ticks-1", "code": 200, "error_message": ""}
+    await app.bot.on_tick_message(ack)
+    await app.bot.on_tick_message({"id": "ticks-0", "code": 200, "error_message": ""})
+    assert app.bot.tick_errors == 0 and app.bot.tick_error is None and app.bot.tick_acks == 2
+    health = (await public_get(app, "/health")).json()
+    assert health["tick_errors"] == 0 and health["tick_error"] is None and health["tick_acks"] == 2
+    # Gercek hata hala hata
+    await app.bot.on_tick_message({"id": "ticks-2", "code": 4000, "error_message": "MARKET_INSTRUMENT_NOT_FOUND"})
+    assert app.bot.tick_errors == 1 and app.bot.tick_error["code"] == 4000
+    # Olay akisinda da onay "hata" diye siniflanmaz
+    assert schema.parse_ws_event(ack)[0] == "ack"
+    assert schema.parse_ws_event({"id": "x", "code": 3000, "error_message": "REQUEST_INVALID"})[0] == "error"
+    assert schema.is_ws_ack({"code": True}) is False and schema.is_ws_ack({"code": "200"}) is False

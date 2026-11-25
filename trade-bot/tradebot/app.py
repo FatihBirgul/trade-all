@@ -63,6 +63,8 @@ STOP_RECHECK_UNKNOWN = 300.0  # seviye bilinmiyorsa (elle mudahale gerekir) daha
 REARM_LIMIT = 3  # stop bu kadar denemede kurulamazsa pozisyon kapatilir
 ATR_MAX_AGE_BARS = 3
 TICK_CHUNK = 20
+VETO_REASON_CHARS = 80
+SUMMARY_SAMPLES = 5
 RATE_PAUSE_LIMIT = 2  # bir taramada 429 sonrasi en cok bu kadar kisa bekleme; sonra tarama birakilir
 RATE_PAUSE_DEFAULT = 2.0
 RATE_PAUSE_MAX = 10.0
@@ -83,8 +85,10 @@ class ScanSummary:
     skipped: str | None = None
     quoted: int = 0  # taranan sembollerden taze fiyati (tick) olanlar; 0 ise fiyat akisi calismiyor demektir
     candle_retries: int = 0  # ikinci denemede gecen mum istekleri (gecici AUTH_INVALID_API_KEY)
+    would_open: int = 0  # deneme modunda tum kapilardan gecen (canlida emir gonderilecek) adaylar
     reasons: dict[str, int] = field(default_factory=dict)
     blocked_reasons: dict[str, int] = field(default_factory=dict)
+    veto_reasons: dict[str, int] = field(default_factory=dict)  # aday cikmayan sembollerde V9'un ilk nedeni
 
 
 def _default_stream_factory(client, path, on_message, name):
@@ -122,6 +126,7 @@ class Bot:
         self.last_scan: ScanSummary | None = None
         self.tick_errors = 0  # fiyat akisinin dondurdugu hata sayisi (reddedilen abonelik vb.)
         self.tick_error: dict | None = None  # son hata: {"code", "message", "id"}
+        self.tick_acks = 0  # sunucunun onayladigi fiyat aboneligi istekleri
         self._limits = schema.Limits()
         self._events_stream = None
         self._event_connections = 0
@@ -220,6 +225,9 @@ class Bot:
         tick = schema.parse_tick(raw)
         if tick is None:
             # Abonelik yaniti ya da hata: reddedilen abonelik sessiz kalmamali (fiyat hic gelmez).
+            if schema.is_ws_ack(raw):
+                self.tick_acks += 1  # abonelik onayi (kod 200): hata degil
+                return
             code, message = schema.parse_error(raw)
             if code is not None:
                 log.warning("fiyat akisi hata dondurdu: %s (kod %s, istek %s)", message, code, raw.get("id"))
@@ -586,6 +594,8 @@ class Bot:
             for result in results:
                 if result.candidate is None:
                     summary.reasons[result.decision] = summary.reasons.get(result.decision, 0) + 1
+                    veto = (result.reasons[0] if result.reasons else result.decision)[:VETO_REASON_CHARS]
+                    summary.veto_reasons[veto] = summary.veto_reasons.get(veto, 0) + 1
                     log.info("aday yok %s: %s (%s)", symbol, result.decision, "; ".join(result.reasons))
                     continue
                 summary.candidates += 1
@@ -685,10 +695,14 @@ class Bot:
             log.info("aday engellendi %s %s: %s", candidate.symbol, candidate.side, verdict.reason)
             return
         candidate = self._with_tp2(candidate, instrument, settings)
-        data = {**dataclasses.asdict(candidate), "dry_run": settings.dry_run, "score": score, "votes": votes}
+        equity = self.account.equity if self.account is not None else 0.0
+        data = {**dataclasses.asdict(candidate), "dry_run": settings.dry_run, "score": score, "votes": votes,
+                # Varliga oranla risk (%): tutarin kendisi bakiyeyi ele verir, oran vermez.
+                "risk_pct": round(candidate.risk_amount / equity * 100.0, 4) if equity > 0 else None}
         text = (f"{candidate.symbol} {candidate.side} {candidate.lots:g} lot @ {candidate.entry:g}, "
                 f"SL {candidate.stop_loss:g}, TP {candidate.take_profit_2:g} ({candidate.strategy_id})")
         if settings.dry_run:
+            summary.would_open += 1
             await self._record("info", "signal", "[dry-run] " + text, data)  # kaydet, emir gonderme
             return
         await self._record("info", "signal", text, data)
@@ -921,6 +935,56 @@ class Bot:
             if missing:
                 self._subscribed.update(missing)
                 await self._tick_stream.subscribe(schema.subscribe_ticks(f"ticks-extra-{int(now)}", missing))
+
+    def scan_summary(self, hours: float = 24.0) -> dict:
+        """Son `hours` saatin taramalarinin ozeti: yalnizca sayilar ve nedenler.
+
+        Herkese acik uctan da verilir; bu yuzden hesap numarasi, bakiye, varlik ya da para tutari ICERMEZ.
+        Ornek adaylarda lot ve riskin varliga orani (%) vardir; mutlak tutarlar yalnizca yetkili API'dedir.
+        """
+        now = self._clock()
+        since = now - max(0.25, min(float(hours), 168.0)) * 3600.0
+        out = {"hours": round((now - since) / 3600.0, 2), "dry_run": self.repo.get_bot_settings().dry_run,
+               "scans": 0, "scans_skipped": {}, "symbols_scanned": 0, "candidates": 0, "would_open": 0, "opened": 0,
+               "observed": 0, "shadowed": 0, "news_blocked": 0, "portfolio_blocked": 0, "errors": 0,
+               "decisions": {}, "veto_reasons": {}, "portfolio_reasons": {}, "observed_reasons": {}, "samples": []}
+
+        def add(target: dict, source: object) -> None:
+            for key, count in (source.items() if isinstance(source, dict) else ()):
+                if isinstance(count, int):
+                    target[str(key)[:VETO_REASON_CHARS]] = target.get(str(key)[:VETO_REASON_CHARS], 0) + count
+
+        for event in self.repo.events_since(since, ("scan", "scan_skipped", "signal", "signal_observed")):
+            data = event["data"] if isinstance(event["data"], dict) else {}
+            if event["kind"] == "scan":
+                out["scans"] += 1
+                for key, field_name in (("symbols_scanned", "scanned"), ("candidates", "candidates"),
+                                        ("would_open", "would_open"), ("opened", "opened"), ("observed", "observed"),
+                                        ("shadowed", "shadowed"), ("news_blocked", "news_blocked"),
+                                        ("portfolio_blocked", "blocked"), ("errors", "errors")):
+                    value = data.get(field_name)
+                    out[key] += value if isinstance(value, int) else 0
+                add(out["decisions"], data.get("reasons"))
+                add(out["veto_reasons"], data.get("veto_reasons"))
+                add(out["portfolio_reasons"], data.get("blocked_reasons"))
+            elif event["kind"] == "scan_skipped":
+                add(out["scans_skipped"], {data.get("reason") or "?": 1})
+            elif event["kind"] == "signal_observed":
+                add(out["observed_reasons"], {data.get("reason") or "?": 1})
+            elif event["kind"] == "signal":
+                entry, stop = data.get("entry"), data.get("stop_loss")
+                distance = (round(abs(entry - stop) / entry * 100.0, 4)
+                            if isinstance(entry, (int, float)) and isinstance(stop, (int, float)) and entry else None)
+                out["samples"].append({
+                    "at": event["at"], "symbol": data.get("symbol"), "side": data.get("side"),
+                    "strategy_id": data.get("strategy_id"), "lots": data.get("lots"),
+                    "score": round(data["score"], 1) if isinstance(data.get("score"), (int, float)) else None,
+                    "net_rr": round(data["net_rr"], 2) if isinstance(data.get("net_rr"), (int, float)) else None,
+                    "stop_pct": distance, "risk_pct": data.get("risk_pct"),
+                    "dry_run": data.get("dry_run")})
+        out["signals"] = len(out["samples"])
+        out["samples"] = out["samples"][-SUMMARY_SAMPLES:]
+        return out
 
     def quoted_now(self) -> int:
         """Evrende su an taze (QUOTE_MAX_AGE icinde) fiyati olan sembol sayisi."""

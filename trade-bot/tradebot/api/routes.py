@@ -46,9 +46,15 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
         return {"status": "ok" if fresh else "stale", "last_scan_at": state.last_scan_at,
                 "heartbeat_at": state.heartbeat_at, "stream_connected": bot.streams_up(), "halted": state.halted,
                 "last_scan": last_scan, "tick_errors": getattr(bot, "tick_errors", 0),
-                "tick_error": getattr(bot, "tick_error", None),
+                "tick_error": getattr(bot, "tick_error", None), "tick_acks": getattr(bot, "tick_acks", 0),
                 # Su an taze fiyati olan evren sembolu sayisi: tarama beklemeden fiyat akisinin calistigini gosterir.
                 "quoted_now": bot.quoted_now() if hasattr(bot, "quoted_now") else None}
+
+    @public.get("/health/summary")
+    async def health_summary(hours: float = Query(default=24.0, ge=0.25, le=168.0)):
+        """Son taramalarin ozeti (canliya gecis karari icin). Herkese acik: yalnizca sayilar, nedenler ve
+        ornek adaylarin lot / risk yuzdesi. Hesap numarasi, bakiye ya da para tutari icermez."""
+        return bot.scan_summary(hours)
 
     @public.post("/pair")
     async def pair(body: PairRequest):
