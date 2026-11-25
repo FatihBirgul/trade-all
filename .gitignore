@@ -29,3 +29,6 @@ test-results/
 playwright-report/
 *.apk
 *.egg-info/
+
+# graphify knowledge graph output (local, rebuilt per machine)
+graphify-out/

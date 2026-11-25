@@ -1,0 +1,6 @@
+{
+  "env": {
+    "GRAPHIFY_BACKEND": "none",
+    "GRAPHIFY_QUERY_LOG_DISABLE": "1"
+  }
+}
