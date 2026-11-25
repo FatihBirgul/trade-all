@@ -245,7 +245,7 @@ class Executor:
                 closed = self.repo.get_trade(position.id)
                 await self._record(
                     "info", "trade_closed",
-                    f"{closed.symbol} {closed.side} kapandi: {closed.pnl:+.2f} ({_REASONS.get(reason, reason)})",
+                    f"{closed.symbol} {closed.side} kapandı: {closed.pnl:+.2f} ({_REASONS.get(reason, reason)})",
                     {"position_id": position.id, "symbol": closed.symbol, "side": closed.side, "pnl": closed.pnl,
                      "reason": reason, "origin": closed.origin})
                 continue
@@ -291,7 +291,7 @@ class Executor:
             trade = self.repo.get_trade(position_id)
             if trade is not None:
                 await self._record(
-                    "info", "trade_closed", f"{trade.symbol} {trade.side} kapandi: {trade.pnl:+.2f}",
+                    "info", "trade_closed", f"{trade.symbol} {trade.side} kapandı: {trade.pnl:+.2f}",
                     {"position_id": position_id, "symbol": trade.symbol, "side": trade.side, "pnl": trade.pnl,
                      "reason": "unknown" if position_id in report.unexplained else "offline",
                      "origin": trade.origin})
@@ -350,16 +350,16 @@ class Executor:
             if key in confirmed:
                 self.repo.update_order_state(key, "FILLED")
             elif not current["operation_id"] and now - current["created_at"] >= UNKNOWN_TIMEOUT:
-                self.repo.update_order_state(key, "CANCELLED", error="sonuc bilinmiyor; pozisyon bulunamadi")
+                self.repo.update_order_state(key, "CANCELLED", error="sonuç bilinmiyor; pozisyon bulunamadı")
                 symbol = current["payload"].get("symbol")
                 await self._record(
                     "warning", "order_unknown",
-                    f"{symbol} {_KINDS[current['kind']]} emrinin sonucu alinamadi; broker'da karsiligi yok",
+                    f"{symbol} {_KINDS[current['kind']]} emrinin sonucu alınamadı; broker'da karşılığı yok",
                     {"symbol": symbol, "kind": current["kind"], "position_id": current["position_id"]})
         return report
 
 
-_KINDS = {"open": "acma", "modify": "SL/TP degisikligi", "close": "kapama"}
-_REASONS = {"sl": "stop", "tp": "kar al", "so": "stop out", "close": "kapatildi", "external": "disaridan kapatildi"}
-_TITLES = {"trade_opened": "Islem acildi", "trade_closed": "Islem kapandi", "order_rejected": "Emir reddedildi",
+_KINDS = {"open": "açma", "modify": "SL/TP değişikliği", "close": "kapama"}
+_REASONS = {"sl": "stop", "tp": "kâr al", "so": "stop out", "close": "kapatıldı", "external": "dışarıdan kapatıldı"}
+_TITLES = {"trade_opened": "İşlem açıldı", "trade_closed": "İşlem kapandı", "order_rejected": "Emir reddedildi",
            "order_unknown": "Emir sonucu bilinmiyor"}

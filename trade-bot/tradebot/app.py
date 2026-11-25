@@ -126,7 +126,7 @@ class Bot:
         self._open_streams()
         self.started = True
         universe = self.catalog.universe(self.repo.get_bot_settings().enabled_symbols)
-        await self._record("info", "bot_started", f"Bot basladi: {len(universe)} sembol izleniyor",
+        await self._record("info", "bot_started", f"Bot başladı: {len(universe)} sembol izleniyor",
                            {"universe": len(universe), "catalog_errors": len(catalog_errors),
                             "dry_run": self.repo.get_bot_settings().dry_run})
 
@@ -219,7 +219,7 @@ class Bot:
         if self.repo.bot_state().halted:
             return
         self.repo.set_bot_state(halted=True, halt_reason=reason)
-        await self._record("error", "bot_halted", f"Bot durdu: {reason}. Devam icin uygulamadan onay gerekli.",
+        await self._record("error", "bot_halted", f"Bot durdu: {reason}. Devam için uygulamadan onay gerekli.",
                            {"reason": reason}, notify=True, title="Bot durdu")
 
     async def _check_limits(self, settings: BotSettings) -> None:
@@ -229,16 +229,16 @@ class Bot:
             return
         today, total = self.bot_pnl(state)
         if not state.halted and total <= -settings.risk.total_loss_pct / 100.0 * capital:
-            await self._halt(f"toplam kayip siniri (%{settings.risk.total_loss_pct:g}) asildi")
+            await self._halt(f"toplam kayıp sınırı (%{settings.risk.total_loss_pct:g}) aşıldı")
         self._daily_blocked = today <= -settings.risk.daily_loss_pct / 100.0 * capital
         if self._daily_blocked:
             day = datetime.fromtimestamp(self._day_start(), timezone.utc).strftime("%Y-%m-%d")
             if self.repo.get_setting("daily_limit_day") != day:
                 self.repo.set_setting("daily_limit_day", day)
                 await self._record("warning", "daily_limit",
-                                   f"Gunluk kayip siniri (%{settings.risk.daily_loss_pct:g}) doldu; "
-                                   "bugun yeni bot islemi acilmayacak.",
-                                   {"pnl_today": today}, notify=True, title="Gunluk limit doldu")
+                                   f"Günlük kayıp sınırı (%{settings.risk.daily_loss_pct:g}) doldu; "
+                                   "bugün yeni bot işlemi açılmayacak.",
+                                   {"pnl_today": today}, notify=True, title="Günlük limit doldu")
 
     # ------------------------------------------------------------------ tarama
     def _is_open(self, instrument: Instrument, now: float) -> bool:
@@ -262,14 +262,14 @@ class Bot:
 
     async def _skip(self, summary: ScanSummary, reason: str) -> ScanSummary:
         summary.skipped = reason
-        await self._record("info", "scan_skipped", f"Tarama yapilmadi: {_SKIP.get(reason, reason)}", {"reason": reason})
+        await self._record("info", "scan_skipped", f"Tarama yapılmadı: {_SKIP.get(reason, reason)}", {"reason": reason})
         return summary
 
     async def _auth_error(self, exc: ExnessError) -> None:
         await self._record(
             "error", "auth_error",
-            f"Exness kimlik dogrulamasi reddedildi: {exc}. Sunucu saatini (NTP) ve API anahtarini kontrol edin.",
-            {"code": exc.code}, notify=True, title="API erisimi reddedildi")
+            f"Exness kimlik doğrulaması reddedildi: {exc}. Sunucu saatini (NTP) ve API anahtarını kontrol edin.",
+            {"code": exc.code}, notify=True, title="API erişimi reddedildi")
 
     async def on_bar_close(self, tf: str = "M15") -> ScanSummary:
         now = self._clock()
@@ -306,7 +306,7 @@ class Bot:
                 # Limit asildi: bu turu birak, dongude tekrar deneme.
                 summary.errors += 1
                 summary.skipped = "rate_limited"
-                await self._record("warning", "rate_limited", f"Istek limiti doldu; tarama yarida kesildi ({exc})")
+                await self._record("warning", "rate_limited", f"İstek limiti doldu; tarama yarıda kesildi ({exc})")
                 return summary
             except (ExnessError, ValueError) as exc:
                 summary.errors += 1
@@ -335,7 +335,7 @@ class Bot:
         await self._record(
             "info", "scan",
             f"Tarama: {summary.scanned} sembol, {summary.candidates} aday, {summary.opened} emir"
-            + (f", {summary.closed} kapali" if summary.closed else ""), dataclasses.asdict(summary))
+            + (f", {summary.closed} kapalı" if summary.closed else ""), dataclasses.asdict(summary))
         return summary
 
     def _with_tp2(self, candidate: Candidate, instrument: Instrument, settings: BotSettings) -> Candidate:
@@ -429,9 +429,9 @@ class Bot:
                             self.repo.upsert_trade(fresh)
                             await self._record(
                                 "info", "sl_breakeven",
-                                f"{trade.symbol} {trade.side}: SL girise cekiliyor ({action.price:g})",
+                                f"{trade.symbol} {trade.side}: SL girişe çekiliyor ({action.price:g})",
                                 {"position_id": trade.position_id, "symbol": trade.symbol, "sl": action.price},
-                                notify=True, title="SL girise cekildi")
+                                notify=True, title="SL girişe çekildi")
                 elif isinstance(action, PartialClose):
                     await self.executor.close(trade.position_id, volume=action.volume)
                 break  # pozisyon basina bir seferde tek istek; sonucu gelince devam edilir
@@ -447,11 +447,11 @@ class Bot:
         if down > STREAM_ALERT_AFTER and not self._connection_alerted:
             self._connection_alerted = True
             await self._record("error", "connection_lost",
-                               f"Exness baglantisi {int(down)} saniyedir yok; yeni islem acilmiyor.",
-                               {"seconds": down}, notify=True, title="Baglanti koptu")
+                               f"Exness bağlantısı {int(down)} saniyedir yok; yeni işlem açılmıyor.",
+                               {"seconds": down}, notify=True, title="Bağlantı koptu")
         elif self._connection_alerted and self.streams_up():
             self._connection_alerted = False
-            await self._record("info", "connection_restored", "Exness baglantisi geri geldi.")
+            await self._record("info", "connection_restored", "Exness bağlantısı geri geldi.")
         await self._check_limits(self.repo.get_bot_settings())
         if self._tick_stream is not None:
             missing = [s for s in self._tick_symbols() if s not in self._subscribed]
@@ -497,8 +497,8 @@ class Bot:
                 log.error("acilis basarisiz: %s", exc)
                 if not alerted:
                     alerted = True
-                    await self._record("error", "startup_failed", f"Bot baslatilamadi: {exc}",
-                                       notify=True, title="Bot baslatilamadi")
+                    await self._record("error", "startup_failed", f"Bot başlatılamadı: {exc}",
+                                       notify=True, title="Bot başlatılamadı")
             await self._sleep(delay)
             delay = min(delay * 2, 300.0)
 
@@ -535,6 +535,6 @@ class Bot:
         )
 
 
-_SKIP = {"halted": "bot durduruldu (toplam kayip siniri)", "stopped": "kullanici durdurdu",
-         "stream_down": "Exness baglantisi yok", "account_blocked": "hesap yeni isleme kapali",
-         "daily_limit": "gunluk kayip siniri doldu"}
+_SKIP = {"halted": "bot durduruldu (toplam kayıp sınırı)", "stopped": "kullanıcı durdurdu",
+         "stream_down": "Exness bağlantısı yok", "account_blocked": "hesap yeni işleme kapalı",
+         "daily_limit": "günlük kayıp sınırı doldu"}

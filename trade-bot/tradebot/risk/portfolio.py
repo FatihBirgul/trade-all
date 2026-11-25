@@ -39,20 +39,20 @@ def check_entry(candidate: Candidate, *, open_bot: Sequence[Trade], bot_pnl_toda
     if halted:
         return Verdict(False, "bot durduruldu")
     if start_capital is None or start_capital <= 0:
-        return Verdict(False, "baslangic sermayesi bilinmiyor")
+        return Verdict(False, "başlangıç sermayesi bilinmiyor")
     if bot_pnl_total <= -settings.total_loss_pct / 100.0 * start_capital:
-        return Verdict(False, f"toplam kayip siniri (%{settings.total_loss_pct:g}) asildi", should_halt=True)
+        return Verdict(False, f"toplam kayıp sınırı (%{settings.total_loss_pct:g}) aşıldı", should_halt=True)
     if bot_pnl_today <= -settings.daily_loss_pct / 100.0 * start_capital:
-        return Verdict(False, f"gunluk kayip siniri (%{settings.daily_loss_pct:g}) doldu")
+        return Verdict(False, f"günlük kayıp sınırı (%{settings.daily_loss_pct:g}) doldu")
     bot_trades = [t for t in open_bot if t.origin == "bot" and t.is_open]
     if len(bot_trades) >= settings.max_open_bot:
-        return Verdict(False, f"acik bot islemi siniri ({settings.max_open_bot}) dolu")
+        return Verdict(False, f"açık bot işlemi sınırı ({settings.max_open_bot}) dolu")
     if sum(1 for t in bot_trades if t.symbol == candidate.symbol) >= settings.per_symbol:
-        return Verdict(False, f"{candidate.symbol} icin zaten acik bot islemi var")
+        return Verdict(False, f"{candidate.symbol} için zaten açık bot işlemi var")
     exposure: Counter = Counter()
     for trade in bot_trades:
         exposure.update(currency_legs(trade.symbol, trade.side, instruments))
     for leg in currency_legs(candidate.symbol, candidate.side, instruments):
         if exposure[leg] >= settings.per_currency_side:
-            return Verdict(False, f"{leg[0]} {leg[1]} yonunde zaten {exposure[leg]} acik islem var")
+            return Verdict(False, f"{leg[0]} {leg[1]} yönünde zaten {exposure[leg]} açık işlem var")
     return Verdict(True, "ok")

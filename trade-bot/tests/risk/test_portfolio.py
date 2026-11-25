@@ -77,7 +77,7 @@ def test_metal_and_crypto_use_instrument_currencies():
 def test_daily_loss_limit():
     assert check(bot_pnl_today=-149.99).allowed is True
     verdict = check(bot_pnl_today=-150.0)  # 3000'in %5'i
-    assert verdict.allowed is False and verdict.should_halt is False and "gunluk" in verdict.reason
+    assert verdict.allowed is False and verdict.should_halt is False and "günlük" in verdict.reason
     assert check(bot_pnl_today=-150.0, settings=RiskSettings(daily_loss_pct=10)).allowed is True
 
 

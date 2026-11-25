@@ -25,7 +25,7 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
     def require_token(authorization: str | None = Header(default=None)) -> None:
         scheme, _, token = (authorization or "").partition(" ")
         if scheme.lower() != "bearer" or not auth.verify_token(repo, token.strip()):
-            raise HTTPException(status_code=401, detail="gecersiz ya da eksik token")
+            raise HTTPException(status_code=401, detail="geçersiz ya da eksik token")
 
     private = APIRouter(dependencies=[Depends(require_token)])
 
@@ -41,8 +41,8 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
     async def pair(body: PairRequest):
         token = auth.redeem_pair_code(repo, body.code, now=clock())
         if token is None:
-            raise HTTPException(status_code=401, detail="kod gecersiz ya da suresi dolmus")
-        repo.add_event("info", "device_paired", "Yeni cihaz eslestirildi")
+            raise HTTPException(status_code=401, detail="kod geçersiz ya da süresi dolmuş")
+        repo.add_event("info", "device_paired", "Yeni cihaz eşleştirildi")
         return {"token": token}
 
     # ------------------------------------------------------------------ durum ve pozisyonlar
@@ -74,7 +74,7 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
     def _open_trade(position_id: str):
         trade = repo.get_trade(position_id)
         if trade is None or not trade.is_open:
-            raise HTTPException(status_code=404, detail="acik pozisyon bulunamadi")
+            raise HTTPException(status_code=404, detail="açık pozisyon bulunamadı")
         return trade
 
     @private.patch("/positions/{position_id}")
@@ -85,7 +85,7 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
             # Kullanicinin koydugu SL: bot bunu zarar yonune geri almaz (user_sl_override).
             key = await bot.executor.modify(position_id, sl=body.sl, tp=body.tp, user=True)
             if key is None:
-                raise HTTPException(status_code=409, detail="pozisyonda sonucu beklenen baska bir istek var")
+                raise HTTPException(status_code=409, detail="pozisyonda sonucu beklenen başka bir istek var")
         if body.manage is not None:
             trade = _open_trade(position_id)
             trade.manage = body.manage
@@ -96,10 +96,10 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
     async def close_position(position_id: str, body: CloseRequest):
         trade = _open_trade(position_id)
         if body.volume is not None and body.volume > trade.volume + 1e-9:
-            raise HTTPException(status_code=422, detail="hacim acik pozisyondan buyuk")
+            raise HTTPException(status_code=422, detail="hacim açık pozisyondan büyük")
         key = await bot.executor.close(position_id, volume=body.volume, user=True)
         if key is None:
-            raise HTTPException(status_code=409, detail="pozisyonda sonucu beklenen baska bir istek var")
+            raise HTTPException(status_code=409, detail="pozisyonda sonucu beklenen başka bir istek var")
         return {"order": key}
 
     # ------------------------------------------------------------------ elle islem
@@ -108,18 +108,18 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
         try:
             instrument = bot.catalog.get(body.symbol)
         except KeyError:
-            raise HTTPException(status_code=404, detail="sembol bulunamadi") from None
+            raise HTTPException(status_code=404, detail="sembol bulunamadı") from None
         if not instrument.tradable:
-            raise HTTPException(status_code=409, detail="sembol isleme kapali")
+            raise HTTPException(status_code=409, detail="sembol işleme kapalı")
         quote = bot.quotes.quote(body.symbol)
         if quote is None or clock() - quote["time"] > QUOTE_MAX_AGE:
-            raise HTTPException(status_code=409, detail="guncel fiyat yok")
+            raise HTTPException(status_code=409, detail="güncel fiyat yok")
         sign = 1.0 if body.side == "BUY" else -1.0
         entry = quote["ask"] if body.side == "BUY" else quote["bid"]
         sl = entry - sign * body.sl_distance
         tp = entry + sign * body.tp_distance if body.tp_distance is not None else None
         if sl <= 0:
-            raise HTTPException(status_code=422, detail="SL mesafesi fiyattan buyuk")
+            raise HTTPException(status_code=422, detail="SL mesafesi fiyattan büyük")
         lots = body.lots
         if lots is None:
             # Sermaye ve marjin ortak oldugu icin gercek hesap equity'si kullanilir (spec §6.4).
@@ -128,15 +128,15 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
             try:
                 per_lot = abs(bot.provider.loss_for(body.symbol, body.side, 1.0, entry, sl))
             except LookupError:
-                raise HTTPException(status_code=409, detail="hesap para birimine donusum kuru yok") from None
+                raise HTTPException(status_code=409, detail="hesap para birimine dönüşüm kuru yok") from None
             budget = bot.account.equity * repo.get_bot_settings().risk.risk_pct / 100.0
             if per_lot <= 0 or not math.isfinite(per_lot):
-                raise HTTPException(status_code=409, detail="lot hesaplanamadi")
+                raise HTTPException(status_code=409, detail="lot hesaplanamadı")
             step = Decimal(str(instrument.volume_step))
             units = (Decimal(str(budget / per_lot + 1e-9)) / step).to_integral_value(rounding=ROUND_FLOOR)
             lots = float(min(units * step, Decimal(str(instrument.volume_max))))
         if lots < instrument.volume_min - 1e-12:
-            raise HTTPException(status_code=422, detail="en kucuk lot risk sinirini asiyor")
+            raise HTTPException(status_code=422, detail="en küçük lot risk sınırını aşıyor")
         try:
             key = await bot.executor.open_manual(body.symbol, body.side, lots, sl=sl, tp=tp, price=entry)
         except ValueError as exc:
@@ -148,7 +148,7 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
     @private.post("/bot/stop")
     async def stop():
         repo.set_bot_state(stopped=True)
-        repo.add_event("warning", "bot_stopped", "Bot durduruldu: yeni islem acilmayacak, acik islemler yonetilecek")
+        repo.add_event("warning", "bot_stopped", "Bot durduruldu: yeni işlem açılmayacak, açık işlemler yönetilecek")
         return bot.status()
 
     @private.post("/bot/resume")
@@ -157,24 +157,24 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
         if state.halted:
             if body is None or not body.confirm_halt:
                 raise HTTPException(status_code=409,
-                                    detail="toplam kayip siniri nedeniyle durdu; devam icin confirm_halt=true gerekli")
+                                    detail="toplam kayıp sınırı nedeniyle durdu; devam için confirm_halt=true gerekli")
             # Bilincli devam: olcum tabani sifirlanir, yoksa bot ayni kayip yuzunden hemen yeniden dururdu.
             capital = bot.account.equity if bot.account is not None else state.start_capital
             repo.set_bot_state(halted=False, halt_reason=None, start_capital=capital, start_at=clock())
         repo.set_bot_state(stopped=False)
-        repo.add_event("info", "bot_resumed", "Bot devam ediyor" + (" (durma onaylandi)" if state.halted else ""))
+        repo.add_event("info", "bot_resumed", "Bot devam ediyor" + (" (durma onaylandı)" if state.halted else ""))
         return bot.status()
 
     @private.post("/bot/close-all")
     async def close_all(body: CloseAllRequest):
         if body.confirm != CLOSE_ALL_PHRASE:
-            raise HTTPException(status_code=409, detail=f'onay icin confirm="{CLOSE_ALL_PHRASE}" gonderilmeli')
+            raise HTTPException(status_code=409, detail=f'onay için confirm="{CLOSE_ALL_PHRASE}" gönderilmeli')
         repo.set_bot_state(stopped=True)  # kapatirken yeni islem acilmasin
         requested = 0
         for trade in repo.open_trades():
             if await bot.executor.close(trade.position_id, user=True) is not None:
                 requested += 1
-        repo.add_event("warning", "close_all", f"Tum pozisyonlar icin kapama istendi ({requested})")
+        repo.add_event("warning", "close_all", f"Tüm pozisyonlar için kapama istendi ({requested})")
         return {"requested": requested, "stopped": True}
 
     # ------------------------------------------------------------------ ayarlar
@@ -185,7 +185,7 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
     @private.put("/settings")
     async def put_settings(body: BotSettings):
         repo.set_bot_settings(body)
-        repo.add_event("info", "settings_changed", "Ayarlar guncellendi", body.model_dump(mode="json"))
+        repo.add_event("info", "settings_changed", "Ayarlar güncellendi", body.model_dump(mode="json"))
         return body.model_dump(mode="json")
 
     # ------------------------------------------------------------------ raporlar ve olaylar

@@ -11,7 +11,7 @@ from .api.server import serve
 from .app import Bot
 from .config import Settings
 from .exness.client import ExnessClient
-from .notify import NullNotifier
+from .notify.expo import ExpoNotifier
 from .store.repo import Repo
 
 
@@ -39,7 +39,8 @@ class Runtime:
 
 
 def build_notifier(repo: Repo):
-    return NullNotifier()
+    """Kayitli cihaz yoksa ExpoNotifier zaten hicbir sey gondermez."""
+    return ExpoNotifier(repo)
 
 
 def build_runtime(settings: Settings) -> Runtime:
