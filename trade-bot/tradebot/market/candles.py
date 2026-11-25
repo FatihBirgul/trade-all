@@ -74,6 +74,26 @@ class CandleStore:
         self.transient_rejections += 1
         return data
 
+    async def heal(self, symbol: str, tf: str, missing: int) -> bool:
+        """Onbellekte eksik gorunen mumu (acilis zamani `missing`) borsadan yeniden ister -> geldi mi?
+
+        `get` yalnizca son mumdan sonrasini ceker; arada kalmis bir bosluk kendiliginden kapanmaz. Burada
+        yalnizca boslugun cevresi istenir (tek istek). Borsa da mum vermiyorsa bosluk gercektir (o surede
+        hic fiyat gelmemistir) ve False doner.
+        """
+        duration = DURATIONS[tf]
+        slot = int(missing // duration) * duration
+        now = self._clock()
+        broker_symbol = self._catalog.get(symbol).broker_symbol
+        path = schema.candles_path(self._client.account_id, broker_symbol, tf, slot - 2 * duration,
+                                   min(now, slot + 3 * duration))
+        rows = schema.parse_candles(await self._fetch(path))
+        closed = [(symbol, tf, r["time"], r["open"], r["high"], r["low"], r["close"], r["tick_volume"])
+                  for r in rows if r["time"] + duration <= now]
+        with transaction(self._db):
+            self._db.executemany("INSERT OR REPLACE INTO candles VALUES (?,?,?,?,?,?,?,?)", closed)
+        return any(row[2] == slot for row in closed)
+
     async def get(self, symbol: str, tf: str, count: int = 256) -> list[dict]:
         """Gerekirse yalnizca eksik araligi ceker, sonra onbellekten son `count` kapanmis mumu dondurur."""
         duration = DURATIONS[tf]
