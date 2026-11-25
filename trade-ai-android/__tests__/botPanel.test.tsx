@@ -41,6 +41,7 @@ function setBot(overrides: Partial<Bot> = {}, statusOverrides: Partial<BotStatus
     stop: jest.fn().mockResolvedValue({}),
     resume: jest.fn().mockResolvedValue({}),
     closeAll: jest.fn().mockResolvedValue({ requested: 3, skipped: [], stopped: true }),
+    setDryRun: jest.fn().mockResolvedValue({}),
   };
   const bot = {
     phase: "ready",
@@ -228,4 +229,44 @@ test("unconfigured shows link to connection", async () => {
   expect(ui.queryByText("Durdur")).toBeNull();
   await fireEvent.press(ui.getByText("Bağlantı sekmesine git"));
   expect(mockPush).toHaveBeenCalledWith("/connection");
+});
+
+test("going live needs two explicit confirmations and is offered only in dry run", async () => {
+  const { api } = setBot({}, { dry_run: true });
+  const ui = await screen();
+  expect(ui.queryByText("Deneme moduna dön")).toBeNull();
+  await fireEvent.press(ui.getByText("Canlı moda geç"));
+  expect(api.setDryRun).not.toHaveBeenCalled();
+  expect(dialog().title).toBe("Canlı moda geçilsin mi?");
+  expect(dialog().message).toContain("GERÇEK PARA");
+  expect(dialog().message).toContain("3.012,50 USC");
+  await pressDialog("Canlıya geçmek istiyorum");
+  expect(api.setDryRun).not.toHaveBeenCalled(); // ikinci onay bekleniyor
+  expect(dialog().title).toBe("Emin misiniz?");
+  await pressDialog("Vazgeç");
+  expect(api.setDryRun).not.toHaveBeenCalled();
+
+  await fireEvent.press(ui.getByText("Canlı moda geç"));
+  await pressDialog("Canlıya geçmek istiyorum");
+  await pressDialog("Evet, canlıya geç");
+  expect(api.setDryRun).toHaveBeenCalledTimes(1);
+  expect(api.setDryRun).toHaveBeenCalledWith(false);
+  await waitFor(() => expect(ui.getByText("Canlı moda geçildi.")).toBeTruthy());
+});
+
+test("going live is not offered while the bot is not answering", async () => {
+  setBot({ heartbeatStale: true }, { dry_run: true });
+  const ui = await screen();
+  await fireEvent.press(ui.getByText("Canlı moda geç"));
+  expect(alert).not.toHaveBeenCalled();
+});
+
+test("returning to dry run asks once", async () => {
+  const { api } = setBot();
+  const ui = await screen();
+  expect(ui.queryByText("Canlı moda geç")).toBeNull();
+  await fireEvent.press(ui.getByText("Deneme moduna dön"));
+  expect(api.setDryRun).not.toHaveBeenCalled();
+  await pressDialog("Deneme moduna dön");
+  expect(api.setDryRun).toHaveBeenCalledWith(true);
 });

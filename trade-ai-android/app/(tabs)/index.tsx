@@ -72,6 +72,42 @@ export default function Panel() {
       ],
     );
   }
+  function confirmGoLive() {
+    // Canlı mod gerçek para ile emir gönderir: iki ayrı onay.
+    Alert.alert(
+      "Canlı moda geçilsin mi?",
+      "Bot GERÇEK PARA ile emir göndermeye başlar ve kendi kararıyla işlem açar.\n\n" +
+        "Kayıp sınırları şu anki varlık (" +
+        amountText(status?.equity, status?.currency) +
+        ") üzerinden ölçülmeye başlar.",
+      [
+        { text: "Vazgeç", style: "cancel" },
+        {
+          text: "Canlıya geçmek istiyorum",
+          style: "destructive",
+          onPress: () =>
+            Alert.alert("Emin misiniz?", "Bu andan itibaren bot gerçek hesapta işlem açabilir.", [
+              { text: "Vazgeç", style: "cancel" },
+              {
+                text: "Evet, canlıya geç",
+                style: "destructive",
+                onPress: () => void run(() => bot.api.setDryRun(false), "Canlı moda geçildi."),
+              },
+            ]),
+        },
+      ],
+    );
+  }
+  function confirmDryRun() {
+    Alert.alert(
+      "Deneme moduna dönülsün mü?",
+      "Bot yeni işlem açmaz ve açık işlemlerde kademeli stop yapmaz. Mevcut SL ve TP emirleri Exness’te kalır.",
+      [
+        { text: "Vazgeç", style: "cancel" },
+        { text: "Deneme moduna dön", onPress: () => void run(() => bot.api.setDryRun(true), "Deneme moduna geçildi.") },
+      ],
+    );
+  }
   function confirmCloseAll() {
     const count = (status?.open_bot ?? 0) + (status?.open_manual ?? 0);
     Alert.alert(
@@ -162,6 +198,11 @@ export default function Panel() {
               <Button title="Durdur" onPress={confirmStop} disabled={busy} secondary />
             )}
             <Button title="Hepsini kapat" onPress={confirmCloseAll} disabled={busy} secondary />
+            {status.dry_run ? (
+              <Button title="Canlı moda geç" onPress={confirmGoLive} disabled={busy || bot.heartbeatStale} secondary />
+            ) : (
+              <Button title="Deneme moduna dön" onPress={confirmDryRun} disabled={busy} secondary />
+            )}
             {notice ? (
               <Label style={{ color: notice.bad ? colors.red : colors.muted }}>{notice.text}</Label>
             ) : null}

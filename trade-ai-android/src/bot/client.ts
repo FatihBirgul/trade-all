@@ -185,6 +185,17 @@ export function createBotApi(config: BotConfig | null, transport: Transport = fe
     stop: () => request<BotStatus>("/bot/stop", "POST"),
     resume: (confirmHalt = false) =>
       request<BotStatus>("/bot/resume", "POST", confirmHalt ? { confirm_halt: true } : {}),
+    // Deneme/canlı kipi. Ayarlar her seferinde yeniden okunur (eski bir kopya gönderilmez); canlıya
+    // geçiş sunucuda ayrı bir onay değeri ister ve yalnızca kullanıcı onayladıktan sonra çağrılır.
+    setDryRun: async (dryRun: boolean) => {
+      const settings = await request<Record<string, unknown>>("/settings");
+      if (typeof settings.dry_run !== "boolean") throw new BotError("INVALID_RESPONSE");
+      return request<Record<string, unknown>>(
+        "/settings" + (dryRun ? "" : "?confirm_live=true"),
+        "PUT",
+        { ...settings, dry_run: dryRun },
+      );
+    },
     closeAll: () =>
       request<{ requested: number; skipped: string[]; stopped: boolean }>("/bot/close-all", "POST", {
         confirm: "CLOSE-ALL",

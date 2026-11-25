@@ -258,3 +258,32 @@ test("position ids are validated before building a url", async () => {
   await createBotApi(config, transport).closePosition("AB-12_cd");
   expect(transport.mock.calls[0][0]).toBe(config.origin + "/positions/AB-12_cd/close");
 });
+
+test("going live re-reads settings and sends the separate confirmation; going back to dry run does not", async () => {
+  const settings = { dry_run: true, risk: { risk_pct: 0.5 }, strategy_modes: { fx_trend_momentum_v6: "shadow" } };
+  const transport = jest.fn(async (_url: string, request: { method: string; body?: string }) =>
+    request.method === "GET" ? ok(settings) : ok(JSON.parse(request.body ?? "{}")),
+  );
+  const api = createBotApi(config, transport as unknown as typeof fetch);
+  await api.setDryRun(false);
+  const calls = transport.mock.calls as unknown as [string, { method: string; body?: string }][];
+  expect(calls.map(([url, request]) => [request.method, url.replace(config.origin, "")])).toEqual([
+    ["GET", "/settings"],
+    ["PUT", "/settings?confirm_live=true"],
+  ]);
+  // Okunan ayarlar aynen geri gönderilir; yalnızca dry_run değişir (strateji kipleri korunur).
+  expect(JSON.parse(calls[1][1].body ?? "")).toEqual({ ...settings, dry_run: false });
+  transport.mockClear();
+  await api.setDryRun(true);
+  expect((transport.mock.calls as unknown as [string][])[1][0]).toBe(config.origin + "/settings");
+
+  const refused = jest.fn(async (_url: string, request: { method: string }) =>
+    request.method === "GET" ? ok(settings) : ok({ detail: "strateji bu yoldan canlıya alınamaz" }, 409),
+  );
+  await expect(createBotApi(config, refused as unknown as typeof fetch).setDryRun(false)).rejects.toMatchObject({
+    code: "HTTP_409",
+    message: "strateji bu yoldan canlıya alınamaz",
+    uncertain: false,
+  });
+  expect(refused).toHaveBeenCalledTimes(2); // yeniden denenmez
+});

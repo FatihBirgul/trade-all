@@ -36,6 +36,7 @@ const LABELS: Record<string, string> = {
   bot_resumed: "Bot devam ediyor",
   bot_started: "Bot başladı",
   capital_base: "Canlı mod başladı",
+  mode_changed: "Kip değişti",
   balance_change: "Para yatırma/çekme",
   startup_failed: "Bot başlatılamadı",
   connection_lost: "Exness bağlantısı koptu",
