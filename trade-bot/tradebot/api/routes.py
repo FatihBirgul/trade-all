@@ -9,10 +9,11 @@ from decimal import ROUND_FLOOR, Decimal
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 
 from ..app import QUOTE_MAX_AGE, Bot
-from ..config import BotSettings
+from ..config import BotSettings, strategy_mode
+from ..signals import scorecard, v9
 from . import auth
 from .models import (CloseAllRequest, CloseRequest, DeviceRequest, ManualTrade, PairRequest, PositionPatch,
-                     ResumeRequest)
+                     ResumeRequest, StrategyModeRequest)
 
 CLOSE_ALL_PHRASE = "CLOSE-ALL"
 HEARTBEAT_STALE = 120.0
@@ -195,6 +196,10 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
 
     @private.put("/settings")
     async def put_settings(body: BotSettings):
+        previous = repo.get_bot_settings()
+        for strategy_id in v9.builtin_strategy_ids():
+            if strategy_mode(body, strategy_id) == "live" and strategy_mode(previous, strategy_id) != "live":
+                scorecard.mark_resumed(repo, strategy_id, clock())  # karne denetimi bu andan baslar
         repo.set_bot_settings(body)
         repo.add_event("info", "settings_changed", "Ayarlar güncellendi", body.model_dump(mode="json"))
         return body.model_dump(mode="json")
@@ -244,6 +249,29 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
                          "closed_at": t.closed_at, "pnl": t.pnl, "strategy_id": t.strategy_id}
                         for t in closed[:200]],
         }
+
+    @private.get("/scorecard")
+    async def get_scorecard():
+        return scorecard.scorecard(repo, repo.get_bot_settings())
+
+    @private.post("/strategies/{strategy_id}/mode")
+    async def set_strategy_mode(strategy_id: str, body: StrategyModeRequest):
+        if strategy_id not in v9.builtin_strategy_ids():
+            raise HTTPException(status_code=404, detail="strateji bulunamadı")
+        settings = repo.get_bot_settings()
+        current = strategy_mode(settings, strategy_id)
+        if body.mode == "live" and current != "live":
+            if not body.confirm:
+                raise HTTPException(status_code=409,
+                                    detail="stratejiyi canlıya almak gerçek işlem açar; onay için confirm=true gönderin")
+            scorecard.mark_resumed(repo, strategy_id, clock())
+        settings.strategy_modes[strategy_id] = body.mode
+        if settings.enabled_strategies is not None and body.mode != "off":
+            settings.enabled_strategies.add(strategy_id)
+        repo.set_bot_settings(settings)
+        repo.add_event("info", "strategy_mode", f"{strategy_id} kipi: {body.mode}",
+                       {"strategy_id": strategy_id, "mode": body.mode})
+        return {"strategy_id": strategy_id, "mode": body.mode}
 
     @private.get("/news")
     async def news(hours: int = Query(default=48, ge=1, le=168)):

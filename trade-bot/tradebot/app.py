@@ -30,7 +30,7 @@ from .market.quotes import QuoteBook
 from .news.gate import blocking_event
 from .risk.portfolio import check_entry
 from .signals import v9
-from .signals import fusion
+from .signals import fusion, scorecard
 from .signals.adapter import Candidate, Evaluation, evaluate_all
 from .signals.shadow import ShadowBook
 from .signals.provider import ExnessV9Provider
@@ -354,6 +354,7 @@ class Bot:
         now = self._clock()
         summary = ScanSummary(at=now)
         self.repo.set_bot_state(last_scan_at=now)
+        await self._check_scorecard()
         settings = self.repo.get_bot_settings()
         await self._check_limits(settings)
         state = self.repo.bot_state()
@@ -465,7 +466,8 @@ class Bot:
         score, votes, multiplier = self._score(result, instrument, settings)
         if result.mode == "shadow":
             # Golge kipindeki strateji: sinyali ve sanal sonucu izle, gercek emir gonderme.
-            if self.shadow.open(candidate, "shadow", score, self._clock()):
+            reason = "paused" if candidate.strategy_id in scorecard.paused(self.repo) else "shadow"
+            if self.shadow.open(candidate, reason, score, self._clock()):
                 summary.shadowed += 1
             return
         if multiplier is None:
@@ -683,11 +685,26 @@ class Bot:
                     "Haber takvimi 24 saattir alınamıyor. Bot çalışmaya devam ediyor ama haber penceresi "
                     "koruması güncel değil.", notify=True, title="Haber takvimi alınamıyor")
 
+    async def _check_scorecard(self) -> None:
+        """Karnesi bozulan stratejiyi duraklatir: golge kipine alir (izlenir, emir acmaz) ve bir kez bildirir."""
+        settings = self.repo.get_bot_settings()
+        for strategy_id, stats in scorecard.strategies_to_pause(self.repo, settings):
+            settings.strategy_modes[strategy_id] = "shadow"
+            self.repo.set_bot_settings(settings)  # kalici: yeniden baslatmada da duraklatilmis kalir
+            scorecard.mark_paused(self.repo, strategy_id, self._clock(), stats)
+            await self._record(
+                "error", "strategy_paused",
+                f"{strategy_id} duraklatıldı: {stats['trades']} işlemde ortalama {stats['avg_r']:+.2f}R. "
+                "Strateji gölgede izlenmeye devam ediyor; uygulamadan yeniden açabilirsiniz.",
+                {"strategy_id": strategy_id, "trades": stats["trades"], "avg_r": stats["avg_r"]},
+                notify=True, title="Strateji duraklatıldı")
+
     # ------------------------------------------------------------------ kalp atisi
     async def heartbeat(self) -> None:
         now = self._clock()
         self.repo.set_bot_state(heartbeat_at=now)
         await self._refresh_news()
+        await self._check_scorecard()
         if self.account is not None and now - self._last_equity_sample >= EQUITY_SAMPLE_INTERVAL:
             self._last_equity_sample = now
             self.repo.add_equity(now, self.account.balance, self.account.equity)
