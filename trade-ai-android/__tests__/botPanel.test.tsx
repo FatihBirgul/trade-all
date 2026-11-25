@@ -99,9 +99,32 @@ test("shows balance equity and pnl split", async () => {
 test("dry run is announced so no one mistakes it for live trading", async () => {
   setBot({}, { dry_run: true });
   const ui = await screen();
-  expect(ui.getByText("Deneme modu: emir gönderilmiyor")).toBeTruthy();
-  expect(ui.getByText("● DENEME MODU · EMİR GÖNDERİLMİYOR")).toBeTruthy();
+  expect(ui.getByText("Deneme modu: bot emir göndermiyor")).toBeTruthy();
+  expect(ui.getByText("● DENEME MODU · BOT EMİR GÖNDERMİYOR")).toBeTruthy();
   expect(ui.queryByText("● CANLI · GERÇEK HESAP")).toBeNull();
+});
+
+test("in dry run the close-all dialog says the action is real", async () => {
+  const { api } = setBot({}, { dry_run: true });
+  const ui = await screen();
+  await fireEvent.press(ui.getByText("Hepsini kapat"));
+  expect(dialog().message).toContain("Deneme modunda bile bu işlem GERÇEK hesapta yapılır.");
+  expect(api.closeAll).not.toHaveBeenCalled();
+});
+
+test("a double tap sends the action once", async () => {
+  const { api } = setBot();
+  let finish!: () => void;
+  api.stop.mockReturnValue(new Promise<void>((resolve) => (finish = resolve)));
+  const ui = await screen();
+  await fireEvent.press(ui.getByText("Durdur"));
+  const buttons = dialog().buttons;
+  await act(async () => {
+    buttons.find((b) => b.text === "Durdur")?.onPress?.();
+    buttons.find((b) => b.text === "Durdur")?.onPress?.();
+  });
+  expect(api.stop).toHaveBeenCalledTimes(1);
+  await act(async () => finish());
 });
 
 test("stop asks for confirmation then calls api", async () => {
@@ -176,11 +199,26 @@ test("uncertain result is shown instead of success and is not retried", async ()
   expect(ui.getByText(new BotError("NETWORK", undefined, true).message)).toBeTruthy();
 });
 
-test("stale heartbeat card is shown", async () => {
-  setBot({ heartbeatStale: true });
+test("stale heartbeat card is shown and the bot is not presented as running", async () => {
+  setBot({ heartbeatStale: true, lastOkAt: new Date(2026, 10, 25, 14, 32, 5).getTime() });
   const ui = await screen();
   expect(ui.getByText("Bottan 5 dakikadır haber yok")).toBeTruthy();
+  expect(ui.getByText(/Son güncelleme: 14:32:05\./)).toBeTruthy();
   expect(ui.getByText("3.012,50 USC")).toBeTruthy(); // son bilinen veri görünür kalır
+  expect(ui.queryByText("Çalışıyor")).toBeNull();
+  expect(ui.getByText("Bot yanıt vermiyor (son bilinen durum: Çalışıyor)")).toBeTruthy();
+  expect(ui.queryByText("● CANLI · GERÇEK HESAP")).toBeNull();
+  expect(ui.getByText("● BOTTAN HABER YOK · BİLGİLER ESKİ")).toBeTruthy();
+});
+
+test("no data yet plus an error is a failure, not an empty panel", async () => {
+  const { bot } = setBot({ status: null, lastOkAt: null, error: "Sunucuya ulaşılamadı." });
+  const ui = await screen();
+  expect(ui.getByText("Veri alınamadı. Sunucuya ulaşılamadı.")).toBeTruthy();
+  expect(ui.queryByText(/Son bilinen bilgiler/)).toBeNull(); // hiç veri alınmadı
+  expect(ui.queryByText("Durdur")).toBeNull();
+  await fireEvent.press(ui.getByText("Yeniden dene"));
+  expect(bot.refresh).toHaveBeenCalled();
 });
 
 test("unconfigured shows link to connection", async () => {

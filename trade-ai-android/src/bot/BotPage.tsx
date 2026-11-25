@@ -2,8 +2,9 @@ import React, { type PropsWithChildren } from "react";
 import { ScrollView, TextInput, View, type TextInputProps } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { Button, Card, Label, Loading, s } from "../ui";
+import { Button, Card, Failure, Label, Loading, s } from "../ui";
 import { design, useTheme } from "../theme";
+import { clockText } from "./presentation";
 import { useBot } from "./state";
 
 // Bot ekranlarının ortak çerçevesi. Eski Page bileşeni "DEMO / sanal işlem" şeridi gösterdiği
@@ -11,13 +12,15 @@ import { useBot } from "./state";
 export function BotPage({ children }: PropsWithChildren) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const { phase, status } = useBot();
+  const { phase, status, heartbeatStale } = useBot();
   const banner =
     phase !== "ready" || !status
       ? null
-      : status.dry_run
-        ? { text: "● DENEME MODU · EMİR GÖNDERİLMİYOR", color: colors.gold }
-        : { text: "● CANLI · GERÇEK HESAP", color: colors.green };
+      : heartbeatStale
+        ? { text: "● BOTTAN HABER YOK · BİLGİLER ESKİ", color: colors.red }
+        : status.dry_run
+          ? { text: "● DENEME MODU · BOT EMİR GÖNDERMİYOR", color: colors.gold }
+          : { text: "● CANLI · GERÇEK HESAP", color: colors.green };
   return (
     <SafeAreaView testID="bot-page" edges={["top"]} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScrollView
@@ -86,20 +89,36 @@ export function Disconnected() {
   );
 }
 
+// Veri hiç alınamadıysa null döner; o durumu ekranlar <NoData /> ile gösterir.
 export function StaleNotice() {
   const { colors } = useTheme();
-  const { heartbeatStale, error } = useBot();
+  const { heartbeatStale, error, lastOkAt } = useBot();
+  if (lastOkAt === null) return null;
+  const updated = "Son güncelleme: " + clockText(lastOkAt) + ".";
   if (heartbeatStale)
     return (
       <Card elevated>
         <Label style={{ color: colors.red, fontWeight: "700" }}>Bottan 5 dakikadır haber yok</Label>
         <Label muted>
-          Aşağıdaki bilgiler eski olabilir. Açık pozisyonların zarar durdurma (SL) emirleri Exness tarafında durur;
-          sunucuyu kontrol edin.
+          Aşağıdaki bilgiler eski olabilir. {updated} Açık pozisyonların zarar durdurma (SL) emirleri Exness
+          tarafında durur; sunucuyu kontrol edin.
         </Label>
       </Card>
     );
   if (error)
-    return <Label style={{ color: colors.red, fontSize: 12 }}>{error} Son bilinen bilgiler gösteriliyor.</Label>;
+    return (
+      <Label style={{ color: colors.red, fontSize: 13 }}>
+        {error} Son bilinen bilgiler gösteriliyor. {updated}
+      </Label>
+    );
   return null;
+}
+
+// Bu bağlantıda henüz hiç veri alınamadı: "pozisyon yok" ya da "olay yok" demek yanlış olur.
+// Veri varsa null döner.
+export function NoData() {
+  const { phase, lastOkAt, error, refresh } = useBot();
+  if (phase !== "ready" || lastOkAt !== null) return null;
+  if (!error) return <Loading />;
+  return <Failure message={"Veri alınamadı. " + error} retry={() => void refresh()} />;
 }

@@ -1,11 +1,11 @@
 import React, { useState } from "react";
 import { View } from "react-native";
-import { BotPage, Disconnected, StaleNotice } from "../../src/bot/BotPage";
+import { BotPage, Disconnected, NoData, StaleNotice } from "../../src/bot/BotPage";
 import { isImportant, kindLabel } from "../../src/bot/notifications";
 import { timeText } from "../../src/bot/presentation";
 import { useBot } from "../../src/bot/state";
 import { useTheme } from "../../src/theme";
-import { Card, Choices, Empty, Label, Loading, ScreenHeader } from "../../src/ui";
+import { Card, Choices, Empty, Label, ScreenHeader } from "../../src/ui";
 
 const FILTERS = ["Önemli", "Tümü"] as const;
 
@@ -23,9 +23,8 @@ export default function Events() {
         <>
           <StaleNotice />
           <Choices values={FILTERS} value={filter} onChange={setFilter} />
-          {!bot.status && !bot.error ? (
-            <Loading />
-          ) : shown.length === 0 ? (
+          <NoData />
+          {bot.lastOkAt === null ? null : shown.length === 0 ? (
             <Empty
               text={
                 bot.events.length === 0

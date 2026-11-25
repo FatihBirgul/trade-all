@@ -6,6 +6,25 @@ const config: BotConfig = {
   token: "t".repeat(43),
   pairedAt: 1,
 };
+const STATUS = {
+  currency: "USC",
+  balance: 3000,
+  equity: 3012.5,
+  margin_free: 2890,
+  pnl_today: { bot: 1, manual: 0, total: 1 },
+  open_bot: 1,
+  open_manual: 0,
+  halted: false,
+  halt_reason: null,
+  stopped: false,
+  dry_run: true,
+  start_capital: 3000,
+  last_scan_at: null,
+  heartbeat_at: 1,
+  stream_connected: true,
+  started: true,
+};
+const POSITION = { position_id: "2001", symbol: "EURUSD", side: "BUY", volume: 0.05, entry: 1.1 };
 const ok = (body: unknown, status = 200) => ({
   ok: status >= 200 && status < 300,
   status,
@@ -49,7 +68,7 @@ test("wrong pairing code shows a clear message and is not retried", async () => 
 });
 
 test("pair rejects a response without a usable token", async () => {
-  for (const body of [{}, { token: "kisa" }, { token: 5 }, null]) {
+  for (const body of [{}, { token: "kisa" }, { token: 5 }]) {
     const transport = jest.fn().mockResolvedValue(ok(body));
     await expect(pairBot("https://x.sslip.io", "482913", transport)).rejects.toMatchObject({
       code: "INVALID_RESPONSE",
@@ -57,15 +76,80 @@ test("pair rejects a response without a usable token", async () => {
   }
 });
 
+test("pairing failures tell the user what to check instead of 'result uncertain'", async () => {
+  const offline = jest.fn().mockRejectedValue(new TypeError("Network request failed"));
+  const error = await pairBot("https://yanlis-adres.sslip.io", "482913", offline).catch((e) => e);
+  expect(error).toMatchObject({ code: "PAIR_NETWORK", uncertain: false });
+  expect(error.message).toContain("Adresi ve internet bağlantınızı kontrol edin");
+  expect(error.message).not.toContain("belirsiz");
+  expect(offline).toHaveBeenCalledTimes(1);
+
+  const wrongHost = jest.fn().mockResolvedValue(ok({ detail: "Not Found" }, 404));
+  await expect(pairBot("https://x.sslip.io", "482913", wrongHost)).rejects.toMatchObject({
+    code: "PAIR_NOT_FOUND",
+    message: "Bu adreste Trade Bot bulunamadı. Sunucu adresini kontrol edin.",
+  });
+  const notJson = jest.fn().mockResolvedValue({ ok: true, status: 200, json: async () => { throw new Error("html"); } });
+  await expect(pairBot("https://x.sslip.io", "482913", notJson)).rejects.toMatchObject({ code: "PAIR_NETWORK" });
+});
+
 test("sends bearer token and parses status", async () => {
-  const status = { equity: 3012.5, halted: false };
-  const transport = jest.fn().mockResolvedValue(ok(status));
-  await expect(createBotApi(config, transport).status()).resolves.toEqual(status);
+  const transport = jest.fn().mockResolvedValue(ok(STATUS));
+  await expect(createBotApi(config, transport).status()).resolves.toEqual(STATUS);
   const [url, request] = transport.mock.calls[0];
   expect(url).toBe("https://203-0-113-7.sslip.io/status");
   expect(request.headers.Authorization).toBe("Bearer " + "t".repeat(43));
   expect(request.method).toBe("GET");
   expect(request.body).toBeUndefined();
+  expect(request.redirect).toBe("error");
+  expect(url).not.toContain("t".repeat(43)); // token asla adres satırında taşınmaz
+});
+
+test("a malformed success response is an error, never 'no positions'", async () => {
+  const api = (body: unknown) => createBotApi(config, jest.fn().mockResolvedValue(ok(body)));
+  for (const body of [{}, [], { positions: "x" }, { positions: [{ symbol: "EURUSD" }] }, { positions: null }])
+    await expect(api(body).positions()).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+  await expect(api({ positions: [] }).positions()).resolves.toEqual([]);
+  await expect(api({ positions: [POSITION] }).positions()).resolves.toEqual([POSITION]);
+  for (const body of [[], {}, { ...STATUS, pnl_today: null }, { ...STATUS, halted: "no" }])
+    await expect(api(body).status()).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+  for (const body of [{}, { events: [{ id: "1" }] }])
+    await expect(api(body).events(0)).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+});
+
+test("a response from another origin is rejected", async () => {
+  const redirected = { ...ok(STATUS), url: "https://baska-sunucu.example/status" };
+  await expect(createBotApi(config, jest.fn().mockResolvedValue(redirected)).status()).rejects.toMatchObject({
+    code: "REDIRECTED",
+  });
+  const same = { ...ok(STATUS), url: config.origin + "/status" };
+  await expect(createBotApi(config, jest.fn().mockResolvedValue(same)).status()).resolves.toEqual(STATUS);
+  const lookalike = { ...ok(STATUS), url: config.origin + ".evil.example/status" };
+  await expect(createBotApi(config, jest.fn().mockResolvedValue(lookalike)).status()).rejects.toMatchObject({
+    code: "REDIRECTED",
+  });
+});
+
+test("gateway errors and unreadable success on a mutation are uncertain and not retried", async () => {
+  for (const status of [502, 503, 504]) {
+    const transport = jest.fn().mockResolvedValue(ok({ detail: "Bad Gateway" }, status));
+    const error = await createBotApi(config, transport).closeAll().catch((e) => e);
+    expect(error).toMatchObject({ code: "HTTP_" + status, uncertain: true, status });
+    expect(error.message).toContain("belirsiz");
+    expect(transport).toHaveBeenCalledTimes(1);
+  }
+  const unreadable = jest.fn().mockResolvedValue({ ok: true, status: 200, json: async () => { throw new Error("kesildi"); } });
+  await expect(createBotApi(config, unreadable).closePosition("2001")).rejects.toMatchObject({
+    code: "INVALID_RESPONSE",
+    uncertain: true,
+  });
+  expect(unreadable).toHaveBeenCalledTimes(1);
+  // Okuma isteklerinde aynı hatalar belirsiz değildir.
+  const readFailure = jest.fn().mockResolvedValue(ok({ detail: "Bad Gateway" }, 502));
+  await expect(createBotApi(config, readFailure).status()).rejects.toMatchObject({ uncertain: false });
+  // Sunucunun açık reddi (409/422) belirsiz değildir.
+  const conflict = jest.fn().mockResolvedValue(ok({ detail: "bekleyen istek var" }, 409));
+  await expect(createBotApi(config, conflict).closePosition("2001")).rejects.toMatchObject({ uncertain: false });
 });
 
 test("unconfigured client never touches the network", async () => {
@@ -122,8 +206,14 @@ test("closeAll sends exact confirm phrase", async () => {
 });
 
 test("endpoints use the documented paths and bodies", async () => {
-  const transport = jest.fn().mockResolvedValue(ok({}));
-  const api = createBotApi(config, transport);
+  const transport = jest.fn(async (url: string) => {
+    const path = String(url).replace(config.origin, "");
+    if (path === "/status") return ok(STATUS);
+    if (path === "/positions") return ok({ positions: [] });
+    if (path.startsWith("/events")) return ok({ events: [] });
+    return ok({});
+  });
+  const api = createBotApi(config, transport as unknown as typeof fetch);
   await api.health();
   await api.positions();
   await api.patchPosition("2001", { sl: 1.0972, manage: false });
@@ -134,11 +224,9 @@ test("endpoints use the documented paths and bodies", async () => {
   await api.events(41);
   await api.recentEvents(50);
   await api.registerDevice("ExponentPushToken[abc]");
-  const calls = transport.mock.calls.map(([url, request]) => [
-    request.method,
-    url.replace(config.origin, ""),
-    request.body ? JSON.parse(request.body) : null,
-  ]);
+  const calls = (transport.mock.calls as unknown as [string, { method: string; body?: string; redirect?: string; headers: Record<string, string> }][]).map(
+    ([url, request]) => [request.method, url.replace(config.origin, ""), request.body ? JSON.parse(request.body) : null],
+  );
   expect(calls).toEqual([
     ["GET", "/health", null],
     ["GET", "/positions", null],
@@ -151,13 +239,22 @@ test("endpoints use the documented paths and bodies", async () => {
     ["GET", "/events?newest=true&limit=50", null],
     ["POST", "/devices", { expo_token: "ExponentPushToken[abc]" }],
   ]);
-  expect(transport.mock.calls[0][1].headers.Authorization).toBeUndefined(); // /health herkese açık
+  const requests = (transport.mock.calls as unknown as [string, { redirect?: string; headers: Record<string, string> }][]).map(
+    ([, request]) => request,
+  );
+  expect(requests[0].headers.Authorization).toBeUndefined(); // /health herkese açık
+  expect(requests.every((request) => request.redirect === "error")).toBe(true);
+  expect(requests.slice(1).every((request) => request.headers.Authorization === "Bearer " + config.token)).toBe(true);
 });
 
 test("position ids are validated before building a url", async () => {
-  const transport = jest.fn();
-  await expect(createBotApi(config, transport).closePosition("../bot/stop")).rejects.toMatchObject({
-    code: "INVALID_REQUEST",
-  });
+  const transport = jest.fn().mockResolvedValue(ok({ order: "k" }));
+  for (const bad of ["../bot/stop", "20 01", "2001?x=1", "", "a".repeat(65)])
+    await expect(createBotApi(config, transport).closePosition(bad)).rejects.toMatchObject({
+      code: "INVALID_REQUEST",
+    });
   expect(transport).not.toHaveBeenCalled();
+  // Kimlik biçimi broker'a aittir: yalnızca rakam varsayılmaz.
+  await createBotApi(config, transport).closePosition("AB-12_cd");
+  expect(transport.mock.calls[0][0]).toBe(config.origin + "/positions/AB-12_cd/close");
 });

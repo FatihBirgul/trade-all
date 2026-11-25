@@ -10,7 +10,7 @@ export function botStateText(
   if (status.halted) return { label: "Durdu: " + (status.halt_reason || "toplam kayıp sınırı"), tone: "bad" };
   if (status.stopped) return { label: "Durduruldu", tone: "warn" };
   if (!status.stream_connected) return { label: "Exness bağlantısı yok", tone: "bad" };
-  if (status.dry_run) return { label: "Deneme modu: emir gönderilmiyor", tone: "warn" };
+  if (status.dry_run) return { label: "Deneme modu: bot emir göndermiyor", tone: "warn" };
   return { label: "Çalışıyor", tone: "ok" };
 }
 
@@ -55,3 +55,19 @@ export function timeText(epochSeconds: number): string {
     two(date.getDate()) + "." + two(date.getMonth() + 1) + " " + two(date.getHours()) + ":" + two(date.getMinutes())
   );
 }
+
+// "+1,25R" / "−0,45R". Sıfıra yuvarlanan değer işaretsiz yazılır.
+export function rText(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "";
+  const rounded = Math.round(value * 100) / 100;
+  const body = priceText(Math.abs(rounded)) + "R";
+  return rounded > 0 ? "+" + body : rounded < 0 ? "−" + body : body;
+}
+
+export function clockText(epochMs: number): string {
+  const date = new Date(epochMs);
+  return two(date.getHours()) + ":" + two(date.getMinutes()) + ":" + two(date.getSeconds());
+}
+
+// Deneme modu yalnızca botun kendi emirlerini durdurur; kullanıcının verdiği emirler gerçektir.
+export const REAL_ACTION_NOTE = "Deneme modunda bile bu işlem GERÇEK hesapta yapılır.";

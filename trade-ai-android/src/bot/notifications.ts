@@ -70,15 +70,36 @@ function safely(schedule: Schedule, title: string, body: string) {
   }
 }
 
+export const FRESH_SECONDS = 600; // bundan eski olay "yeni" gibi tek tek bildirilmez
+export const MAX_SINGLE = 3; // bir seferde en çok bu kadar ayrı bildirim; gerisi tek özet
+
 // Uygulama açıkken gelen önemli olaylar için yerel bildirim. Görülen en büyük kimliği döndürür;
-// aynı olay ikinci kez bildirilmez.
-export function notifyNewEvents(events: readonly BotEvent[], lastSeenId: number, schedule: Schedule): number {
+// aynı olay ikinci kez bildirilmez. Uygulama saatlerce arka planda kaldıysa birikmiş olaylar tek tek
+// "az önce olmuş" gibi yağmaz: yalnızca son 10 dakikanın en yeni üçü ayrı, kalanı tek özet bildirilir.
+export function notifyNewEvents(
+  events: readonly BotEvent[],
+  lastSeenId: number,
+  schedule: Schedule,
+  nowSeconds?: number,
+): number {
   let seen = lastSeenId;
+  const important: BotEvent[] = [];
   for (const event of [...events].sort((a, b) => a.id - b.id)) {
     if (event.id <= seen) continue;
     seen = event.id;
-    if (importantKinds.has(event.kind)) safely(schedule, kindLabel(event.kind), event.message);
+    if (importantKinds.has(event.kind)) important.push(event);
   }
+  const fresh =
+    nowSeconds === undefined ? important : important.filter((event) => nowSeconds - event.at <= FRESH_SECONDS);
+  const single = fresh.slice(-MAX_SINGLE);
+  for (const event of single) safely(schedule, kindLabel(event.kind), event.message);
+  const rest = important.length - single.length;
+  if (rest > 0)
+    safely(
+      schedule,
+      rest + " önemli olay daha",
+      "Uygulama kapalıyken ya da kısa sürede birden çok olay oldu. Bildirimler sekmesine bakın.",
+    );
   return seen;
 }
 

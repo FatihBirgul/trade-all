@@ -3,7 +3,8 @@ import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 
-const CHANNEL = "trade-bot";
+// Sunucunun uzak bildirimlerde kullandığı kanal ile aynı olmalı (tradebot/notify/expo.py).
+const CHANNEL = "default";
 let prepared: Promise<boolean> | null = null;
 
 async function setup(): Promise<boolean> {

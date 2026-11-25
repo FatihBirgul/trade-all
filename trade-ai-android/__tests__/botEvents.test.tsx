@@ -31,6 +31,8 @@ function setBot(events: BotEvent[], overrides: Partial<Bot> = {}) {
     events,
     error: "",
     heartbeatStale: false,
+    lastOkAt: 1,
+    refresh: jest.fn(),
     ...overrides,
   } as unknown as Bot);
 }
@@ -101,4 +103,11 @@ test("not connected shows the connection hint", async () => {
   const ui = await screen();
   expect(ui.getByText("Bu telefonun bağlantı anahtarı artık geçerli değil.")).toBeTruthy();
   expect(ui.queryByText("Stop eksik")).toBeNull();
+});
+
+test("events never loaded plus an error is a failure, not 'no events'", async () => {
+  setBot([], { status: null, lastOkAt: null, error: "Sunucuya ulaşılamadı." });
+  const ui = await screen();
+  expect(ui.getByText("Veri alınamadı. Sunucuya ulaşılamadı.")).toBeTruthy();
+  expect(ui.queryByText("Henüz olay yok.")).toBeNull();
 });

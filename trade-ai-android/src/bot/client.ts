@@ -14,6 +14,10 @@ const MESSAGES: Record<string, string> = {
   PAIR_REJECTED: "Kod geçersiz ya da süresi dolmuş. Sunucuda yeni kod üretin.",
   INVALID_RESPONSE: "Sunucu yanıtı anlaşılamadı. Sunucu adresini kontrol edin.",
   INVALID_REQUEST: "İstek geçersiz.",
+  PAIR_NETWORK:
+    "Sunucuya ulaşılamadı. Adresi ve internet bağlantınızı kontrol edin. Kod kullanılmış olabilir; gerekirse sunucuda yeni kod üretin.",
+  PAIR_NOT_FOUND: "Bu adreste Trade Bot bulunamadı. Sunucu adresini kontrol edin.",
+  REDIRECTED: "Sunucu isteği başka bir adrese yönlendirdi. Bağlantı güvenli değil; sunucu adresini kontrol edin.",
   HTTP_429: "Çok fazla istek gönderildi. Biraz bekleyip yeniden deneyin.",
 };
 
@@ -46,7 +50,8 @@ function detailText(payload: unknown): string | undefined {
 
 async function send(
   transport: Transport,
-  url: string,
+  origin: string,
+  path: string,
   method: string,
   token: string | null,
   body?: unknown,
@@ -56,24 +61,39 @@ async function send(
   const headers: Record<string, string> = { Accept: "application/json" };
   if (token) headers.Authorization = "Bearer " + token;
   if (body !== undefined) headers["Content-Type"] = "application/json";
+  const mutation = method !== "GET";
+  let response: Awaited<ReturnType<Transport>>;
   try {
-    const response = await transport(url, {
+    response = await transport(origin + path, {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
       redirect: "error",
       signal: controller.signal,
     });
+  } catch {
+    clearTimeout(timer);
+    // Değişiklik yapan isteklerde sonuç bilinmez: asla kendiliğinden yeniden denenmez.
+    throw new BotError("NETWORK", undefined, mutation);
+  }
+  try {
+    // React Native'in fetch'i "redirect: error" seçeneğini uygulamayabilir; yanıtın gerçekten
+    // eşleşilen sunucudan geldiği ayrıca doğrulanır.
+    if (typeof response.url === "string" && response.url && !response.url.startsWith(origin + "/"))
+      throw new BotError("REDIRECTED", undefined, mutation);
     let payload: unknown = null;
+    let readable = true;
     try {
       payload = await response.json();
     } catch {
-      payload = null;
+      readable = false;
     }
+    // Vekil sunucu hatası ya da okunamayan başarılı yanıt: istek sunucuya ulaşmış ve işlenmiş olabilir.
+    if (mutation && (response.status === 502 || response.status === 503 || response.status === 504))
+      throw new BotError("HTTP_" + response.status, undefined, true, response.status);
+    if (mutation && response.ok && (!readable || payload === null || typeof payload !== "object"))
+      throw new BotError("INVALID_RESPONSE", undefined, true, response.status);
     return { status: response.status, ok: response.ok, payload };
-  } catch {
-    // Değişiklik yapan isteklerde sonuç bilinmez: asla kendiliğinden yeniden denenmez.
-    throw new BotError("NETWORK", undefined, method !== "GET");
   } finally {
     clearTimeout(timer);
   }
@@ -87,18 +107,56 @@ export async function pairBot(originInput: string, code: string, transport: Tran
     throw new BotError("INVALID_ORIGIN");
   }
   if (!/^[0-9]{6}$/.test(code)) throw new BotError("INVALID_CODE");
-  const result = await send(transport, origin + "/pair", "POST", null, { code });
+  let result: Awaited<ReturnType<typeof send>>;
+  try {
+    result = await send(transport, origin, "/pair", "POST", null, { code });
+  } catch (reason) {
+    // Eşleştirme bir işlem emri değildir: "sonuç belirsiz" yerine ne yapılacağı söylenir.
+    if (reason instanceof BotError && (reason.code === "NETWORK" || reason.uncertain))
+      throw new BotError(reason.code === "REDIRECTED" ? "REDIRECTED" : "PAIR_NETWORK");
+    throw reason;
+  }
   if (result.status === 401) throw new BotError("PAIR_REJECTED", undefined, false, 401);
+  if (result.status === 404 || result.status === 405) throw new BotError("PAIR_NOT_FOUND", undefined, false, result.status);
   if (!result.ok) throw new BotError("HTTP_" + result.status, detailText(result.payload), false, result.status);
   const token = (result.payload as { token?: unknown } | null)?.token;
   if (typeof token !== "string" || token.length < 32) throw new BotError("INVALID_RESPONSE");
   return { origin, token, pairedAt: Date.now() };
 }
 
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+
+// Yanıtın biçimi ekranlara verilmeden önce doğrulanır: bozuk bir yanıt "pozisyon yok" gibi görünmemeli.
+function statusShape(value: unknown): value is BotStatus {
+  if (!isObject(value) || !isObject(value.pnl_today)) return false;
+  const pnl = value.pnl_today;
+  return (
+    ["bot", "manual", "total"].every((key) => typeof pnl[key] === "number") &&
+    ["halted", "stopped", "dry_run", "stream_connected"].every((key) => typeof value[key] === "boolean") &&
+    typeof value.open_bot === "number" &&
+    typeof value.open_manual === "number"
+  );
+}
+function listShape<T>(value: unknown, key: string, item: (entry: Record<string, unknown>) => boolean): T[] {
+  const list = isObject(value) ? value[key] : undefined;
+  if (!Array.isArray(list) || !list.every((entry) => isObject(entry) && item(entry)))
+    throw new BotError("INVALID_RESPONSE");
+  return list as T[];
+}
+const positionShape = (entry: Record<string, unknown>) =>
+  typeof entry.position_id === "string" &&
+  typeof entry.symbol === "string" &&
+  (entry.side === "BUY" || entry.side === "SELL") &&
+  typeof entry.volume === "number" &&
+  typeof entry.entry === "number";
+const eventShape = (entry: Record<string, unknown>) =>
+  typeof entry.id === "number" && typeof entry.at === "number" && typeof entry.kind === "string";
+
 export function createBotApi(config: BotConfig | null, transport: Transport = fetch, onUnauthorized?: () => void) {
   async function request<T>(path: string, method = "GET", body?: unknown, authenticated = true): Promise<T> {
     if (!config) throw new BotError("UNCONFIGURED");
-    const result = await send(transport, config.origin + path, method, authenticated ? config.token : null, body);
+    const result = await send(transport, config.origin, path, method, authenticated ? config.token : null, body);
     if (result.status === 401) {
       onUnauthorized?.();
       throw new BotError("UNAUTHORIZED", undefined, false, 401);
@@ -108,13 +166,18 @@ export function createBotApi(config: BotConfig | null, transport: Transport = fe
     return result.payload as T;
   }
   const position = (id: string) => {
-    if (!/^[0-9]{1,20}$/.test(id)) throw new BotError("INVALID_REQUEST");
-    return "/positions/" + id;
+    // Kimlik biçimi broker'a aittir; yalnızca URL'yi bozabilecek karakterler reddedilir.
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new BotError("INVALID_REQUEST");
+    return "/positions/" + encodeURIComponent(id);
   };
   return {
     health: () => request<BotHealth>("/health", "GET", undefined, false),
-    status: () => request<BotStatus>("/status"),
-    positions: async () => (await request<{ positions: BotPosition[] }>("/positions")).positions ?? [],
+    status: async () => {
+      const value = await request<unknown>("/status");
+      if (!statusShape(value)) throw new BotError("INVALID_RESPONSE");
+      return value;
+    },
+    positions: async () => listShape<BotPosition>(await request<unknown>("/positions"), "positions", positionShape),
     patchPosition: async (id: string, patch: PositionPatch) =>
       request<{ order: string | null; manage: boolean }>(position(id), "PATCH", patch),
     closePosition: async (id: string, volume?: number) =>
@@ -127,11 +190,14 @@ export function createBotApi(config: BotConfig | null, transport: Transport = fe
         confirm: "CLOSE-ALL",
       }),
     events: async (after = 0) =>
-      (await request<{ events: BotEvent[] }>("/events?after=" + Math.max(0, Math.floor(after)))).events ?? [],
+      listShape<BotEvent>(await request<unknown>("/events?after=" + Math.max(0, Math.floor(after))), "events", eventShape),
     // İlk açılış: en yeni olaylar, yeniden eskiye.
     recentEvents: async (limit = 100) =>
-      (await request<{ events: BotEvent[] }>("/events?newest=true&limit=" + Math.min(500, Math.max(1, Math.floor(limit)))))
-        .events ?? [],
+      listShape<BotEvent>(
+        await request<unknown>("/events?newest=true&limit=" + Math.min(500, Math.max(1, Math.floor(limit)))),
+        "events",
+        eventShape,
+      ),
     registerDevice: (expoToken: string) =>
       request<{ registered: boolean }>("/devices", "POST", { expo_token: expoToken }),
   };

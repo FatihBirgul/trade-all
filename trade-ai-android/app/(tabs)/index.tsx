@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Alert } from "react-native";
-import { BotPage, Disconnected, StaleNotice } from "../../src/bot/BotPage";
-import { agoText, amountText, botStateText, pnlText } from "../../src/bot/presentation";
+import { BotPage, Disconnected, NoData, StaleNotice } from "../../src/bot/BotPage";
+import { REAL_ACTION_NOTE, agoText, amountText, botStateText, pnlText } from "../../src/bot/presentation";
 import { useBot } from "../../src/bot/state";
 import { useTheme } from "../../src/theme";
-import { Button, Card, Heading, Label, Loading, Row, ScreenHeader } from "../../src/ui";
+import { Button, Card, Heading, Label, Row, ScreenHeader } from "../../src/ui";
 
 export default function Panel() {
   const bot = useBot();
@@ -13,7 +13,10 @@ export default function Panel() {
   const [notice, setNotice] = useState<{ text: string; bad: boolean } | null>(null);
   const status = bot.status;
 
+  const running = useRef(false); // çift dokunuş aynı emri iki kez göndermesin
   async function run(action: () => Promise<unknown>, done: string) {
+    if (running.current) return;
+    running.current = true;
     setBusy(true);
     setNotice(null);
     try {
@@ -22,6 +25,7 @@ export default function Panel() {
     } catch (reason) {
       setNotice({ text: reason instanceof Error ? reason.message : "İşlem tamamlanamadı.", bad: true });
     } finally {
+      running.current = false;
       setBusy(false);
       void bot.refresh();
     }
@@ -72,9 +76,11 @@ export default function Panel() {
     const count = (status?.open_bot ?? 0) + (status?.open_manual ?? 0);
     Alert.alert(
       "Tüm pozisyonlar kapatılsın mı?",
-      "Bot ve elle açılmış " +
-        count +
-        " pozisyonun tamamı piyasa fiyatından kapatılır ve bot durdurulur. Bu işlem geri alınamaz.",
+      (count > 0
+        ? "Bot ve elle açılmış " + count + " pozisyonun tamamı piyasa fiyatından kapatılır ve bot durdurulur."
+        : "Açık pozisyon görünmüyor; yine de varsa hepsi kapatılır ve bot durdurulur.") +
+        " Bu işlem geri alınamaz." +
+        (status?.dry_run ? "\n\n" + REAL_ACTION_NOTE : ""),
       [
         { text: "Vazgeç", style: "cancel" },
         {
@@ -113,15 +119,18 @@ export default function Panel() {
     <BotPage>
       <ScreenHeader title="Panel" badge="TRADE BOT" />
       <StaleNotice />
-      {!status || !state ? (
-        bot.error ? null : (
-          <Loading />
-        )
-      ) : (
+      <NoData />
+      {!status || !state ? null : (
         <>
           <Card>
             <Heading>Bot durumu</Heading>
-            <Label style={{ color: toneColor[state.tone], fontWeight: "700" }}>{state.label}</Label>
+            {bot.heartbeatStale ? (
+              <Label style={{ color: colors.red, fontWeight: "700" }}>
+                Bot yanıt vermiyor (son bilinen durum: {state.label})
+              </Label>
+            ) : (
+              <Label style={{ color: toneColor[state.tone], fontWeight: "700" }}>{state.label}</Label>
+            )}
             <Row name="Son tarama" value={agoText(status.last_scan_at, nowSeconds)} />
             <Row name="Exness bağlantısı" value={status.stream_connected ? "Bağlı" : "Kopuk"} />
           </Card>
@@ -136,6 +145,9 @@ export default function Panel() {
             <Row name="Bot" value={pnlText(status.pnl_today.bot, currency)} />
             <Row name="Elle" value={pnlText(status.pnl_today.manual, currency)} />
             <Row name="Toplam" value={pnlText(status.pnl_today.total, currency)} />
+            <Label muted style={{ fontSize: 12 }}>
+              Açık işlemlerin anlık kârı/zararı dahildir. Gün Türkiye saatiyle 03:00’te başlar.
+            </Label>
           </Card>
           <Card>
             <Heading>Açık işlemler</Heading>

@@ -94,3 +94,15 @@ test("disconnect clears config", async () => {
   buttons[1].onPress?.();
   expect(bot.disconnect).toHaveBeenCalledTimes(1);
 });
+
+test("an address typed without https:// is completed, never downgraded", async () => {
+  const bot = setBot({});
+  const ui = await screen();
+  await fireEvent.changeText(ui.getByLabelText("Sunucu adresi"), " 203-0-113-7.sslip.io ");
+  await fireEvent.changeText(ui.getByLabelText("Eşleştirme kodu"), "482913");
+  await fireEvent.press(ui.getByText("Bağlan"));
+  await waitFor(() => expect(bot.pair).toHaveBeenCalledWith(ORIGIN, "482913"));
+  await fireEvent.changeText(ui.getByLabelText("Sunucu adresi"), "http://203-0-113-7.sslip.io");
+  await fireEvent.press(ui.getByText("Bağlan"));
+  await waitFor(() => expect(bot.pair).toHaveBeenLastCalledWith("http://203-0-113-7.sslip.io", "482913")); // pairBot reddeder
+});

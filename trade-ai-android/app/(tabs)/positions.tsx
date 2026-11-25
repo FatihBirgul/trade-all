@@ -1,8 +1,8 @@
 import React from "react";
-import { BotPage, Disconnected, StaleNotice } from "../../src/bot/BotPage";
+import { BotPage, Disconnected, NoData, StaleNotice } from "../../src/bot/BotPage";
 import { PositionCard } from "../../src/bot/PositionCard";
 import { useBot } from "../../src/bot/state";
-import { Empty, Loading, ScreenHeader } from "../../src/ui";
+import { Empty, ScreenHeader } from "../../src/ui";
 
 export default function Positions() {
   const bot = useBot();
@@ -12,15 +12,14 @@ export default function Positions() {
       <ScreenHeader
         title="Pozisyonlar"
         badge="TRADE BOT"
-        subtitle={ready && bot.status ? bot.positions.length + " açık pozisyon" : undefined}
+        subtitle={ready && bot.lastOkAt !== null ? bot.positions.length + " açık pozisyon" : undefined}
       />
       <Disconnected />
       {ready ? (
         <>
           <StaleNotice />
-          {!bot.status && !bot.error ? (
-            <Loading />
-          ) : bot.positions.length === 0 ? (
+          <NoData />
+          {bot.lastOkAt === null ? null : bot.positions.length === 0 ? (
             <Empty text="Açık pozisyon yok." />
           ) : (
             bot.positions.map((position) => (
@@ -28,6 +27,7 @@ export default function Positions() {
                 key={position.position_id}
                 position={position}
                 currency={bot.status?.currency}
+                dryRun={bot.status?.dry_run ?? false}
                 api={bot.api}
                 onChanged={() => void bot.refresh()}
               />

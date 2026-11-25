@@ -1,11 +1,11 @@
-import { agoText, amountText, botStateText, pnlText, pnlTone, priceText } from "../src/bot/presentation";
+import { agoText, amountText, botStateText, pnlText, pnlTone, priceText, rText } from "../src/bot/presentation";
 
 const base = { halted: false, halt_reason: null, stopped: false, stream_connected: true, dry_run: false };
 
 test("state text priority", () => {
   expect(botStateText(base)).toEqual({ label: "Çalışıyor", tone: "ok" });
   expect(botStateText({ ...base, dry_run: true })).toEqual({
-    label: "Deneme modu: emir gönderilmiyor",
+    label: "Deneme modu: bot emir göndermiyor",
     tone: "warn",
   });
   expect(botStateText({ ...base, dry_run: true, stream_connected: false }).label).toBe("Exness bağlantısı yok");
@@ -46,4 +46,12 @@ test("ago text", () => {
   expect(agoText(1000 - 7300, 1000)).toBe("2 sa önce");
   expect(agoText(1000 - 200000, 1000)).toBe("2 gün önce");
   expect(agoText(1010, 1000)).toBe("az önce"); // saat farkı negatif süre göstermez
+});
+
+test("r multiple text never shows a signed zero", () => {
+  expect(rText(1.25)).toBe("+1,25R");
+  expect(rText(-0.45)).toBe("−0,45R");
+  expect(rText(-0.001)).toBe("0R");
+  expect(rText(0)).toBe("0R");
+  expect(rText(null)).toBe("");
 });

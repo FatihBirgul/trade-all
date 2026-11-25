@@ -105,3 +105,20 @@ test("labels and importance", () => {
   expect(isImportant({ kind: "rate_limited", level: "warning" })).toBe(true);
   expect(isImportant({ kind: "trade_opened", level: "info" })).toBe(true);
 });
+
+test("old events are summarised and at most three are announced individually", () => {
+  const now = 1_800_000_000 + 10_000;
+  const old = Array.from({ length: 6 }, (_, i) => ({ ...event(i + 1, "trade_opened"), at: now - 7200 }));
+  const fresh = Array.from({ length: 5 }, (_, i) => ({ ...event(i + 10, "trade_closed"), at: now - 30 }));
+  const schedule = jest.fn();
+  expect(notifyNewEvents([...old, ...fresh, { ...event(20, "scan"), at: now }], 0, schedule, now)).toBe(20);
+  expect(schedule.mock.calls.map(([title, body]) => [title, body.slice(0, 8)])).toEqual([
+    ["İşlem kapandı", "mesaj 12"],
+    ["İşlem kapandı", "mesaj 13"],
+    ["İşlem kapandı", "mesaj 14"],
+    ["8 önemli olay daha", "Uygulama"],
+  ]);
+  const quiet = jest.fn();
+  notifyNewEvents([{ ...event(30, "trade_opened"), at: now - 5 }], 20, quiet, now);
+  expect(quiet).toHaveBeenCalledTimes(1); // tek yeni olay: özet yok
+});

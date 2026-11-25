@@ -21,6 +21,7 @@ type Server = {
   serverTime: number;
   unauthorized: boolean;
   down: boolean;
+  hang: boolean;
   events: { id: number; at: number; level: string; kind: string; message: string; data: null }[];
 };
 function fakeServer(overrides: Partial<Server> = {}) {
@@ -29,6 +30,7 @@ function fakeServer(overrides: Partial<Server> = {}) {
     serverTime: START / 1000,
     unauthorized: false,
     down: false,
+    hang: false,
     events: [],
     ...overrides,
   };
@@ -39,9 +41,25 @@ function fakeServer(overrides: Partial<Server> = {}) {
     if (path === "/pair")
       return JSON.parse(init?.body ?? "{}").code === "482913" ? reply({ token: TOKEN }) : reply({ detail: "x" }, 401);
     if (server.unauthorized) return reply({ detail: "geçersiz ya da eksik token" }, 401);
+    if (server.hang) return new Promise(() => {}); // yanıt hiç gelmez
     if (path === "/status")
-      return reply({ equity: 3000, halted: false, heartbeat_at: server.heartbeatAt, server_time: server.serverTime });
-    if (path === "/positions") return reply({ positions: [{ position_id: "2001", symbol: "EURUSD" }] });
+      return reply({
+        currency: "USC",
+        equity: 3000,
+        pnl_today: { bot: 0, manual: 0, total: 0 },
+        open_bot: 1,
+        open_manual: 0,
+        halted: false,
+        stopped: false,
+        dry_run: false,
+        stream_connected: true,
+        heartbeat_at: server.heartbeatAt,
+        server_time: server.serverTime,
+      });
+    if (path === "/positions")
+      return reply({
+        positions: [{ position_id: "2001", symbol: "EURUSD", side: "BUY", volume: 0.05, entry: 1.1 }],
+      });
     if (path === "/devices") return reply({ registered: true });
     if (path.startsWith("/events?newest=true")) return reply({ events: server.events.slice().reverse() });
     if (path.startsWith("/events?after=")) {
@@ -254,7 +272,14 @@ test("disconnect clears data and storage", async () => {
   await waitFor(() => expect(ui.getByText("stale:false")).toBeTruthy());
 });
 
-const important = (id: number) => ({ id, at: 1, level: "info", kind: "trade_opened", message: "m" + id, data: null });
+const important = (id: number) => ({
+  id,
+  at: START / 1000,
+  level: "info",
+  kind: "trade_opened",
+  message: "m" + id,
+  data: null,
+});
 
 test("notifies locally for events that arrive while the app is open, not for history", async () => {
   store.getItemAsync.mockResolvedValue(saved);
@@ -283,4 +308,56 @@ test("registered remote push replaces local event notifications but not the hear
   expect(notifications.schedule.mock.calls[0][0]).toBe("Bottan 5 dakikadır haber yok");
   await tick(POLL_MS * 4);
   expect(notifications.schedule).toHaveBeenCalledTimes(1);
+});
+
+test("returning from hours in background shows data as stale before the first answer arrives", async () => {
+  store.getItemAsync.mockResolvedValue(saved);
+  const { transport, server } = fakeServer();
+  const ui = await mount(transport);
+  expect(ui.getByText("stale:false")).toBeTruthy();
+  await act(async () => appListener?.("background"));
+  await tick(3 * 3_600_000); // üç saat arka planda
+  server.hang = true; // döndüğünde ilk istek asılı kalıyor
+  await act(async () => appListener?.("active"));
+  await flush();
+  expect(ui.getByText("stale:true")).toBeTruthy(); // eski veri "canlı" görünmez
+  expect(ui.getByText("equity:3000")).toBeTruthy();
+});
+
+test("a late 401 from the previous connection cannot wipe a new pairing", async () => {
+  store.getItemAsync.mockResolvedValue(saved);
+  let rejectOld!: (value: unknown) => void;
+  const { transport: normal } = fakeServer();
+  let hold = false;
+  const transport = jest.fn((input: unknown, init?: unknown) => {
+    if (hold && String(input).endsWith("/status"))
+      return new Promise((resolve) => {
+        hold = false;
+        rejectOld = resolve;
+      });
+    return (normal as unknown as (a: unknown, b: unknown) => Promise<unknown>)(input, init);
+  }) as unknown as typeof fetch;
+  const ui = await mount(transport);
+  hold = true;
+  await tick(POLL_MS); // eski bağlantının isteği asılı
+  await fireEvent.press(ui.getByText("pair")); // kullanıcı yeniden eşleşti
+  await flush();
+  expect(ui.getByText("phase:ready")).toBeTruthy();
+  store.deleteItemAsync.mockClear();
+  await act(async () => rejectOld({ ok: false, status: 401, json: async () => ({ detail: "geçersiz token" }) }));
+  await flush();
+  expect(ui.getByText("phase:ready")).toBeTruthy();
+  expect(store.deleteItemAsync).not.toHaveBeenCalled();
+  expect(ui.getByText("equity:3000")).toBeTruthy();
+});
+
+test("a backlog of events after background is summarised, not replayed as fresh", async () => {
+  store.getItemAsync.mockResolvedValue(saved);
+  const { transport, server } = fakeServer({ events: [important(1)] });
+  await mount(transport);
+  for (let id = 2; id <= 41; id++) server.events.push({ ...important(id), at: START / 1000 - 8 * 3600 }); // 8 saat önce
+  server.events.push(important(42), important(43));
+  await tick(POLL_MS * 3);
+  const titles = notifications.schedule.mock.calls.map(([title]) => title);
+  expect(titles).toEqual(["İşlem açıldı", "İşlem açıldı", "40 önemli olay daha"]);
 });

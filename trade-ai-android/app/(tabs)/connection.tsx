@@ -17,7 +17,9 @@ export default function Connection() {
     setBusy(true);
     setError("");
     try {
-      await bot.pair(origin, code.trim());
+      // Adres çoğu zaman "https://" olmadan kopyalanır; yalnızca güvenli (https) bağlantı kurulur.
+      const address = origin.trim();
+      await bot.pair(/^[a-z]+:\/\//i.test(address) ? address : "https://" + address, code.trim());
       setCode("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Bağlantı kurulamadı.");

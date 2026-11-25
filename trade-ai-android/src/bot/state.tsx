@@ -69,6 +69,7 @@ export function BotProvider({ children, transport, now = Date.now, notifications
     generation.current += 1;
     lastEventId.current = null;
     ticks.current = 0;
+    busy.current = false; // eski bağlantının süren isteği yenisinin ilk yoklamasını engellemesin
     setStatus(null);
     setPositions([]);
     setEvents([]);
@@ -78,29 +79,13 @@ export function BotProvider({ children, transport, now = Date.now, notifications
     setCheckedAt(now());
   }, [now]);
 
-  // Sunucu token'ı reddetti. Render sırasında API'ye verildiği için ref'lere dokunmaz;
-  // sayaçlar bir sonraki eşleştirmede reset() ile sıfırlanır.
-  const revoke = useCallback(() => {
-    setConfig(null);
-    setPhase("revoked");
-    setStatus(null);
-    setPositions([]);
-    setEvents([]);
-    setError("");
-    setLastOkAt(null);
-    void clearBotConfig();
-  }, []);
-
-  const api = useMemo(
-    () => createBotApi(config, transport ?? fetch, revoke),
-    [config, transport, revoke],
-  );
+  const api = useMemo(() => createBotApi(config, transport ?? fetch), [config, transport]);
 
   useEffect(() => {
     let active = true;
     void loadBotConfig().then((stored) => {
       if (!active) return;
-      setConfig(stored);
+      setConfig((current) => current ?? stored); // yükleme bitmeden yapılmış bir eşleştirmeyi ezme
       setPhase((current) => (current === "loading" ? (stored ? "ready" : "unconfigured") : current));
     });
     return () => {
@@ -109,7 +94,11 @@ export function BotProvider({ children, transport, now = Date.now, notifications
   }, []);
 
   const refresh = useCallback(async () => {
-    if (!config || busy.current) return;
+    if (!config) return;
+    // Bayatlık ölçümü bir isteğin bitmesini beklemez: arka plandan dönüşte ya da asılı kalan istekte
+    // eski veri "canlı" gibi görünmemeli.
+    setCheckedAt(now());
+    if (busy.current) return;
     busy.current = true;
     const mine = generation.current;
     const withEvents = ticks.current % EVENTS_EVERY === 0;
@@ -132,7 +121,8 @@ export function BotProvider({ children, transport, now = Date.now, notifications
         const known = lastEventId.current;
         const added = fresh.filter((event) => event.id > known);
         // İlk yüklemedeki geçmiş olaylar bildirilmez; yalnızca uygulama açıkken gelen yeniler.
-        if (!initial && !remotePush.current) notifyNewEvents(added, known, notifications.schedule);
+        if (!initial && !remotePush.current)
+          notifyNewEvents(added, known, notifications.schedule, nextStatus.server_time ?? now() / 1000);
         if (added.length) {
           lastEventId.current = added[added.length - 1].id;
           setEvents((current) => [...added.slice().reverse(), ...current].slice(0, MAX_EVENTS));
@@ -141,14 +131,24 @@ export function BotProvider({ children, transport, now = Date.now, notifications
       setError("");
       setLastOkAt(now());
     } catch (reason) {
+      // Eski bağlantıdan geç gelen yanıt (401 dahil) yeni eşleştirmeye dokunamaz.
       if (mine !== generation.current) return;
-      if (reason instanceof BotError && reason.code === "UNAUTHORIZED") return; // revoke() halletti
+      if (reason instanceof BotError && reason.code === "UNAUTHORIZED") {
+        // Sunucu bu telefonun anahtarını reddetti: veriyi ve saklanan anahtarı sil.
+        reset();
+        setConfig(null);
+        setPhase("revoked");
+        void clearBotConfig();
+        return;
+      }
       setError(reason instanceof Error ? reason.message : "Sunucuya ulaşılamadı.");
     } finally {
-      busy.current = false;
-      if (mine === generation.current) setCheckedAt(now());
+      if (mine === generation.current) {
+        busy.current = false;
+        setCheckedAt(now());
+      }
     }
-  }, [api, config, now, notifications]);
+  }, [api, config, now, notifications, reset]);
 
   useEffect(() => {
     if (phase !== "ready" || !config) return;
