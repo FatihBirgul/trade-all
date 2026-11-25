@@ -238,3 +238,16 @@ giriş ("kovalama") sınırı.
 - İmzalı APK için dört Secret (README) ve gerçek telefonda kurulum denemesi.
 - Yeni stratejiler en az 20 sonuçlanmış gölge işlem ve pozitif ortalama R olmadan canlıya alınamaz (sunucu zorlar).
 - Yukarıdaki "İlk gerçek emirden ÖNCE yapılacaklar" listesi geçerliliğini korur.
+
+### V9 hafta sonu boşluğu düzeltmesi ve V9 kuralının güncellenmesi (2026-11-25, kullanıcı onayıyla)
+
+- PR #7'den sonra canlı özette 30 sembolün 28'i `missing candle during open or unknown broker hours` ile eleniyordu.
+  V9, açılıştan önceki 30 dakikayı (`OPENING_SOON`) "kapalı" saymadığı için hafta sonu boşluğu içeren her H1
+  serisini reddediyordu; H1'de 256 mum her zaman bir hafta sonu içerir. Düzeltme: boşluk denetiminde `OPENING_SOON`
+  da kapalı sayılır (`trade-ai-unified/vendor/day_trader/forex/contracts.py`, tek satır). İşlem kapıları değişmedi.
+  Regresyon: `tests/signals/test_weekend_gap.py` (gerçek Exness oturumları + boşluklu mumlar).
+- **Kural güncellendi (spec §11):** V9 geliştirilebilir. Risk/maliyet kapılarını (net R/R ≥ 1.5, SL zorunluluğu,
+  lot/risk sınırları) gevşeten değişiklikler test + bağımsız inceleme + kullanıcı onayı ister. Önceki kayıtlardaki
+  "V9 değiştirilemez" ifadeleri bu kararla geçersizdir.
+- Ders: sahte borsa verisinde hafta sonu boşluğu yoktu; gerçek veriye özgü biçimler (boşluk, oturum saatleri) için
+  testler gerçek keşif verisinden türetilmeli.
