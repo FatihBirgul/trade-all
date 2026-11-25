@@ -99,6 +99,9 @@ CREATE TABLE IF NOT EXISTS events (
     data_json TEXT
 );
 
+-- Ozet ucu ve temizlik zamana gore okur.
+CREATE INDEX IF NOT EXISTS events_at ON events (at);
+
 CREATE TABLE IF NOT EXISTS equity (
     at REAL PRIMARY KEY,
     balance REAL NOT NULL,

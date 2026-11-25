@@ -29,6 +29,15 @@ echo "saglik: $body"
 # Son 24 saatin tarama ozeti (yalnizca sayilar ve nedenler; hesap bilgisi icermez). Eski surumde yoktur.
 summary="$(curl -fsS --max-time 10 "${TRADEBOT_SUMMARY_URL:-${URL%/health}/health/summary}" 2>/dev/null || true)"
 [ -n "$summary" ] && echo "ozet: $summary"
+# Gunluk yedek: 36 saatten eskiyse (ya da hic alinmadiysa) uyar. Servis yeni baslamissa ilk yedek 30 dk icinde alinir.
+backup_at="$(printf '%s' "$body" | sed -n 's/.*"last_backup_at":\([0-9][0-9]*\).*/\1/p')"
+if [ -n "$backup_at" ] && [ $(( $(date +%s) - backup_at )) -gt 129600 ]; then
+  echo "yedek: UYARI son yedek 36 saatten eski" >&2
+elif [ -n "$backup_at" ]; then
+  echo "yedek: guncel"
+else
+  echo "yedek: henuz alinmadi"
+fi
 case "$body" in
   *'"stream_connected":true'*) echo "akislar: bagli" ;;
   *) echo "akislar: BAGLI DEGIL" >&2; exit 2 ;;

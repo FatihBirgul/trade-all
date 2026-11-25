@@ -280,3 +280,47 @@ Düzeltilenler:
 - Eksik testler eklendi: SAT tarafı, 2R'nin altına geri dönüş, işlem ortasında anahtar değişimi, eski/yeni ayar kaydı.
 Bilinen, bilerek bırakılan: kısmi kapatma kapalıyken iz süren stop fiyat 2R'nin altına inince bekler (stop yerinde
 kalır); anahtar etiketlerindeki "1R/2R" sabit yazıdır (eşikler sunucuda değiştirilirse etiket güncellenmez).
+
+## Faz 4 (plan: `docs/superpowers/plans/2026-11-25-trade-bot-faz4.md`)
+
+- **Karar: bakım işleri bot sürecinin içinde.** Dağıtım kullanıcısının yetkisi yalnızca servisi yeniden başlatmak;
+  root gerektiren systemd zamanlayıcıları kullanıcıya yeni sunucu adımı açardı. Yedek ve temizlik bu yüzden botun
+  içinde, yalnızca `/var/lib/tradebot` altına yazarak çalışır.
+- **Günlük yedek:** `sqlite3.Connection.backup()` ile tutarlı kopya, ayrı bağlantı ve ayrı iş parçacığı; geçici
+  dosya → `quick_check` → yerine taşıma; kip 600; en yeni 14 yedek. Hata botu durdurmaz, günde bir kez bildirilir.
+  `/health.last_backup_at`.
+- **Temizlik:** 60 günden eski `scan`, `scan_skipped`, `signal_observed` (yalnızca `info` düzeyi) silinir; işlem,
+  emir, ayar, uyarı ve hata kayıtları silinmez. Günlük `wal_checkpoint(TRUNCATE)`; `events(at)` dizini.
+- **Hesap durumu:** hesap ayarları her mutabakatta (5 dk) yeniden okunur; "yalnızca kapat"/marjin kısıtı yeniden
+  başlatma beklemeden fark edilir (tek uyarı, düzelince tek bilgi). Önceden yalnızca açılışta okunuyordu.
+- **Saat kayması:** tick saati sunucu saatinden 5 sn'den fazla ilerideyse tek uyarı (V9 böyle veriyi reddeder).
+- **Günlükler:** journald saklar ve döndürür; `deploy/journald-tradebot.conf` yeni kurulumlarda kendiliğinden,
+  mevcut sunucuda isteğe bağlı iki komutla kurulur (kılavuzda). Günlük ve olay kayıtlarında sır bulunmadığı
+  uçtan uca testle doğrulanır.
+- **Hata senaryosu testleri:** broker yeni pozisyonu reddederse emir yinelenmez; kısmi dolum gerçek hacimle
+  kaydedilir ve SL yerinde kalır; veritabanı yazılamıyorsa emir gönderilmez; bir zamanlayıcı görevinin hatası
+  döngüsünü durdurmaz.
+- **Kılavuz:** `trade-bot/README.md` (Türkçe, teknik olmayan kullanıcı için).
+- Yapılmayan (plandaki Task 4/6. madde): "uzun kesinti sonrası açılış" için ayrı test yazılmadı; mevcut yeniden
+  başlatma testleri (açık pozisyonla açılış, kapalıyken stop tetiklenmesi) ve boşluk onarımı bu alanı kapsıyor.
+
+### Faz 4 bağımsız incelemesi (2026-11-25) ve düzeltmeler
+
+İşlem yolu sağlam çıktı (yedek sırasında 139 bin yazmada kilit hatası yok, en uzun duraksama 48 ms). Düzeltilenler:
+- **K1 geri yükleme talimatı işe yaramıyordu:** servis durunca eski veritabanının `-wal` dosyası diskte kalıyor ve
+  kopyalanan yedeğin üstüne yeniden oynatılıyordu. Kılavuz artık eski dosyayı kenara alıp `-wal`/`-shm`'yi siliyor;
+  geri yüklemenin kipi, sonradan açılan işlemleri ve iptal edilmiş telefon bağlantılarını nasıl etkilediği yazıldı.
+- **Ö1** Yedek parça parça kopyalanıyordu; arada her yazmada baştan başlayıp yoğun yazma altında hiç bitmeyebilirdi.
+  Tek adımda (`pages=-1`) alınıyor; yazma sürerken bittiği testle doğrulanır.
+- **Ö2** Yeni uyarılar (`backup_failed`, `account_blocked`, `clock_skew`, `loop_failing`) uygulamada bildirim
+  üretmiyordu ve etiketsizdi; eklendi. Kılavuzdaki "bildirim gelir" ifadesi gerçeğe göre düzeltildi.
+- **Ö3** Kılavuz: deneme modunda açık bot işlemlerine kademeli stop uygulanmadığı yazıldı.
+- **Ö4** Tek bir ileri tarihli tick "saat kaymış" uyarısı üretiyordu; fark art arda iki kalp atışında sürmeli.
+- **Ö5** Biçimi bozuk hesap yanıtı iyi kopyanın yerine geçip hesap durumunu donduruyordu; önce doğrulanıyor.
+- **Ö6** Bir zamanlayıcı görevi art arda 5 kez hata verirse tek `loop_failing` uyarısı; sürekli hata günlüğü
+  doldurmaz. `status.sh` yedek 36 saatten eskiyse uyarır.
+- **Ö8** Yedekten önce boş alan denetimi (veritabanının 2 katı + 50 MB); hata günlüğüne dosya yolu yazılmaz.
+Bilinen, bırakılanlar: disk tamamen doluyken olay kaydı da yazılamadığı için uyarı üretilemez (tek işaret
+uygulamadaki "bottan haber yok"); sunucu saatinin İLERİDE olması algılanmıyor; `systemctl stop` süreci temiz
+kapatmıyor (WAL diskte kalır — veri kaybı yok, geri yükleme talimatı bunu hesaba katar); sürüm satırı commit
+bilgisini içermiyor; kısmi dolumda `risk_amount` planlanan tutarda kalıyor (R istatistiğini hafif kaydırır).

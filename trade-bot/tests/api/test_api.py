@@ -35,7 +35,7 @@ async def test_health_is_public_and_minimal(tmp_path):
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "last_scan_at": None, "heartbeat_at": NOW + 30,
                                "stream_connected": True, "halted": False, "last_scan": None, "tick_errors": 0,
-                               "tick_error": None, "tick_acks": 0, "quoted_now": 1}
+                               "tick_error": None, "tick_acks": 0, "quoted_now": 1, "last_backup_at": None}
 
 
 async def test_health_reports_last_scan_counts_without_account_data(tmp_path):
