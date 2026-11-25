@@ -103,6 +103,7 @@ test("an address typed without https:// is completed, never downgraded", async (
   await fireEvent.press(ui.getByText("Bağlan"));
   await waitFor(() => expect(bot.pair).toHaveBeenCalledWith(ORIGIN, "482913"));
   await fireEvent.changeText(ui.getByLabelText("Sunucu adresi"), "http://203-0-113-7.sslip.io");
+  await fireEvent.changeText(ui.getByLabelText("Eşleştirme kodu"), "482913"); // başarılı denemeden sonra kod silinir
   await fireEvent.press(ui.getByText("Bağlan"));
   await waitFor(() => expect(bot.pair).toHaveBeenLastCalledWith("http://203-0-113-7.sslip.io", "482913")); // pairBot reddeder
 });
