@@ -127,3 +127,21 @@ Kod tarafi tamam (Task 1–14 adim 5). Kullanicidan beklenenler:
 - Para yatırma/çekme (`balance` türü deal): bot K/Z'sine girmez; canlı tabanı tutar kadar kaydırır, her deal bir kez (`balance_ops`). Kaynak: olay akışı + 5 dakikada bir deal geçmişi. Tabandan önceki işlemler yalnızca kaydedilir.
 - `/health` son taramanın sayılarını verir (hesap bilgisi yok); `deploy/status.sh` ve iş akışının `status` kipi dağıtım sonrası doğrulama içindir.
 - Hâlâ gerçek örneği olmayanlar: pozisyon, emir, deal, tick, WS olayları, ACK, operasyon durumu → ilk asgari lot işleminde doğrulanacak.
+
+## Faz 2 bağımsız incelemesi (2026-11-25, sunucu + Android ayrı ayrı)
+
+Sunucu (d6551d9..2fcf2e1) — düzeltilenler, gerileme testleri `tests/test_phase2_review.py` (her biri mutasyonla doğrulandı):
+- C1: `PUT /settings` bir stratejiyi canlıya alamaz (409). Önceki karar ("ya da PUT /settings") geri alındı: bayat ayar kopyası botun duraklattığı stratejiyi onaysız açabiliyordu. Tek yol `POST /strategies/{id}/mode` + `confirm`.
+- I1: gölge işlem açıldığı mumu da sayar (giriş mum kapanışından 5 sn sonra, yeni mumun içinde).
+- I2: aynı sembol/strateji/yön için açık gölge varken yenisi açılmaz; karne gölge sonuçlarını nedene göre ve duraklatmadan sonrası olarak ayırır.
+- I3: takvim hiç alınamadıysa hemen (ve her gün) uyarılır; `/news.stale` bu durumda `true`.
+- I4: gölgedeki strateji canlı stratejiyi bastırmaz; yalnızca aynı yöndeki canlı aday kabul edilir.
+- I5: karne tabanı yalnızca botun duraklattığı strateji yeniden açılınca sıfırlanır.
+- Kullanıcı SL/TP (Android C2'nin sunucu tarafı): yanlış taraf ve fiyattan %50'den uzak seviye 422.
+- Ertelenen (Minor): haber `country: All` olayları, uzun süre çözülemeyen gölge işlemler için 128 mum sınırı, SELL gölgede spread, `signal_observed` tekrar kaydı, taramada V9 analizlerinin `manage_tick`'e yol vermemesi.
+
+Android (aynı aralık) — düzeltilenler, testler `__tests__/bot*.test.ts(x)`:
+- C1 veri hiç alınmadıysa "pozisyon/olay yok" yerine hata + yeniden dene. C2 SL/TP: her değişiklik eski → yeni değerle onaylanır; yanlış taraf ve fiyattan çok uzak seviye gönderilmez; SL uzaklaşıyorsa risk uyarısı. C3 bayatlık bir isteğin bitmesini beklemez.
+- I1 kâr al = broker emri (`tp2`). I2 deneme modunda onay metinleri işlemin gerçek olduğunu söyler. I3 bayatken "Çalışıyor"/CANLI gösterilmez. I4 eski bağlantının geç 401'i yeni eşleştirmeyi silemez. I5 değişiklik isteklerinde 502/503/504 ve okunamayan 2xx "sonuç belirsiz". I6 eşleştirme hata metinleri. I7 başka adresten gelen yanıt reddedilir. I8 pozisyon kimliği biçimi serbest. I9 birikmiş olaylar tek özet bildirim. I10 kademeli stop kapatma onaylı. I11 yanıt biçimi doğrulanır.
+- Açık kalan: I12 uzak push (FCM yok; kanal kimliği `default` ile hizalandı), uygulama arka plandayken kalp atışı uyarısı gelmez, "Bağlantıyı sil" token'ı sunucuda iptal etmez (`tradebot revoke` ile yapılır).
+- Öneri (kontrolcü kararı): `PUT /settings` ile `dry_run: false` geçişi için de açık onay alanı.
