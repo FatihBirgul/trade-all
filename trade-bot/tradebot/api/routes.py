@@ -219,8 +219,15 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
         return repo.get_bot_settings().model_dump(mode="json")
 
     @private.put("/settings")
-    async def put_settings(body: BotSettings):
+    async def put_settings(body: BotSettings, confirm_live: bool = Query(default=False)):
         previous = repo.get_bot_settings()
+        if previous.dry_run and not body.dry_run and not confirm_live:
+            # Canli mod gercek para ile emir gonderir. Bu gecis, ayar govdesinden ayri ve acik bir onay
+            # ister: eski bir ayar kopyasini geri gonderen ya da baska bir alani degistiren istek botu
+            # farkinda olmadan canliya alamaz.
+            raise HTTPException(
+                status_code=409,
+                detail="canlı moda geçiş gerçek emir gönderir; onay için confirm_live=true ile gönderin")
         # Bir stratejiyi canliya almak gercek islem acar ve bilincli onay ister; bu yalnizca
         # POST /strategies/{id}/mode (confirm=true) ile yapilir. Aksi halde eski bir ayar kopyasini
         # geri gonderen istemci, botun duraklattigi stratejiyi farkinda olmadan yeniden acardi.
@@ -235,6 +242,10 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
         if unknown:
             raise HTTPException(status_code=422, detail="bilinmeyen strateji: " + ", ".join(unknown))
         repo.set_bot_settings(body)
+        if previous.dry_run != body.dry_run:
+            repo.add_event("warning", "mode_changed",
+                           "Canlı moda geçildi: bot gerçek emir gönderecek" if not body.dry_run
+                           else "Deneme moduna geçildi: bot emir göndermeyecek", {"dry_run": body.dry_run})
         repo.add_event("info", "settings_changed", "Ayarlar güncellendi", body.model_dump(mode="json"))
         await bot.settings_changed()  # canli moda ilk geciste kayip siniri tabani o andaki varliktan alinir
         return body.model_dump(mode="json")
