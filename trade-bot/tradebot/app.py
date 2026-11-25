@@ -748,6 +748,8 @@ class Bot:
             "dry_run": settings.dry_run, "start_capital": state.start_capital,
             "last_scan_at": state.last_scan_at, "heartbeat_at": state.heartbeat_at,
             "stream_connected": self.streams_up(), "started": self.started,
+            # Uygulama kalp atisinin bayatligini telefon saatine degil bu degere gore olcer.
+            "server_time": self._clock(),
         }
 
     # ------------------------------------------------------------------ zamanlayicilar

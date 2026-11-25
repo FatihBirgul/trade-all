@@ -91,6 +91,7 @@ async def test_status_and_positions(tmp_path):
     assert status["equity"] is not None and status["open_bot"] == 1 and status["currency"] == "USD"
     assert status["pnl_today"]["bot"] == pytest.approx(trade.volume * 100, abs=0.01)
     assert status["pnl_today"]["manual"] == 0 and status["dry_run"] is False
+    assert status["server_time"] >= NOW  # uygulama kalp atisi bayatligini buna gore olcer
     position = positions["positions"][0]
     assert position["position_id"] == trade.position_id and position["origin"] == "bot"
     assert position["unrealized_pnl"] == pytest.approx(trade.volume * 100, abs=0.01)
@@ -275,6 +276,18 @@ async def test_events_paging(tmp_path):
         assert (await http.get("/events", params={"after": last})).json()["events"] == []
         app.repo.add_event("info", "x", "y")
         assert [e["kind"] for e in (await http.get("/events", params={"after": last})).json()["events"]] == ["x"]
+
+
+async def test_events_newest_first_for_app_start(tmp_path):
+    """Uygulama ilk acilista en yeni olaylari ister; eski 200 olayi sayfa sayfa gezmek zorunda kalmaz."""
+    app, http = await authed(tmp_path)
+    for i in range(5):
+        app.repo.add_event("info", f"k{i}", "m")
+    async with http:
+        newest = (await http.get("/events", params={"newest": "true", "limit": 2})).json()["events"]
+        assert [e["kind"] for e in newest] == ["k4", "k3"]
+        oldest = (await http.get("/events", params={"limit": 2})).json()["events"]
+        assert oldest[0]["id"] < oldest[1]["id"] < newest[1]["id"]
 
 
 async def test_devices_register(tmp_path):

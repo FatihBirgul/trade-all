@@ -287,8 +287,10 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
                 "stale": calendar.stale() if calendar is not None else True, "events": events}
 
     @private.get("/events")
-    async def events(after: int = Query(default=0, ge=0), limit: int = Query(default=200, ge=1, le=500)):
-        return {"events": repo.events(after=after, limit=limit)}
+    async def events(after: int = Query(default=0, ge=0), limit: int = Query(default=200, ge=1, le=500),
+                     newest: bool = False):
+        # newest=true: en yeni olaylar, yeniden eskiye (uygulamanin ilk acilisi icin).
+        return {"events": repo.events(after=after, limit=limit, newest=newest)}
 
     @private.post("/devices")
     async def register_device(body: DeviceRequest):
