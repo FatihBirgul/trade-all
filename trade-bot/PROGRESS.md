@@ -251,3 +251,16 @@ giriş ("kovalama") sınırı.
   "V9 değiştirilemez" ifadeleri bu kararla geçersizdir.
 - Ders: sahte borsa verisinde hafta sonu boşluğu yoktu; gerçek veriye özgü biçimler (boşluk, oturum saatleri) için
   testler gerçek keşif verisinden türetilmeli.
+
+### Faz 3'te ertelenen ayarların tamamlanması (2026-11-25, Android 0.9.1)
+
+- **Kademeli stop anahtarları:** `manage.be_enabled / partial_enabled / trail_enabled` (varsayılan açık). Kapatılan
+  aşama atlanır; broker tarafındaki ilk stop her zaman yerinde kalır. Kısmi kapatma kapalıyken iz süren stop aynı
+  eşikte (`partial_at_r`) başlar. Karar: anahtarlar "koruma" sayılır, kapatmak uygulamada "risk artar" uyarısı verir.
+- **Sembol seçimi:** `PUT /settings` bilinmeyen sembolü ve boş listeyi reddeder (boş liste yerine Durdur). Listede
+  kalmış, artık evrende olmayan eski sembol başka ayarın kaydını engellemez. Uygulamada evrenin tamamı seçiliyse
+  `null` (hepsi) yazılır; böylece broker'a sonradan eklenen semboller de açık kalır.
+- **Orta/yüksek puan eşikleri:** uygulamada düzenlenir; sıra (en düşük ≤ orta ≤ yüksek) hem uygulamada hem sunucuda
+  doğrulanır. Eşiği düşürmek "risk artar" sayılır (aynı puanla daha büyük lot).
+- **Elle işlemde risk %:** yalnızca önizlemede lot önermek içindir (0,05–2); emirde her zaman önizlenen lot gider.
+  Ayardaki sınırın üstündeyse sunucu uyarır ve uyarı onay penceresinde tekrarlanır.
