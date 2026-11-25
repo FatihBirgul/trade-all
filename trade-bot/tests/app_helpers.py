@@ -46,7 +46,7 @@ async def feed_ticks(app_or_fake, symbol, bid, ask, now, count=120):
         await fake.set_price(symbol, bid, ask, at=now - count + i)
 
 
-def build(tmp_path, *, now=NOW, dry_run=False, fake=None, clock=None, **fake_args) -> App:
+def build(tmp_path, *, now=NOW, dry_run=False, fake=None, clock=None, news=None, **fake_args) -> App:
     clock = clock or {"now": float(now)}
     fake = fake or FakeExness(clock=lambda: clock["now"], **fake_args)
     repo = Repo(tmp_path / "bot.db", clock=lambda: clock["now"])
@@ -54,7 +54,8 @@ def build(tmp_path, *, now=NOW, dry_run=False, fake=None, clock=None, **fake_arg
         repo.set_bot_settings(BotSettings(dry_run=dry_run))
     notifier = RecordingNotifier()
     factory = stream_factory(fake)
-    bot = Bot(settings(), fake, repo, notifier, clock=lambda: clock["now"], stream_factory=factory)
+    calendar = news(repo, lambda: clock["now"]) if news is not None else None
+    bot = Bot(settings(), fake, repo, notifier, clock=lambda: clock["now"], stream_factory=factory, news=calendar)
     return App(bot, fake, repo, notifier, factory.created, clock, tmp_path)
 
 

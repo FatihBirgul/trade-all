@@ -245,6 +245,19 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
                         for t in closed[:200]],
         }
 
+    @private.get("/news")
+    async def news(hours: int = Query(default=48, ge=1, le=168)):
+        """Onumuzdeki yuksek etkili haberler ve takvimin guncelligi."""
+        calendar = bot.news
+        settings = repo.get_bot_settings().news
+        now = clock()
+        events = [] if calendar is None else [
+            {"currency": e.currency, "title": e.title, "at": e.at, "impact": e.impact}
+            for e in calendar.events() if e.impact == "high" and now - settings.window_minutes * 60 <= e.at <= now + hours * 3600]
+        return {"enabled": settings.enabled, "window_minutes": settings.window_minutes,
+                "fetched_at": calendar.fetched_at() if calendar is not None else None,
+                "stale": calendar.stale() if calendar is not None else True, "events": events}
+
     @private.get("/events")
     async def events(after: int = Query(default=0, ge=0), limit: int = Query(default=200, ge=1, le=500)):
         return {"events": repo.events(after=after, limit=limit)}

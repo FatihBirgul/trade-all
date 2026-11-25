@@ -78,11 +78,21 @@ class ManageSettings(BaseModel):
     tp2_r: float = Field(default=3.0, gt=0, le=20)
 
 
+class NewsSettings(BaseModel):
+    """Spec §6.6 haber penceresi: yuksek etkili haberden once ve sonra bu kadar dakika yeni bot islemi yok."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    window_minutes: int = Field(default=30, ge=5, le=120)
+
+
 class BotSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     risk: RiskSettings = Field(default_factory=RiskSettings)
     manage: ManageSettings = Field(default_factory=ManageSettings)
+    news: NewsSettings = Field(default_factory=NewsSettings)
     enabled_symbols: set[str] | None = None  # None = hepsi
     enabled_strategies: set[str] | None = None  # None = hepsi
     dry_run: bool = True

@@ -27,6 +27,7 @@ from .manager.manage import MoveSL, NoOp, PartialClose, decide
 from .market.candles import CandleStore
 from .market.catalog import InstrumentCatalog
 from .market.quotes import QuoteBook
+from .news.gate import blocking_event
 from .risk.portfolio import check_entry
 from .signals import v9
 from .signals.adapter import Candidate, evaluate
@@ -64,6 +65,7 @@ class ScanSummary:
     candidates: int = 0
     opened: int = 0
     blocked: int = 0
+    news_blocked: int = 0  # haber penceresi nedeniyle analiz edilmeden atlanan semboller
     errors: int = 0
     skipped: str | None = None
     reasons: dict[str, int] = field(default_factory=dict)
@@ -76,13 +78,14 @@ def _default_stream_factory(client, path, on_message, name):
 
 class Bot:
     def __init__(self, settings: Settings, client, repo: Repo, notifier, clock: Callable[[], float] = time.time,
-                 *, stream_factory=None, sleep=asyncio.sleep):
+                 *, stream_factory=None, sleep=asyncio.sleep, news=None):
         self.settings = settings
         self.client = client
         self.repo = repo
         self.notifier = notifier
         self._clock = clock
         self._sleep = sleep
+        self.news = news  # NewsCalendar | None (None: haber filtresi yok)
         self._stream_factory = stream_factory or _default_stream_factory
         self.catalog = InstrumentCatalog(client)
         self.quotes = QuoteBook(clock=clock)
@@ -146,6 +149,7 @@ class Bot:
         report = await reconcile(self.client, self.repo, self.catalog, clock=self._clock, snapshot=snapshot)
         await self.executor.publish(report)
         self._open_streams()
+        await self._refresh_news()
         self.started = True
         universe = self.catalog.universe(self.repo.get_bot_settings().enabled_symbols)
         await self._record("info", "bot_started", f"Bot başladı: {len(universe)} sembol izleniyor",
@@ -360,10 +364,15 @@ class Bot:
             return await self._skip(summary, "daily_limit")
 
         scanned: set[str] = set()
+        news_events = self.news.events() if self.news is not None and settings.news.enabled else []
         for instrument in self.catalog.universe(settings.enabled_symbols):
             symbol = instrument.symbol
             if not self._is_open(instrument, now):
                 summary.closed += 1  # hafta sonu forex gibi: sessizce atla
+                continue
+            if news_events and blocking_event(instrument, news_events, now=now,
+                                              window_minutes=settings.news.window_minutes) is not None:
+                summary.news_blocked += 1  # haber penceresi: yeni islem yok (acik islemler stoplariyla surer)
                 continue
             try:
                 for frame in FRAMES:
@@ -400,7 +409,9 @@ class Bot:
         await self._record(
             "info", "scan",
             f"Tarama: {summary.scanned} sembol, {summary.candidates} aday, {summary.opened} emir"
-            + (f", {summary.closed} kapalı" if summary.closed else ""), dataclasses.asdict(summary))
+            + (f", {summary.closed} kapalı" if summary.closed else "")
+            + (f", {summary.news_blocked} haber penceresinde" if summary.news_blocked else ""),
+            dataclasses.asdict(summary))
         return summary
 
     def _with_tp2(self, candidate: Candidate, instrument: Instrument, settings: BotSettings) -> Candidate:
@@ -601,10 +612,29 @@ class Bot:
         if not self._auth_blocked():
             await self.executor.resolve_unknown()
 
+    async def _refresh_news(self) -> None:
+        """Takvimi gerektiginde yeniler. Alinamamasi botu durdurmaz; 24 saati asarsa gunde bir kez uyarilir."""
+        if self.news is None:
+            return
+        try:
+            if self.news.due():
+                await self.news.refresh()
+        except Exception:  # takvim kaynagi botun calismasini hicbir kosulda bozmamali
+            log.exception("haber takvimi yenilenemedi")
+        if self.news.stale() and self.repo.get_bot_settings().news.enabled:
+            day = datetime.fromtimestamp(self._clock(), timezone.utc).strftime("%Y-%m-%d")
+            if self.repo.get_setting("news_warned_day") != day:
+                self.repo.set_setting("news_warned_day", day)
+                await self._record(
+                    "warning", "news_unavailable",
+                    "Haber takvimi 24 saattir alınamıyor. Bot çalışmaya devam ediyor ama haber penceresi "
+                    "koruması güncel değil.", notify=True, title="Haber takvimi alınamıyor")
+
     # ------------------------------------------------------------------ kalp atisi
     async def heartbeat(self) -> None:
         now = self._clock()
         self.repo.set_bot_state(heartbeat_at=now)
+        await self._refresh_news()
         if self.account is not None and now - self._last_equity_sample >= EQUITY_SAMPLE_INTERVAL:
             self._last_equity_sample = now
             self.repo.add_equity(now, self.account.balance, self.account.equity)
