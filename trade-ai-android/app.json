@@ -19,7 +19,10 @@
         "backgroundImage": "./assets/brand/adaptive-background.png",
         "backgroundColor": "#111316",
         "monochromeImage": "./assets/brand/adaptive-monochrome.png"
-      }
+      },
+      "permissions": [
+        "android.permission.POST_NOTIFICATIONS"
+      ]
     },
     "plugins": [
       "./plugins/withLaunchWindow.cjs",
@@ -27,6 +30,7 @@
       "expo-status-bar",
       "expo-secure-store",
       "expo-font",
+      "expo-notifications",
       [
         "expo-splash-screen",
         {

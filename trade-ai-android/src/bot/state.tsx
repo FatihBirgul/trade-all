@@ -10,6 +10,8 @@ import React, {
 } from "react";
 import { AppState } from "react-native";
 import { BotError, createBotApi, pairBot, type BotApi } from "./client";
+import * as native from "./nativeNotifications";
+import { heartbeatNotifier, notifyNewEvents, registerPush, type Schedule } from "./notifications";
 import { clearBotConfig, loadBotConfig, saveBotConfig } from "./storage";
 import type { BotConfig, BotEvent, BotPosition, BotStatus } from "./types";
 
@@ -38,9 +40,14 @@ type BotState = {
 
 const Context = createContext<BotState | null>(null);
 
-type Props = PropsWithChildren<{ transport?: typeof fetch; now?: () => number }>;
+export type BotNotifications = { schedule: Schedule; pushToken: () => Promise<string | null> };
+type Props = PropsWithChildren<{
+  transport?: typeof fetch;
+  now?: () => number;
+  notifications?: BotNotifications;
+}>;
 
-export function BotProvider({ children, transport, now = Date.now }: Props) {
+export function BotProvider({ children, transport, now = Date.now, notifications = native }: Props) {
   const [phase, setPhase] = useState<BotPhase>("loading");
   const [config, setConfig] = useState<BotConfig | null>(null);
   const [status, setStatus] = useState<BotStatus | null>(null);
@@ -55,6 +62,8 @@ export function BotProvider({ children, transport, now = Date.now }: Props) {
   const lastEventId = useRef<number | null>(null);
   const busy = useRef(false);
   const ticks = useRef(0);
+  // Uzak bildirim kayıtlıysa olayları sunucu gönderir; aynı olay için yerel bildirim üretilmez.
+  const remotePush = useRef(false);
 
   const reset = useCallback(() => {
     generation.current += 1;
@@ -118,9 +127,12 @@ export function BotProvider({ children, transport, now = Date.now }: Props) {
       setStatus(nextStatus);
       setPositions(nextPositions);
       if (fresh) {
+        const initial = lastEventId.current === null;
         if (lastEventId.current === null) lastEventId.current = 0;
         const known = lastEventId.current;
         const added = fresh.filter((event) => event.id > known);
+        // İlk yüklemedeki geçmiş olaylar bildirilmez; yalnızca uygulama açıkken gelen yeniler.
+        if (!initial && !remotePush.current) notifyNewEvents(added, known, notifications.schedule);
         if (added.length) {
           lastEventId.current = added[added.length - 1].id;
           setEvents((current) => [...added.slice().reverse(), ...current].slice(0, MAX_EVENTS));
@@ -136,7 +148,19 @@ export function BotProvider({ children, transport, now = Date.now }: Props) {
       busy.current = false;
       if (mine === generation.current) setCheckedAt(now());
     }
-  }, [api, config, now]);
+  }, [api, config, now, notifications]);
+
+  useEffect(() => {
+    if (phase !== "ready" || !config) return;
+    let active = true;
+    remotePush.current = false;
+    void registerPush(api, notifications.pushToken).then((registered) => {
+      if (active) remotePush.current = registered;
+    });
+    return () => {
+      active = false;
+    };
+  }, [phase, config, api, notifications]);
 
   useEffect(() => {
     if (phase !== "ready" || !config) return;
@@ -190,6 +214,11 @@ export function BotProvider({ children, transport, now = Date.now }: Props) {
     const serverNow = status.server_time ?? (lastOkAt ?? checkedAt) / 1000;
     return serverNow - status.heartbeat_at > STALE_SECONDS;
   }, [phase, lastOkAt, since, checkedAt, status]);
+
+  const heartbeatAlert = useMemo(() => heartbeatNotifier(notifications.schedule), [notifications]);
+  useEffect(() => {
+    heartbeatAlert(heartbeatStale);
+  }, [heartbeatAlert, heartbeatStale]);
 
   const value = useMemo(
     () => ({

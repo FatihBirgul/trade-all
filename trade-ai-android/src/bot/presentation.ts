@@ -46,3 +46,12 @@ export function priceText(value: number | null | undefined): string {
   // Fiyatlar sunucudan geldiği hassasiyetle gösterilir; gereksiz sıfır eklenmez.
   return String(Number(value.toFixed(6))).replace(".", ",");
 }
+
+const two = (value: number) => String(value).padStart(2, "0");
+// "25.11 14:32" — telefonun yerel saatiyle.
+export function timeText(epochSeconds: number): string {
+  const date = new Date(epochSeconds * 1000);
+  return (
+    two(date.getDate()) + "." + two(date.getMonth() + 1) + " " + two(date.getHours()) + ":" + two(date.getMinutes())
+  );
+}

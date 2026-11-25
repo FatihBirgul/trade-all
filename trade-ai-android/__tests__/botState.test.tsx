@@ -42,6 +42,7 @@ function fakeServer(overrides: Partial<Server> = {}) {
     if (path === "/status")
       return reply({ equity: 3000, halted: false, heartbeat_at: server.heartbeatAt, server_time: server.serverTime });
     if (path === "/positions") return reply({ positions: [{ position_id: "2001", symbol: "EURUSD" }] });
+    if (path === "/devices") return reply({ registered: true });
     if (path.startsWith("/events?newest=true")) return reply({ events: server.events.slice().reverse() });
     if (path.startsWith("/events?after=")) {
       const after = Number(path.split("=")[1]);
@@ -81,9 +82,10 @@ const tick = async (ms: number) => {
   });
 };
 const flush = () => tick(0);
+const notifications = { schedule: jest.fn(), pushToken: jest.fn() };
 const mount = async (transport: typeof fetch) => {
   const ui = await render(
-    <BotProvider transport={transport} now={() => clock}>
+    <BotProvider transport={transport} now={() => clock} notifications={notifications}>
       <Probe />
     </BotProvider>,
   );
@@ -94,6 +96,8 @@ const paths = (calls: jest.Mock, prefix: string) =>
   calls.mock.calls.filter(([url]) => String(url).replace(ORIGIN, "").startsWith(prefix)).length;
 
 beforeEach(() => {
+  notifications.schedule.mockReset();
+  notifications.pushToken.mockReset().mockResolvedValue(null);
   jest.useFakeTimers();
   clock = START;
   appListener = null;
@@ -248,4 +252,35 @@ test("disconnect clears data and storage", async () => {
   await tick(POLL_MS * 2);
   expect(calls.mock.calls.length).toBe(before);
   await waitFor(() => expect(ui.getByText("stale:false")).toBeTruthy());
+});
+
+const important = (id: number) => ({ id, at: 1, level: "info", kind: "trade_opened", message: "m" + id, data: null });
+
+test("notifies locally for events that arrive while the app is open, not for history", async () => {
+  store.getItemAsync.mockResolvedValue(saved);
+  const { transport, server } = fakeServer({ events: [important(1), important(2)] });
+  await mount(transport);
+  expect(notifications.schedule).not.toHaveBeenCalled(); // geçmiş olaylar bildirilmez
+  server.events.push(important(3), { ...important(4), kind: "scan" });
+  await tick(POLL_MS * 3);
+  expect(notifications.schedule.mock.calls).toEqual([["İşlem açıldı", "m3"]]);
+  await tick(POLL_MS * 3);
+  expect(notifications.schedule).toHaveBeenCalledTimes(1);
+});
+
+test("registered remote push replaces local event notifications but not the heartbeat alarm", async () => {
+  store.getItemAsync.mockResolvedValue(saved);
+  notifications.pushToken.mockResolvedValue("ExponentPushToken[abc]");
+  const { transport, server, calls } = fakeServer({ events: [important(1)] });
+  await mount(transport);
+  expect(paths(calls, "/devices")).toBe(1);
+  server.events.push(important(2));
+  await tick(POLL_MS * 3);
+  expect(notifications.schedule).not.toHaveBeenCalled(); // sunucu gönderir; çift bildirim olmaz
+  server.down = true;
+  await tick(300_000 + POLL_MS);
+  expect(notifications.schedule).toHaveBeenCalledTimes(1);
+  expect(notifications.schedule.mock.calls[0][0]).toBe("Bottan 5 dakikadır haber yok");
+  await tick(POLL_MS * 4);
+  expect(notifications.schedule).toHaveBeenCalledTimes(1);
 });
