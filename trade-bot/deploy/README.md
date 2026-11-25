@@ -16,9 +16,10 @@ Betik sırayla şunları yapar:
 1. Kurulumu yapar (aşağıdaki 1. adımın aynısı).
 2. Dört Exness değerini tek tek sorar. Yapıştırdığınız değer güvenlik için ekranda görünmez; yapıştırıp Enter'a basın. Değerler `/etc/tradebot/tradebot.env` dosyasına yazılır (yalnızca servis okuyabilir).
 3. Dağıtım için SSH anahtarı üretir.
-4. GitHub'a eklemeniz gereken dört secret'ı (`VPS_HOST`, `VPS_USER`, `VPS_KNOWN_HOSTS`, `VPS_SSH_KEY`) ekrana yazar. Özel anahtar en sonda, ayrı bir blokta gösterilir; onu yalnızca GitHub Secret olarak yapıştırın.
-5. Salt-okuma API keşfini çalıştırır ve sonucu `/root/tradebot-kesif.zip` olarak kaydeder.
-6. Botu **dry-run** kipinde başlatır (gerçek emir göndermez).
+4. Telefon erişimi için HTTPS'i kurar: `https://<IP>.sslip.io` (Caddy + Let's Encrypt; alan adı gerekmez).
+5. GitHub'a eklemeniz gereken dört secret'ı (`VPS_HOST`, `VPS_USER`, `VPS_KNOWN_HOSTS`, `VPS_SSH_KEY`) ekrana yazar. Özel anahtar en sonda, ayrı bir blokta gösterilir; onu yalnızca GitHub Secret olarak yapıştırın.
+6. Salt-okuma API keşfini çalıştırır ve sonucu `/root/tradebot-kesif.zip` olarak kaydeder.
+7. Botu **dry-run** kipinde başlatır (gerçek emir göndermez).
 
 Betiği yeniden çalıştırmak güvenlidir; daha önce girdiğiniz değerleri korur.
 
@@ -141,10 +142,23 @@ sudo -u tradebot bash -c 'set -a; . /etc/tradebot/tradebot.env; set +a; cd /opt/
 
 Betik sonunda çıktı klasörünün ve zip dosyasının yolunu yazar. Çıktıda API anahtarı ya da imza bulunmaz.
 
-## Cihaz eşleştirme kodu
+## Telefon uygulamasını bağlama
+
+Sunucu adresi kurulum sonunda ekrana yazılır (`https://<IP>.sslip.io`; daha sonra `cat /etc/tradebot/public-url` ile
+görebilirsiniz). Eşleştirme kodu için sunucuda:
 
 ```bash
-sudo -u tradebot bash -c 'set -a; . /etc/tradebot/tradebot.env; set +a; cd /opt/tradebot/trade-bot && /opt/tradebot/.venv/bin/python -m tradebot pair'
+tradebot-pair
+```
+
+Kod 10 dakika geçerlidir ve bir kez kullanılır. Uygulamada **Bağlantı** sekmesine adresi ve kodu girin.
+API internete açıktır ama `/health` dışındaki her istek telefonunuza verilen gizli anahtarı (token) ister;
+eşleştirme kodu 5 hatalı denemede iptal olur.
+
+HTTPS'i yeniden kurmak gerekirse:
+
+```bash
+bash /opt/tradebot/trade-bot/deploy/setup-https.sh
 ```
 
 ## Telefon kaybolursa: tüm cihazların erişimini iptal etme

@@ -4,7 +4,8 @@
 #   bash <(curl -fsSL https://raw.githubusercontent.com/FatihBirgul/trade-all/main/trade-bot/deploy/bootstrap.sh)
 #
 # Sirasiyla: install.sh -> Exness degerlerini sorar ve /etc/tradebot/tradebot.env'e (600) yazar ->
-# dagitim SSH anahtarini uretir -> GitHub Secrets degerlerini gosterir -> API kesif betigini calistirir ->
+# dagitim SSH anahtarini uretir -> telefon erisimi icin HTTPS'i kurar (Caddy, <IP>.sslip.io) ->
+# GitHub Secrets degerlerini gosterir -> API kesif betigini calistirir ->
 # servisi baslatir (dry-run: gercek emir gondermez). Tekrar calistirmak guvenlidir; girilen sirlar
 # ekrana yazilmaz.
 set -euo pipefail
@@ -18,6 +19,7 @@ DEPLOY_HOME="${DEPLOY_HOME:-/home/$DEPLOY_USER}"
 SSH_HOST_KEYS="${SSH_HOST_KEYS:-/etc/ssh}"
 TTY="${BOOTSTRAP_TTY:-/dev/tty}"   # betik boruyla calistirilsa da girisler terminalden okunur
 DRY="${BOOTSTRAP_DRY:-0}"          # 1: sistemde degisiklik yapan adimlari atla (yalnizca testler icin)
+PUBLIC_URL=""
 
 say()  { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 note() { printf '    %s\n' "$*"; }
@@ -166,6 +168,20 @@ show_secrets() {
   note "GitHub'a ekledikten sonra sunucudaki kopyayi silebilirsiniz:  rm $key"
 }
 
+setup_https() {
+  say "Telefon erisimi (HTTPS)"
+  if [ "$DRY" = 1 ]; then note "(test modu: atlandi)"; return 0; fi
+  local url=""
+  if url="$(bash "$APP_DIR/trade-bot/deploy/setup-https.sh" 2>&1 | tail -n 1)" && [[ "$url" == https://* ]]; then
+    PUBLIC_URL="$url"
+    note "Uygulama adresi: $PUBLIC_URL"
+    note "Sertifika ilk baglantida kendiliginden alinir (bir iki dakika surebilir)."
+  else
+    note "UYARI: HTTPS kurulamadi: $url"
+    note "Sonra yeniden denemek icin:  bash $APP_DIR/trade-bot/deploy/setup-https.sh"
+  fi
+}
+
 start_service() {
   say "Servis"
   if [ "$DRY" = 1 ]; then note "(test modu: atlandi)"; return 0; fi
@@ -215,12 +231,17 @@ main() {
   fi
   collect_exness
   make_deploy_key
+  setup_https
   show_secrets
   run_discovery
   start_service
   say "Bitti"
   note "1) Yukaridaki dort secret'i GitHub'a ekleyin."
   note "2) /root/tradebot-kesif.zip dosyasini indirip sohbete ekleyin."
+  if [ -n "$PUBLIC_URL" ]; then
+    note "Telefon uygulamasi icin sunucu adresi: $PUBLIC_URL"
+    note "Eslestirme kodu uretmek icin (uygulama kurulunca):  tradebot-pair"
+  fi
   if [ -f /var/run/reboot-required ]; then
     note "3) Bekleyen bir sistem (cekirdek) guncellemesi var. Uygun oldugunuzda yeniden baslatin:  reboot"
     note "   Bot yeniden baslatmadan sonra kendiliginden calisir."

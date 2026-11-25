@@ -64,6 +64,9 @@ fi
 chown tradebot:tradebot "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 
+echo "==> Eslestirme komutu (tradebot-pair)"
+install -o root -g root -m 755 "$APP_DIR/trade-bot/deploy/tradebot-pair" /usr/local/bin/tradebot-pair
+
 echo "==> systemd"
 install -o root -g root -m 644 "$APP_DIR/trade-bot/deploy/tradebot.service" /etc/systemd/system/tradebot.service
 systemctl daemon-reload

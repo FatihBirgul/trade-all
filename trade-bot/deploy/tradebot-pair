@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Telefon uygulamasi icin tek kullanimlik eslestirme kodu uretir (10 dakika gecerli).
+#   sudo tradebot-pair
+set -euo pipefail
+
+ENV_FILE="${ENV_FILE:-/etc/tradebot/tradebot.env}"
+APP_DIR="${APP_DIR:-/opt/tradebot}"
+VENV_PY="${VENV_PY:-$APP_DIR/.venv/bin/python}"
+URL_FILE="${URL_FILE:-/etc/tradebot/public-url}"
+RUN_AS="${RUN_AS-tradebot}"   # bos birakilirsa kullanici degistirilmez (testler)
+
+if [ ! -r "$ENV_FILE" ] && [ "$(id -u)" -ne 0 ]; then
+  echo "Bu komut root olarak calistirilmali:  sudo tradebot-pair" >&2
+  exit 1
+fi
+run() {
+  if [ -n "$RUN_AS" ] && [ "$(id -u)" -eq 0 ]; then
+    sudo -u "$RUN_AS" "$@"
+  else
+    "$@"
+  fi
+}
+# Ortam dosyasi alt kabukta yuklenir; degerleri ekrana ya da surec listesine yazilmaz.
+code="$(run bash -c 'set -a; . "$1"; set +a; cd "$2/trade-bot" 2>/dev/null || cd "$2"; exec "$3" -m tradebot pair' _ "$ENV_FILE" "$APP_DIR" "$VENV_PY" 2>/dev/null | tail -n 1)" || code=""
+if ! [[ "$code" =~ ^[0-9]{6}$ ]]; then
+  echo "Kod uretilemedi. Servis kurulumunu kontrol edin:  systemctl status tradebot --no-pager" >&2
+  exit 1
+fi
+echo
+echo "  Eslestirme kodu : $code   (10 dakika gecerli, tek kullanimlik)"
+if [ -r "$URL_FILE" ]; then
+  echo "  Sunucu adresi   : $(head -n 1 "$URL_FILE")"
+fi
+echo
+echo "  Uygulamada: Baglanti sekmesi > adresi ve kodu girin > Baglan."
+echo

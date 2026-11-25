@@ -94,3 +94,9 @@ Kod tarafi tamam (Task 1–14 adim 5). Kullanicidan beklenenler:
 2. VPS kurulumu ve GitHub Secrets (`trade-bot/deploy/README.md`).
 3. VPS'te `python -m tradebot.discover` ciktisi → fixture'lar ve sema gercek yanitlara gore guncellenecek (Task 4 adim 4).
 4. Dry-run ozeti sonrasi ilk gercek emir icin onay (Task 14 adim 7).
+
+## Faz 2 (plan: `docs/superpowers/plans/2026-11-25-trade-bot-faz2.md`)
+- Kontrolcu kararlari (2026-11-25): Faz 1 `main`'e birlestirildi; disa acilis alan adsiz ve Tailscale'siz, Caddy + Let's Encrypt ile `https://<IP>.sslip.io`; sunucu kurulumu tek komut (`deploy/bootstrap.sh`).
+- Task 1: `setup-https.sh` Caddy'yi kurar ve yalnizca `127.0.0.1:8090`'a vekillik eden bir Caddyfile yazar (erisim logu yok: `/stream` token'i diske dusmesin; admin API kapali; 64 KB govde siniri; HSTS). Genel adres `/etc/tradebot/public-url` dosyasina yazilir. `tradebot-pair` komutu (`/usr/local/bin`) eslestirme kodunu ve adresi gosterir.
+- `bootstrap.sh` kesfi servisten ONCE calistirir ve o sirada servisi durdurur: WebSocket baglanti siniri ve istek kotasi ortak. Exness degerleri gorunmeden okunur, 128 hex anahtar gercek Ed25519 dogrulamasindan gecer, env dosyasina yalnizca guvenli karakterler yazilir.
+- **VPS'te dogrulanacak:** `sslip.io` icin Let's Encrypt sertifikasinin alinabildigi (hiz siniri) ve 80/443'un disaridan erisilebildigi.
