@@ -100,3 +100,14 @@ Kod tarafi tamam (Task 1–14 adim 5). Kullanicidan beklenenler:
 - Task 1: `setup-https.sh` Caddy'yi kurar ve yalnizca `127.0.0.1:8090`'a vekillik eden bir Caddyfile yazar (erisim logu yok: `/stream` token'i diske dusmesin; admin API kapali; 64 KB govde siniri; HSTS). Genel adres `/etc/tradebot/public-url` dosyasina yazilir. `tradebot-pair` komutu (`/usr/local/bin`) eslestirme kodunu ve adresi gosterir.
 - `bootstrap.sh` kesfi servisten ONCE calistirir ve o sirada servisi durdurur: WebSocket baglanti siniri ve istek kotasi ortak. Exness degerleri gorunmeden okunur, 128 hex anahtar gercek Ed25519 dogrulamasindan gecer, env dosyasina yalnizca guvenli karakterler yazilir.
 - **VPS'te dogrulanacak:** `sslip.io` icin Let's Encrypt sertifikasinin alinabildigi (hiz siniri) ve 80/443'un disaridan erisilebildigi.
+
+## İlk canlı keşif (2026-11-25) ve düzeltmeler
+
+- Gerçek yanıtlar `tests/exness/fixtures/real/` altında (hesap no maskeli); ayrıştırıcılar değişmeden geçti. Cent hesap: semboller eksiz (`EURUSD`), EURUSD `contract_size` 1000, para birimi USC, evren 30 enstrüman.
+- WebSocket: sunucu `exness-ws-protocol` alt-protokolünü seçiyor; istemci artık öneriyor (`schema.WS_SUBPROTOCOL`).
+- Mum: 9 istekten yalnızca ilki `AUTH_INVALID_API_KEY` (1000) ile reddedildi → `CandleStore._fetch` yalnızca bu kodda bir kez yineler; REST istemcisi hâlâ hiçbir isteği yinelemez.
+- Limitler (gerçek): mum 2 istek/sn, genel 15/sn, emir 4/sn, en çok 5 WebSocket bağlantısı.
+- Sermaye tabanı (kontrolcü kararı): deneme modunda geçici (varlığı izler); bot ilk kez canlıya geçtiğinde o andaki varlıktan alınır ve ölçüm o andan başlar (`capital_base_live`). Deneme moduna gidip dönmek tabanı sıfırlamaz. Boş hesapla taban kurulmaz.
+- Para yatırma/çekme (`balance` türü deal): bot K/Z'sine girmez; canlı tabanı tutar kadar kaydırır, her deal bir kez (`balance_ops`). Kaynak: olay akışı + 5 dakikada bir deal geçmişi. Tabandan önceki işlemler yalnızca kaydedilir.
+- `/health` son taramanın sayılarını verir (hesap bilgisi yok); `deploy/status.sh` ve iş akışının `status` kipi dağıtım sonrası doğrulama içindir.
+- Hâlâ gerçek örneği olmayanlar: pozisyon, emir, deal, tick, WS olayları, ACK, operasyon durumu → ilk asgari lot işleminde doğrulanacak.

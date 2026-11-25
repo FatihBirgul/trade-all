@@ -524,41 +524,6 @@ async def test_start_capital_is_set_later_if_account_was_unreadable_at_start(tmp
     assert app.repo.bot_state().start_capital == 10_000.0
 
 
-async def test_bot_started_on_an_empty_account_sets_its_capital_base_after_the_deposit(tmp_path):
-    """Canli kurulum: bot para yatirilmadan once baslatildi (varlik 0). Taban 0 olarak kalsaydi
-    yeni islem ve kayip sinirlari kalici olarak devre disi kalirdi."""
-    app = build(tmp_path, balance=0.0)
-    await app.bot.start()
-    assert not app.repo.bot_state().start_capital  # 0 tabani kaydedilmez
-    await app.bot.heartbeat()
-    assert not app.repo.bot_state().start_capital
-
-    app.fake.balance = 3000.0  # para yatirildi
-    app.advance(600)
-    await app.bot.reconcile_now()
-    await app.bot.heartbeat()
-    state = app.repo.bot_state()
-    assert state.start_capital == 3000.0 and state.start_at == app.clock["now"]
-
-    app.fake.balance = 2500.0  # sonraki degisimler tabani oynatmaz
-    app.advance(600)
-    await app.bot.reconcile_now()
-    await app.bot.heartbeat()
-    assert app.repo.bot_state().start_capital == 3000.0
-
-
-async def test_zero_capital_base_already_stored_is_healed(tmp_path):
-    """VPS'teki veritabani tabani 0 olarak kaydetmis olabilir; para gelince duzelmeli."""
-    app = await started(tmp_path)
-    app.repo.conn.execute("UPDATE bot_state SET start_capital = 0")
-    await app.bot.heartbeat()
-    assert app.repo.bot_state().start_capital == 10_000.0
-    again = restart(app)
-    again.repo.conn.execute("UPDATE bot_state SET start_capital = 0")
-    await again.bot.start()
-    assert again.repo.bot_state().start_capital == 10_000.0
-
-
 async def test_scan_on_an_empty_account_reads_real_market_data_and_opens_nothing(tmp_path):
     app = await started(tmp_path, balance=0.0)
     summary = await app.bot.on_bar_close()

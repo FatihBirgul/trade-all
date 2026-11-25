@@ -368,6 +368,17 @@ class FakeExness:
         operation["status"] = "confirmed"
         self._emit(operation, {"orders": [copy.deepcopy(order)]})
 
+    def balance_operation(self, amount: float, *, event: bool = True) -> str:
+        """Para yatirma (+) ya da cekme (-): bakiye degisir, `balance` turu deal olusur.
+        `event=False`: olay akisi bu islemi tasimaz (yalnizca deal gecmisinde gorunur)."""
+        self.balance += amount
+        deal = {"deal_id": self._id(), "type": "balance",
+                "profit": {"amount": f"{amount:.2f}", "currency": self.currency}, "create_time": iso(self.clock())}
+        self.deals.append(deal)
+        if event:
+            self._emit(None, {"deals": [copy.deepcopy(deal)]})
+        return deal["deal_id"]
+
     def _do_close(self, operation: dict) -> None:
         position = self.positions.get(operation["position_id"])
         if position is None or position["state"] != "open":
