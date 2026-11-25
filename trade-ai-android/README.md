@@ -1,4 +1,19 @@
-# Trade AI 2.0 — Android
+# Trade Bot — Android
+
+0.8.0 sürümünden itibaren görünen sekmeler sunucuda çalışan trade botunu (`trade-bot/`) denetler:
+
+- **Panel:** bakiye, varlık, bugünkü kâr/zarar (bot / elle / toplam), bot durumu; Durdur, Devam, Hepsini kapat, Canlı moda geç / Deneme moduna dön. Her işlem onay ister; canlıya geçiş ve kayıp sınırı durmasından sonra devam iki ayrı onay ister.
+- **Pozisyonlar:** açık pozisyonlar, SL/TP düzenleme (eski → yeni değer onayı; yanlış taraf ve fiyattan çok uzak seviye gönderilmez), kapatma, kademeli stop.
+- **Bildirimler:** botun olay akışı (Önemli / Tümü); uygulama açıkken önemli olaylar için yerel bildirim.
+- **Bağlantı:** sunucu adresi ve 6 haneli eşleştirme kodu. Kod sunucuda `sudo tradebot-pair` ile üretilir, 10 dakika geçerlidir.
+
+Bağlantı anahtarı yalnızca telefonun güvenli deposunda tutulur. Deneme modunda bot emir göndermez; uygulamadan verdiğiniz kapatma ve SL/TP emirleri her zaman gerçek hesapta yapılır. Uygulama kapalıyken bildirim için Firebase yapılandırması (`google-services.json`) ve Expo proje kimliği gerekir; henüz yok.
+
+Eski kripto analiz ekranları kod olarak duruyor ama sekme çubuğunda gösterilmiyor. Aşağıdaki bölümler o eski uygulamaya aittir.
+
+---
+
+## Eski uygulama (Trade AI 2.0)
 
 React Native / Expo Android istemcisi. Bu depo yalnızca mobil ön yüzü içerir; backend deposu olan `FatihBirgul/trade-ai` ve `trade-ai-v2` dalı bu projeden bağımsızdır.
 
