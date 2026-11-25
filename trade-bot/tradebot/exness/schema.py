@@ -15,6 +15,13 @@ from typing import Any, Literal
 from urllib.parse import quote, urlsplit
 
 
+def is_ws_ack(raw: Any) -> bool:
+    """Akis abonelik onayi. Canlida `{"id": "ticks-1", "code": 200, "error_message": ""}` biciminde
+    gelir: hata yaniti ile ayni alanlar, basari kodu (2xx)."""
+    code = raw.get("code") if isinstance(raw, dict) else None
+    return isinstance(code, int) and not isinstance(code, bool) and 200 <= code < 300
+
+
 def parse_error(raw: Any) -> tuple[int | None, str | None]:
     """Hata govdesi -> (kod, mesaj). Bicim taninmazsa (None, None)."""
     if not isinstance(raw, dict):
@@ -543,7 +550,7 @@ def parse_transaction_event(raw: Any) -> TxEvent:
 
 
 def parse_ws_event(raw: Any) -> tuple[str, Any]:
-    """Olay akisi mesaji -> (tur, veri). tur: transaction | snapshot | account | instrument | error | other."""
+    """Olay akisi mesaji -> (tur, veri). tur: transaction | snapshot | account | instrument | ack | error | other."""
     if not isinstance(raw, dict):
         return "other", raw
     kind = raw.get("event_type")
@@ -559,6 +566,8 @@ def parse_ws_event(raw: Any) -> tuple[str, Any]:
             return "instrument", parse_instrument(payload)
     except ValueError:
         return "other", raw
+    if kind is None and is_ws_ack(raw):
+        return "ack", raw
     if kind is None and parse_error(raw)[0] is not None:
         return "error", parse_error(raw)
     return "other", raw

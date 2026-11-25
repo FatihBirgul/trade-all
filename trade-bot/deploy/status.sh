@@ -26,6 +26,9 @@ if [ -z "$body" ]; then
   exit 1
 fi
 echo "saglik: $body"
+# Son 24 saatin tarama ozeti (yalnizca sayilar ve nedenler; hesap bilgisi icermez). Eski surumde yoktur.
+summary="$(curl -fsS --max-time 10 "${TRADEBOT_SUMMARY_URL:-${URL%/health}/health/summary}" 2>/dev/null || true)"
+[ -n "$summary" ] && echo "ozet: $summary"
 case "$body" in
   *'"stream_connected":true'*) echo "akislar: bagli" ;;
   *) echo "akislar: BAGLI DEGIL" >&2; exit 2 ;;

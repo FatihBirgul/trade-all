@@ -279,6 +279,14 @@ class Repo:
         return [{"id": r["id"], "at": r["at"], "level": r["level"], "kind": r["kind"], "message": r["message"],
                  "data": json.loads(r["data_json"]) if r["data_json"] else None} for r in rows]
 
+    def events_since(self, since: float, kinds: tuple[str, ...]) -> list[dict]:
+        """`since` anindan sonraki, verilen turlerdeki olaylar (eskiden yeniye)."""
+        marks = ",".join("?" for _ in kinds)
+        rows = self.conn.execute(
+            f"SELECT * FROM events WHERE at >= ? AND kind IN ({marks}) ORDER BY id", (float(since), *kinds)).fetchall()
+        return [{"id": r["id"], "at": r["at"], "level": r["level"], "kind": r["kind"], "message": r["message"],
+                 "data": json.loads(r["data_json"]) if r["data_json"] else None} for r in rows]
+
     # ---------------------------------------------------------------- ayarlar ve durum
     def apply_balance_op(self, deal_id: str, at: float, amount: float, *, apply: bool) -> tuple[bool, float | None]:
         """Para yatirma/cekme deal'ini bir kez kaydeder -> (yeni mi, yeni taban).
