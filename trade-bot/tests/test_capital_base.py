@@ -23,7 +23,7 @@ async def go_live_via_api(app):
                                  headers={"Authorization": f"Bearer {token}"}) as http:
         body = (await http.get("/settings")).json()
         body["dry_run"] = False
-        response = await http.put("/settings", json=body)
+        response = await http.put("/settings", json=body, params={"confirm_live": "true"})
         assert response.status_code == 200
         return (await http.get("/status")).json()
 
@@ -255,3 +255,61 @@ async def test_balance_event_without_operation_does_not_disturb_orders(tmp_path)
     assert [(t.position_id, t.origin, t.volume) for t in app.repo.open_trades()] == trades_before
     assert app.repo.bot_state().start_capital == 10_500.0
     assert "order_rejected" not in app.kinds()
+
+
+async def test_going_live_needs_a_separate_explicit_confirmation(tmp_path):
+    """Canli mod gercek emir gonderir: ayar govdesinden ayri bir onay olmadan gecis reddedilir."""
+    app = build(tmp_path, dry_run=True, balance=3000.0)
+    await app.bot.start()
+    token = issue_token(app.repo, now=app.clock["now"])
+    api = create_app(app.bot, clock=lambda: app.clock["now"])
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api), base_url="http://test",
+                                 headers={"Authorization": f"Bearer {token}"}) as http:
+        body = (await http.get("/settings")).json()
+        assert body["dry_run"] is True
+
+        # Deneme modunda kalan degisiklikler onay istemez.
+        body["risk"]["risk_pct"] = 0.25
+        assert (await http.put("/settings", json=body)).status_code == 200
+
+        live = {**body, "dry_run": False}
+        for params in ({}, {"confirm_live": "false"}):
+            refused = await http.put("/settings", json=live, params=params)
+            assert refused.status_code == 409 and "confirm_live=true" in refused.json()["detail"]
+        # Govdeye gomulu bir onay alani kabul edilmez: onay ayri verilmelidir.
+        assert (await http.put("/settings", json={**live, "confirm_live": True})).status_code == 422
+        assert app.repo.get_bot_settings().dry_run is True
+        assert not app.repo.get_setting(BASE_LIVE, False) and "capital_base" not in app.kinds()
+        assert "mode_changed" not in app.kinds()
+
+        app.advance(60)
+        accepted = await http.put("/settings", json=live, params={"confirm_live": "true"})
+        assert accepted.status_code == 200 and accepted.json()["dry_run"] is False
+        assert app.repo.get_bot_settings().dry_run is False
+        assert app.repo.get_setting(BASE_LIVE) is True and base(app) == (3000.0, app.clock["now"])
+        assert app.kinds().count("mode_changed") == 1
+
+        # Zaten canliyken yapilan degisiklik yeniden onay istemez; deneme moduna donus de istemez.
+        live["risk"]["risk_pct"] = 0.5
+        assert (await http.put("/settings", json=live)).status_code == 200
+        assert (await http.put("/settings", json={**live, "dry_run": True})).status_code == 200
+        assert app.repo.get_bot_settings().dry_run is True and app.kinds().count("mode_changed") == 2
+        # Yeniden canliya gecis yine onay ister.
+        assert (await http.put("/settings", json=live)).status_code == 409
+
+
+async def test_a_stale_live_settings_copy_cannot_undo_a_return_to_dry_run(tmp_path):
+    """Istemci ayarlari bot canliyken okudu; bot deneme moduna alindi; eski kopya geri gonderildi."""
+    app = await started(tmp_path)  # canli
+    token = issue_token(app.repo, now=app.clock["now"])
+    api = create_app(app.bot, clock=lambda: app.clock["now"])
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api), base_url="http://test",
+                                 headers={"Authorization": f"Bearer {token}"}) as http:
+        stale = (await http.get("/settings")).json()
+        assert stale["dry_run"] is False
+        assert (await http.put("/settings", json={**stale, "dry_run": True})).status_code == 200
+        stale["risk"]["risk_pct"] = 1.0
+        assert (await http.put("/settings", json=stale)).status_code == 409
+    assert app.repo.get_bot_settings().dry_run is True and app.repo.get_bot_settings().risk.risk_pct == 0.5
+    summary = await app.bot.on_bar_close()
+    assert summary.opened == 0 and app.fake.calls("POST", "/positions") == []
