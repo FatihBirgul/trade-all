@@ -13,7 +13,7 @@ from ..config import BotSettings, strategy_mode
 from ..signals import custom, scorecard, v9
 from ..signals.shadow import ShadowBook
 from . import auth
-from .models import (CloseAllRequest, CloseRequest, DeviceRequest, ManualTrade, PairRequest, PositionPatch,
+from .models import (CloseAllRequest, CloseRequest, DeviceRequest, ManualPreview, ManualTrade, PairRequest, PositionPatch,
                      ResumeRequest, StrategyModeRequest)
 
 MAX_LEVEL_DISTANCE = 0.5  # kullanici SL/TP seviyesi fiyattan en cok bu oranda uzak olabilir
@@ -138,6 +138,88 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
         return {"order": key}
 
     # ------------------------------------------------------------------ elle islem
+    def _manual_plan(body, instrument) -> dict:
+        """Elle islemin giris/stop/hedef/lot plani. Onizleme ve gercek emir AYNI hesabi kullanir:
+        kullanicinin onayladigi sayilar gonderilecek emrin sayilaridir (fiyat degisimi disinda)."""
+        quote = bot.quotes.quote(body.symbol)
+        if quote is None or clock() - quote["time"] > QUOTE_MAX_AGE:
+            raise HTTPException(status_code=409, detail="güncel fiyat yok")
+        sign = 1.0 if body.side == "BUY" else -1.0
+        entry = quote["ask"] if body.side == "BUY" else quote["bid"]
+        sl = entry - sign * body.sl_distance
+        tp = entry + sign * body.tp_distance if body.tp_distance is not None else None
+        if sl <= 0:
+            raise HTTPException(status_code=422, detail="SL mesafesi fiyattan büyük")
+        if bot.account is None:
+            raise HTTPException(status_code=409, detail="hesap durumu bilinmiyor")
+        try:
+            per_lot = abs(bot.provider.loss_for(body.symbol, body.side, 1.0, entry, sl))
+        except LookupError:
+            raise HTTPException(status_code=409, detail="hesap para birimine dönüşüm kuru yok") from None
+        if per_lot <= 0 or not math.isfinite(per_lot):
+            raise HTTPException(status_code=409, detail="lot hesaplanamadı")
+        # Sermaye ve marjin ortak oldugu icin gercek hesap equity'si kullanilir (spec §6.4).
+        risk_pct = getattr(body, "risk_pct", None) or repo.get_bot_settings().risk.risk_pct
+        budget = bot.account.equity * risk_pct / 100.0
+        step = Decimal(str(instrument.volume_step))
+        units = (Decimal(str(budget / per_lot + 1e-9)) / step).to_integral_value(rounding=ROUND_FLOOR)
+        suggested = float(min(units * step, Decimal(str(instrument.volume_max))))
+        lots = body.lots if body.lots is not None else suggested
+        if lots < instrument.volume_min - 1e-12:
+            raise HTTPException(status_code=422, detail="en küçük lot risk sınırını aşıyor")
+        if lots > instrument.volume_max + 1e-12:
+            raise HTTPException(status_code=422, detail="lot en büyük lotu aşıyor")
+        return {"entry": entry, "sl": sl, "tp": tp, "lots": lots, "suggested_lots": suggested, "per_lot": per_lot,
+                "risk_pct": risk_pct, "budget": budget, "spread": quote["spread"]}
+
+    @private.post("/trades/preview")
+    async def manual_preview(body: ManualPreview):
+        """Elle islem onizlemesi: onerilen lot ve bu lotla zarar/kar. Emir GONDERMEZ."""
+        try:
+            instrument = bot.catalog.get(body.symbol)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="sembol bulunamadı") from None
+        if not instrument.tradable:
+            raise HTTPException(status_code=409, detail="sembol işleme kapalı")
+        plan = _manual_plan(body, instrument)
+        loss = plan["per_lot"] * plan["lots"]
+        equity = bot.account.equity
+        warnings = []
+        if loss > plan["budget"] * 1.0001:
+            warnings.append(f"Bu lotla zarar, risk sınırınızın (%{plan['risk_pct']:g}) üstünde")
+        if body.sl_distance < 3 * plan["spread"]:
+            warnings.append("SL mesafesi alış-satış farkına çok yakın; hemen tetiklenebilir")
+        if body.tp_distance is not None and body.tp_distance < body.sl_distance:
+            warnings.append("Hedef, zarar durdurmadan yakın (R/R 1'in altında)")
+        if body.tp_distance is None:
+            warnings.append("Kâr al seviyesi yok")
+        profit = None
+        if plan["tp"] is not None:
+            profit = bot.provider.pnl(body.symbol, body.side, plan["lots"], plan["entry"], plan["tp"])
+        return {"symbol": body.symbol, "side": body.side, "entry": plan["entry"], "sl": plan["sl"], "tp": plan["tp"],
+                "lots": plan["lots"], "suggested_lots": plan["suggested_lots"], "loss": loss, "profit": profit,
+                "loss_pct": loss / equity * 100.0 if equity > 0 else None,
+                "rr": body.tp_distance / body.sl_distance if body.tp_distance is not None else None,
+                "risk_pct": plan["risk_pct"], "currency": bot.account.currency, "volume_min": instrument.volume_min,
+                "volume_step": instrument.volume_step, "volume_max": instrument.volume_max, "warnings": warnings}
+
+    @private.get("/symbols")
+    async def symbols():
+        """Islem yapilabilen evren: elle islem ekrani ve ayarlar icin."""
+        now = clock()
+        rows = []
+        for instrument in bot.catalog.universe():
+            age = bot.quotes.age(instrument.symbol)
+            quote = bot.quotes.quote(instrument.symbol)
+            is_open = bot._is_open(instrument, now)
+            fresh = age is not None and age <= QUOTE_MAX_AGE
+            rows.append({"symbol": instrument.symbol, "kind": instrument.kind, "open": is_open, "quoted": fresh,
+                         "bid": quote["bid"] if quote and fresh else None, "ask": quote["ask"] if quote and fresh else None,
+                         "digits": instrument.digits, "tick_size": instrument.tick_size,
+                         "volume_min": instrument.volume_min, "volume_step": instrument.volume_step,
+                         "volume_max": instrument.volume_max})
+        return {"symbols": rows}
+
     @private.post("/trades")
     async def manual_trade(body: ManualTrade):
         try:
@@ -155,32 +237,8 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
                     raise HTTPException(status_code=409, detail="bu client_id başka bir emir için kullanıldı")
                 return {"order": previous["idempotency_key"], "state": previous["state"], "duplicate": True,
                         "lots": float(sent["body"]["volume"]), "sl": sent.get("sl"), "tp": sent.get("tp2")}
-        quote = bot.quotes.quote(body.symbol)
-        if quote is None or clock() - quote["time"] > QUOTE_MAX_AGE:
-            raise HTTPException(status_code=409, detail="güncel fiyat yok")
-        sign = 1.0 if body.side == "BUY" else -1.0
-        entry = quote["ask"] if body.side == "BUY" else quote["bid"]
-        sl = entry - sign * body.sl_distance
-        tp = entry + sign * body.tp_distance if body.tp_distance is not None else None
-        if sl <= 0:
-            raise HTTPException(status_code=422, detail="SL mesafesi fiyattan büyük")
-        lots = body.lots
-        if lots is None:
-            # Sermaye ve marjin ortak oldugu icin gercek hesap equity'si kullanilir (spec §6.4).
-            if bot.account is None:
-                raise HTTPException(status_code=409, detail="hesap durumu bilinmiyor")
-            try:
-                per_lot = abs(bot.provider.loss_for(body.symbol, body.side, 1.0, entry, sl))
-            except LookupError:
-                raise HTTPException(status_code=409, detail="hesap para birimine dönüşüm kuru yok") from None
-            budget = bot.account.equity * repo.get_bot_settings().risk.risk_pct / 100.0
-            if per_lot <= 0 or not math.isfinite(per_lot):
-                raise HTTPException(status_code=409, detail="lot hesaplanamadı")
-            step = Decimal(str(instrument.volume_step))
-            units = (Decimal(str(budget / per_lot + 1e-9)) / step).to_integral_value(rounding=ROUND_FLOOR)
-            lots = float(min(units * step, Decimal(str(instrument.volume_max))))
-        if lots < instrument.volume_min - 1e-12:
-            raise HTTPException(status_code=422, detail="en küçük lot risk sınırını aşıyor")
+        plan = _manual_plan(body, instrument)
+        entry, sl, tp, lots = plan["entry"], plan["sl"], plan["tp"], plan["lots"]
         try:
             key = await bot.executor.open_manual(body.symbol, body.side, lots, sl=sl, tp=tp, price=entry,
                                                  client_id=body.client_id)
