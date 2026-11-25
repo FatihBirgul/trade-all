@@ -2,7 +2,7 @@ import { BotError, createBotApi, pairBot } from "../src/bot/client";
 import type { BotConfig } from "../src/bot/types";
 
 const config: BotConfig = {
-  origin: "https://194-163-185-83.sslip.io",
+  origin: "https://203-0-113-7.sslip.io",
   token: "t".repeat(43),
   pairedAt: 1,
 };
@@ -14,11 +14,11 @@ const ok = (body: unknown, status = 200) => ({
 
 test("pairs with code and stores token", async () => {
   const transport = jest.fn().mockResolvedValue(ok({ token: "x".repeat(43) }));
-  const result = await pairBot(" https://194-163-185-83.sslip.io/ ", "482913", transport);
-  expect(result.origin).toBe("https://194-163-185-83.sslip.io");
+  const result = await pairBot(" https://203-0-113-7.sslip.io/ ", "482913", transport);
+  expect(result.origin).toBe("https://203-0-113-7.sslip.io");
   expect(result.token).toBe("x".repeat(43));
   const [url, request] = transport.mock.calls[0];
-  expect(url).toBe("https://194-163-185-83.sslip.io/pair");
+  expect(url).toBe("https://203-0-113-7.sslip.io/pair");
   expect(request.method).toBe("POST");
   expect(JSON.parse(request.body)).toEqual({ code: "482913" });
   expect(request.headers.Authorization).toBeUndefined();
@@ -28,7 +28,7 @@ test("pairs with code and stores token", async () => {
 
 test("rejects http and malformed code without network", async () => {
   const transport = jest.fn();
-  await expect(pairBot("http://194-163-185-83.sslip.io", "482913", transport)).rejects.toMatchObject({
+  await expect(pairBot("http://203-0-113-7.sslip.io", "482913", transport)).rejects.toMatchObject({
     code: "INVALID_ORIGIN",
   });
   await expect(pairBot("https://x.sslip.io/yol", "482913", transport)).rejects.toMatchObject({
@@ -62,7 +62,7 @@ test("sends bearer token and parses status", async () => {
   const transport = jest.fn().mockResolvedValue(ok(status));
   await expect(createBotApi(config, transport).status()).resolves.toEqual(status);
   const [url, request] = transport.mock.calls[0];
-  expect(url).toBe("https://194-163-185-83.sslip.io/status");
+  expect(url).toBe("https://203-0-113-7.sslip.io/status");
   expect(request.headers.Authorization).toBe("Bearer " + "t".repeat(43));
   expect(request.method).toBe("GET");
   expect(request.body).toBeUndefined();
@@ -117,7 +117,7 @@ test("closeAll sends exact confirm phrase", async () => {
   const transport = jest.fn().mockResolvedValue(ok({ requested: 2, skipped: [], stopped: true }));
   await createBotApi(config, transport).closeAll();
   const [url, request] = transport.mock.calls[0];
-  expect(url).toBe("https://194-163-185-83.sslip.io/bot/close-all");
+  expect(url).toBe("https://203-0-113-7.sslip.io/bot/close-all");
   expect(JSON.parse(request.body)).toEqual({ confirm: "CLOSE-ALL" });
 });
 

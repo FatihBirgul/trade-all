@@ -9,7 +9,7 @@ Trade AI'nin Forex, kripto, Android ve web geliştirmeleri bu depoda toplanır. 
 | Web köprüleri ve önceki arayüz | [trade-ai-forex-web](trade-ai-forex-web/) | MT5 fiyat ve risk köprüsü, haber ve takvim servisi, yerel PWA sürümü |
 | Forex V5 ve Day Trader | [day-trader-skill](day-trader-skill/) | PWA'ların kullandığı Forex API'si, broker seansları, veri kontrolleri ve 11 Day Trader becerisi |
 | Trade AI V2 | [trade-ai](trade-ai/) | Kripto analizi, tarayıcı ve bildirimler, sanal portföy, olay günlüğü, yeniden oynatma ve araştırma. V1 uyumluluk sunucusu ve Expo arayüzü de burada. |
-| Android uygulaması | [trade-ai-android](trade-ai-android/) | Expo / React Native 0.7.7 uygulama sürümü, grafikler, portföy ve cihaz eşleştirme |
+| Android uygulaması | [trade-ai-android](trade-ai-android/) | Expo / React Native 0.8.0: Trade Bot paneli, pozisyonlar, bildirimler (eski analiz ekranları gizli) |
 | Mobil ağ geçidi | [trade-ai-gateway](trade-ai-gateway/) | Android oturumları, yetkilendirme ve V2 API bağlantısı |
 | İlk Trade uygulaması | [legacy/trade](legacy/trade/) | Ayrı `Trade` reposundaki ilk backend ve Expo uygulaması |
 

@@ -11,7 +11,7 @@ jest.mock("expo-secure-store", () => ({
 }));
 const store = SecureStore as jest.Mocked<typeof SecureStore>;
 
-const ORIGIN = "https://194-163-185-83.sslip.io";
+const ORIGIN = "https://203-0-113-7.sslip.io";
 const TOKEN = "t".repeat(43);
 const saved = JSON.stringify({ origin: ORIGIN, token: TOKEN, pairedAt: 1 });
 const START = 1_800_000_000_000;

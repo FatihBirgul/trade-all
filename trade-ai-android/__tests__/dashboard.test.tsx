@@ -1,6 +1,6 @@
 import React from "react";
 import { render, waitFor } from "@testing-library/react-native";
-import Home from "../app/(tabs)/index";
+import Home from "../app/(tabs)/legacy";
 import { useApp } from "../src/state";
 import { useMarketQuotes } from "../src/useMarketQuotes";
 import { ThemeProvider } from "../src/theme";

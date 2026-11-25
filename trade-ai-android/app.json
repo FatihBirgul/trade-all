@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Trade AI 2.0",
+    "name": "Trade Bot",
     "slug": "trade-ai-android",
-    "version": "0.7.7",
+    "version": "0.8.0",
     "scheme": "tradeai",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
@@ -11,7 +11,7 @@
     },
     "android": {
       "package": "com.fatihbirgul.tradeai",
-      "versionCode": 16,
+      "versionCode": 17,
       "softwareKeyboardLayoutMode": "resize",
       "allowBackup": false,
       "adaptiveIcon": {

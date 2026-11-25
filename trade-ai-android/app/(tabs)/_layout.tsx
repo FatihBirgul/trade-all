@@ -4,19 +4,23 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Tabs } from "expo-router";
 import { tabBarHeight } from "../../src/navigationLayout";
 import { TabIcon } from "../../src/TabIcon";
-import { useApp } from "../../src/state";
 import { useTheme } from "../../src/theme";
 export default function Layout() {
   const { fontScale } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const { uiMode } = useApp();
   const { colors } = useTheme();
+  // Görünen sekmeler trade bot ekranlarıdır. Eski kripto ekranları yerinde durur ama sekme
+  // çubuğunda gösterilmez (spec §8).
   const screens = [
-    ["index", "Ana Sayfa", "home-outline"],
-    ["analysis", "Analiz", "analytics-outline"],
-    ["portfolios", "Portföyler", "wallet-outline"],
-    ["scanner", "Tarayıcı", "scan-outline"],
-    ["settings", "Ayarlar", "settings-outline"],
+    ["index", "Panel", "speedometer-outline", true],
+    ["positions", "Pozisyonlar", "list-outline", true],
+    ["events", "Bildirimler", "notifications-outline", true],
+    ["connection", "Bağlantı", "link-outline", true],
+    ["legacy", "Eski Ana Sayfa", "home-outline", false],
+    ["analysis", "Analiz", "analytics-outline", false],
+    ["portfolios", "Portföyler", "wallet-outline", false],
+    ["scanner", "Tarayıcı", "scan-outline", false],
+    ["settings", "Ayarlar", "settings-outline", false],
   ] as const;
   return (
     <Tabs
@@ -40,13 +44,13 @@ export default function Layout() {
         tabBarItemStyle: { paddingHorizontal: 2 },
       }}
     >
-      {screens.map(([name, title, icon]) => (
+      {screens.map(([name, title, icon, visible]) => (
         <Tabs.Screen
           key={name}
           name={name}
           options={{
             title,
-            ...(name === "scanner" && uiMode !== "pro" ? { href: null } : {}),
+            ...(visible ? {} : { href: null }),
             tabBarIcon: ({ color, focused }) => (
               <TabIcon
                 name={icon}
