@@ -122,7 +122,8 @@ export default function Panel() {
   const state = status ? botStateText(status) : null;
   const toneColor = { ok: colors.green, warn: colors.gold, bad: colors.red };
   const currency = status?.currency;
-  const nowSeconds = status?.server_time ?? Date.now() / 1000;
+  // Süreler sunucu saatine göre hesaplanır; eski sunucularda son yanıt anı kullanılır.
+  const nowSeconds = status?.server_time ?? (bot.lastOkAt ?? 0) / 1000;
   return (
     <BotPage>
       <ScreenHeader title="Panel" badge="TRADE BOT" />
