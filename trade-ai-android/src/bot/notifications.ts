@@ -19,6 +19,8 @@ export const importantKinds: ReadonlySet<string> = new Set([
   "news_unavailable",
   "strategy_paused",
   "startup_failed",
+  "capital_base",
+  "balance_change",
 ]);
 
 const LABELS: Record<string, string> = {
@@ -33,6 +35,8 @@ const LABELS: Record<string, string> = {
   bot_stopped: "Bot durduruldu",
   bot_resumed: "Bot devam ediyor",
   bot_started: "Bot başladı",
+  capital_base: "Canlı mod başladı",
+  balance_change: "Para yatırma/çekme",
   startup_failed: "Bot başlatılamadı",
   connection_lost: "Exness bağlantısı koptu",
   connection_restored: "Exness bağlantısı geri geldi",
