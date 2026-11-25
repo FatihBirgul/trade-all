@@ -44,6 +44,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: trade-bot/deploy
       - name: Deploy over SSH
         env:
           MODE: ${{ inputs.mode }}
@@ -60,8 +63,14 @@ jobs:
           fi
           port="${VPS_PORT:-22}"
           install -d -m 700 ~/.ssh
-          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
+          # Secret elle yapistirilirken satir sonlari/bosluklar bozulabilir; anahtar onarilir ve
+          # baglanmadan once dogrulanir. Anahtarin icerigi hicbir zaman gunluge yazilmaz.
+          python3 trade-bot/deploy/ssh_key_normalize.py ~/.ssh/deploy_key
+          if ! ssh-keygen -y -f ~/.ssh/deploy_key >/dev/null 2>&1; then
+            echo "::error::VPS_SSH_KEY gecerli bir ozel anahtar degil (eksik kopyalanmis ya da parola korumali). Sunucudaki /home/deploy/.ssh/github_deploy dosyasinin tamamini yeniden yapistirin."
+            exit 1
+          fi
+          echo "deploy anahtari okundu: $(ssh-keygen -l -f ~/.ssh/deploy_key | awk '{print $2}')"
           if [ -n "$VPS_KNOWN_HOSTS" ]; then
             printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
           else
