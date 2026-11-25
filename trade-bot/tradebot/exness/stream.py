@@ -42,6 +42,7 @@ class Stream:
         self._clock = clock
         self._backoff = (backoff_start, backoff_max)
         self._subscriptions: list[dict] = []
+        self.subscription_delay = 0.0  # abonelik mesajlari arasinda bekleme (abonelik hiz siniri icin)
         self._socket = None
         self._stopped = False
         self.disconnected_since = clock()
@@ -78,7 +79,9 @@ class Stream:
                 url, headers = await self.client.ws_endpoint(self.path)
                 socket = await self._connect(url, headers)
                 self._socket = socket
-                for message in self._subscriptions:
+                for index, message in enumerate(list(self._subscriptions)):
+                    if index and self.subscription_delay > 0:
+                        await self._sleep(self.subscription_delay)
                     await socket.send(json.dumps(message))
                 self.connected = True
                 self.disconnected_since = None

@@ -16,7 +16,8 @@ from .db import connect, transaction
 
 Origin = Literal["bot", "manual"]
 _TRADE_BOOLS = ("user_sl_override", "manage", "be_done", "partial_done")
-_STATE_FIELDS = ("halted", "halt_reason", "stopped", "start_capital", "start_at", "last_scan_at")
+_STATE_FIELDS = ("halted", "halt_reason", "stopped", "start_capital", "start_at", "last_scan_at",
+                 "heartbeat_at")
 
 
 @dataclass
@@ -62,6 +63,7 @@ class BotState:
     start_capital: float | None
     start_at: float | None
     last_scan_at: float | None
+    heartbeat_at: float | None = None  # servis dongusunun son canlilik isareti
 
 
 _TRADE_COLUMNS = [f.name for f in fields(Trade) if f.name != "id"]
@@ -266,7 +268,7 @@ class Repo:
         row = self.conn.execute("SELECT * FROM bot_state WHERE id = 1").fetchone()
         return BotState(halted=bool(row["halted"]), halt_reason=row["halt_reason"], stopped=bool(row["stopped"]),
                         start_capital=row["start_capital"], start_at=row["start_at"],
-                        last_scan_at=row["last_scan_at"])
+                        last_scan_at=row["last_scan_at"], heartbeat_at=row["heartbeat_at"])
 
     def set_bot_state(self, **changes: Any) -> None:
         unknown = set(changes) - set(_STATE_FIELDS)

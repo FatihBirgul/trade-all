@@ -63,6 +63,10 @@ class Executor:
     def _cooling(self, position_id: str) -> bool:
         return self._cooldown.get(position_id, 0.0) > self._clock()
 
+    def already_submitted(self, candidate: Candidate) -> bool:
+        return (self.repo.get_order(f"bot-{candidate.setup_id}") is not None
+                or self.repo.trade_by_setup(candidate.setup_id) is not None)
+
     # ------------------------------------------------------------------ gonderim
     async def open(self, candidate: Candidate, origin: str = "bot") -> str:
         """Aday icin piyasa emri. Ayni setup icin ikinci kez cagrilirsa hicbir sey gondermez."""

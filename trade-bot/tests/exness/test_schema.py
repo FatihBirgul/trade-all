@@ -194,7 +194,8 @@ def test_parse_limits():
     assert ("GET", "/v1/market-data/accounts/{account_id}/candles", 120, 60.0) in limits.methods
     assert limits.max_candles == 1000
     assert (limits.history_range_days, limits.history_age_days) == (31, 365)
-    assert schema.parse_limits({}).max_candles is None
+    assert limits.tick_subscription_rate == (100, 1.0, 100)
+    assert schema.parse_limits({}).max_candles is None and schema.parse_limits({}).tick_subscription_rate is None
 
 
 def test_parse_deals():

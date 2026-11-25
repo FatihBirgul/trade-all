@@ -233,6 +233,7 @@ class Limits:
     max_candles: int | None = None
     history_range_days: int | None = None
     history_age_days: int | None = None
+    tick_subscription_rate: tuple[int, float, int] | None = None  # (limit, pencere_sn, burst)
     websocket: dict = field(default_factory=dict)
 
 
@@ -331,7 +332,7 @@ def parse_account(details: Any, state: Any) -> Account:
     currency = _text(settings.get("currency"))
     if not currency:
         raise ValueError("hesap para birimi yok")
-    current = parse_account_state(state)
+    current = state if isinstance(state, AccountState) else parse_account_state(state)
     enabled = settings.get("trade_mode") == "enabled"
     return Account(currency=currency.upper(), balance=current.balance, equity=current.equity,
                    margin=current.used_margin, margin_free=current.equity - current.used_margin,
@@ -602,7 +603,14 @@ def parse_limits(raw: Any) -> Limits:
             if isinstance(value, int) and not isinstance(value, bool) and value > 0:
                 extra[key] = min(value, extra.get(key, value))
     websocket = limits.get("websocket") if isinstance(limits.get("websocket"), dict) else {}
-    return Limits(global_rate=rate(rest.get("global_account_rate")), methods=tuple(methods),
+    tick_rate = None
+    for endpoint in websocket.get("endpoints") or []:
+        rates = endpoint.get("subscription_operation_rate") if isinstance(endpoint, dict) else None
+        bucket = rates.get("ticks") if isinstance(rates, dict) else None
+        if isinstance(bucket, dict) and rate(bucket) and str(endpoint.get("path", "")).endswith("/ws/ticks"):
+            burst = bucket.get("burst")
+            tick_rate = (*rate(bucket), int(burst) if isinstance(burst, int) and burst > 0 else 1)
+    return Limits(tick_subscription_rate=tick_rate, global_rate=rate(rest.get("global_account_rate")), methods=tuple(methods),
                   max_candles=extra.get("max_candles_per_request"),
                   history_range_days=extra.get("history_range_days"),
                   history_age_days=extra.get("history_age_days"), websocket=websocket)

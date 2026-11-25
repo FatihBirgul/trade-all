@@ -81,7 +81,8 @@ CREATE TABLE IF NOT EXISTS bot_state (
     stopped INTEGER NOT NULL DEFAULT 0,
     start_capital REAL,
     start_at REAL,
-    last_scan_at REAL
+    last_scan_at REAL,
+    heartbeat_at REAL
 );
 INSERT OR IGNORE INTO bot_state (id) VALUES (1);
 
