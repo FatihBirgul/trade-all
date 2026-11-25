@@ -50,6 +50,7 @@ class Trade:
     risk_amount: float | None = None
     last_sl: float | None = None  # broker'in en son onayladigi SL; emir iptal olsa da kalir
     planned_tp: float | None = None  # planlanan TP; broker'daki kaybolursa yeniden kurulur
+    votes_json: str | None = None  # giristeki modul oylari: {"modul": 1 | 0 | -1}
     id: int | None = None
 
     @property

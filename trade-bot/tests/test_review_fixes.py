@@ -829,11 +829,11 @@ async def test_invalid_order_does_not_abort_the_scan(tmp_path):
     real_open = app.bot.executor.open
     seen = []
 
-    async def flaky(cand, origin="bot"):
+    async def flaky(cand, origin="bot", **extra):
         seen.append(cand.symbol)
         if len(seen) == 1:
             raise ValueError("hacim enstruman sinirlarinin disinda")
-        return await real_open(cand, origin)
+        return await real_open(cand, origin, **extra)
     app.bot.executor.open = flaky
     summary = await app.bot.on_bar_close()
     assert summary.candidates == 2 and summary.opened == 1 and "signal_invalid" in app.kinds()

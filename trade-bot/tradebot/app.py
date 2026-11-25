@@ -30,7 +30,8 @@ from .market.quotes import QuoteBook
 from .news.gate import blocking_event
 from .risk.portfolio import check_entry
 from .signals import v9
-from .signals.adapter import Candidate, evaluate
+from .signals import fusion
+from .signals.adapter import Candidate, Evaluation, evaluate
 from .signals.provider import ExnessV9Provider
 from .store.repo import BotState, Repo
 
@@ -66,6 +67,7 @@ class ScanSummary:
     opened: int = 0
     blocked: int = 0
     news_blocked: int = 0  # haber penceresi nedeniyle analiz edilmeden atlanan semboller
+    observed: int = 0  # guven puani esigin altinda kalan (islem acilmayan) adaylar
     errors: int = 0
     skipped: str | None = None
     reasons: dict[str, int] = field(default_factory=dict)
@@ -403,7 +405,7 @@ class Bot:
                 log.info("aday yok %s: %s (%s)", symbol, result.decision, "; ".join(result.reasons))
                 continue
             summary.candidates += 1
-            await self._consider(result.candidate, instrument, settings, summary)
+            await self._consider(result, instrument, settings, summary)
 
         await self._refresh_open_candles(scanned)
         await self._record(
@@ -424,10 +426,42 @@ class Bot:
         units = (Decimal(str(raw)) / quantum).to_integral_value(rounding=ROUND_CEILING if sign > 0 else ROUND_FLOOR)
         return dataclasses.replace(candidate, take_profit_2=float(units * quantum))
 
-    async def _consider(self, candidate: Candidate, instrument: Instrument, settings: BotSettings,
+    def _score(self, result: Evaluation, instrument: Instrument, settings: BotSettings):
+        """(puan, oylar, carpan). Guven puani kapaliyken ya da rapor yokken tam risk (1.0)."""
+        if not settings.fusion.enabled or result.report is None:
+            return None, None, 1.0
+        votes = fusion.collect_votes(result.report, result.candidate.side, now=self._clock(), kind=instrument.kind)
+        value = fusion.score(votes, settings.fusion.weights)
+        return value, {v.module: v.value for v in votes}, fusion.risk_multiplier(value, settings.fusion)
+
+    async def _observe(self, candidate: Candidate, summary: ScanSummary, *, score: float | None, votes: dict | None,
+                       reason: str) -> None:
+        """Islem acilmayan aday: "gozlem" olarak kaydedilir (spec §6.2), emir gonderilmez."""
+        summary.observed += 1
+        await self._record(
+            "info", "signal_observed",
+            f"{candidate.symbol} {candidate.side} gözlem olarak kaydedildi: {reason}",
+            {"symbol": candidate.symbol, "side": candidate.side, "strategy_id": candidate.strategy_id,
+             "setup_id": candidate.setup_id, "score": score, "votes": votes, "reason": reason})
+
+    async def _consider(self, result: Evaluation, instrument: Instrument, settings: BotSettings,
                         summary: ScanSummary) -> None:
+        candidate = result.candidate
         if self.executor.already_submitted(candidate):
             return  # ayni mum ikinci kez tarandi
+        score, votes, multiplier = self._score(result, instrument, settings)
+        if multiplier is None:
+            await self._observe(candidate, summary, score=score, votes=votes,
+                                reason=f"güven puanı {score:.0f} < {settings.fusion.min_score:g}")
+            return
+        if multiplier < 1.0:
+            lots = fusion.scale_lots(candidate.lots, multiplier, instrument)
+            if lots is None:
+                await self._observe(candidate, summary, score=score, votes=votes,
+                                    reason=f"puan {score:.0f} için azaltılmış lot en küçük lotun altında")
+                return
+            candidate = dataclasses.replace(candidate, lots=lots,
+                                            risk_amount=candidate.risk_amount * lots / candidate.lots)
         state = self.repo.bot_state()
         today, total = self.bot_pnl(state)
         # Islem satiri ancak dolum olayiyla olusur. Ayni taramada gonderilmis ama henuz dolmamis
@@ -448,7 +482,7 @@ class Bot:
             log.info("aday engellendi %s %s: %s", candidate.symbol, candidate.side, verdict.reason)
             return
         candidate = self._with_tp2(candidate, instrument, settings)
-        data = {**dataclasses.asdict(candidate), "dry_run": settings.dry_run}
+        data = {**dataclasses.asdict(candidate), "dry_run": settings.dry_run, "score": score, "votes": votes}
         text = (f"{candidate.symbol} {candidate.side} {candidate.lots:g} lot @ {candidate.entry:g}, "
                 f"SL {candidate.stop_loss:g}, TP {candidate.take_profit_2:g} ({candidate.strategy_id})")
         if settings.dry_run:
@@ -456,7 +490,7 @@ class Bot:
             return
         await self._record("info", "signal", text, data)
         try:
-            key = await self.executor.open(candidate, "bot")
+            key = await self.executor.open(candidate, "bot", score=score, votes=votes)
         except ValueError as exc:  # istek kurulamadi (or. hacim sinir disi): bu adayi birak, taramaya devam
             await self._record("warning", "signal_invalid", f"{candidate.symbol} emri kurulamadı: {exc}",
                                {"symbol": candidate.symbol})

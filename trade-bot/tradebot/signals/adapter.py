@@ -39,6 +39,7 @@ class Evaluation:
     decision: str
     reasons: tuple[str, ...]
     candidate: Candidate | None = None
+    report: object | None = None  # V9 AnalysisReport (guven puani modulleri okur)
 
 
 def evaluate(provider, symbol: str, *, equity: float, risk_pct: float, commission_per_lot: float,
@@ -53,13 +54,13 @@ def evaluate(provider, symbol: str, *, equity: float, risk_pct: float, commissio
         commission_per_lot=commission_per_lot, enabled_strategies=enabled_strategies)
     reasons = tuple(str(reason) for reason in report.decision_reasons)
     if report.final_decision not in CANDIDATE_DECISIONS or report.trading_eligibility != "ELIGIBLE":
-        return Evaluation(symbol, report.final_decision, reasons)
+        return Evaluation(symbol, report.final_decision, reasons, report=report)
     strategy_id = (report.routing or {}).get("strategy_id")
     setup_id = next((row.get("setup_id") for row in report.strategies if row.get("strategy_id") == strategy_id), None)
     values = (report.entry_zone, report.stop_loss, report.take_profit_1, report.take_profit_2, report.lot_size,
               report.net_risk_reward, report.risk_amount, strategy_id, setup_id)
     if any(value is None for value in values):
-        return Evaluation(symbol, "INSUFFICIENT_DATA", ("V9 raporu eksik alan iceriyor",))
+        return Evaluation(symbol, "INSUFFICIENT_DATA", ("V9 raporu eksik alan iceriyor",), report=report)
     entry_zone = report.entry_zone if isinstance(report.entry_zone, dict) else report.entry_zone.model_dump()
     candidate = Candidate(
         symbol=symbol, side="BUY" if report.final_decision == "BUY_CANDIDATE" else "SELL",
@@ -67,7 +68,7 @@ def evaluate(provider, symbol: str, *, equity: float, risk_pct: float, commissio
         take_profit_1=float(report.take_profit_1), take_profit_2=float(report.take_profit_2),
         lots=float(report.lot_size), strategy_id=str(strategy_id), setup_id=str(setup_id),
         net_rr=float(report.net_risk_reward), analysis_id=report.analysis_id, risk_amount=float(report.risk_amount))
-    return Evaluation(symbol, report.final_decision, reasons, candidate)
+    return Evaluation(symbol, report.final_decision, reasons, candidate, report)
 
 
 def evaluate_symbol(provider, symbol: str, *, equity: float, risk_pct: float, commission_per_lot: float,
