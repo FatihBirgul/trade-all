@@ -105,7 +105,8 @@ async function send(
       readable = false;
     }
     // Vekil sunucu hatası ya da okunamayan başarılı yanıt: istek sunucuya ulaşmış ve işlenmiş olabilir.
-    if (mutation && (response.status === 502 || response.status === 503 || response.status === 504))
+    // Sunucu hatası (500 dahil) emir aracıya gittikten SONRA da oluşabilir; zaman aşımı (408) da öyle.
+    if (mutation && (response.status >= 500 || response.status === 408))
       throw new BotError("HTTP_" + response.status, undefined, true, response.status);
     if (mutation && response.ok && (!readable || payload === null || typeof payload !== "object"))
       throw new BotError("INVALID_RESPONSE", undefined, true, response.status);
@@ -261,6 +262,14 @@ export function createBotApi(config: BotConfig | null, transport: Transport = fe
     openTrade: (trade: TradeRequest, clientId: string) => {
       if (!/^[A-Za-z0-9._~-]{8,64}$/.test(clientId)) throw new BotError("INVALID_REQUEST");
       return request<TradeResult>("/trades", "POST", { ...trade, client_id: clientId });
+    },
+    // Sonucu bilinmeyen elle emri sorar; emir AÇMAZ. Sunucuda kayıt yoksa o kimlik geçersiz kılınır.
+    resolveTrade: async (clientId: string) => {
+      if (!/^[A-Za-z0-9._~-]{8,64}$/.test(clientId)) throw new BotError("INVALID_REQUEST");
+      const value = await request<{ found: boolean; state: string | null; lots: number | null }>(
+        "/trades/" + clientId + "/resolve", "POST", {});
+      if (typeof value.found !== "boolean") throw new BotError("INVALID_RESPONSE", undefined, true);
+      return value;
     },
     closeAll: () =>
       request<{ requested: number; skipped: string[]; stopped: boolean }>("/bot/close-all", "POST", {

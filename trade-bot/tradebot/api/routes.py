@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import re
 from decimal import ROUND_FLOOR, Decimal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
@@ -19,6 +20,9 @@ from .models import (CloseAllRequest, CloseRequest, DeviceRequest, ManualPreview
 MAX_LEVEL_DISTANCE = 0.5  # kullanici SL/TP seviyesi fiyattan en cok bu oranda uzak olabilir
 CLOSE_ALL_PHRASE = "CLOSE-ALL"
 HEARTBEAT_STALE = 120.0
+CLIENT_ID = re.compile(r"[A-Za-z0-9._~-]{8,64}")  # models.ManualTrade.client_id ile ayni
+MANUAL_VOID_KEY = "manual_void_ids"  # sonucu sorulup kaydi bulunmayan (gecersiz kilinan) elle emir kimlikleri
+MANUAL_VOID_KEEP = 200
 
 
 def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
@@ -237,6 +241,11 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
                     raise HTTPException(status_code=409, detail="bu client_id başka bir emir için kullanıldı")
                 return {"order": previous["idempotency_key"], "state": previous["state"], "duplicate": True,
                         "lots": float(sent["body"]["volume"]), "sl": sent.get("sl"), "tp": sent.get("tp2")}
+            if body.client_id in repo.get_setting(MANUAL_VOID_KEY, []):
+                # Uygulama bu emrin sonucunu sordu, kayit yoktu ve kimlik gecersiz kilindi; kullaniciya "acilmadi"
+                # dendi. Yolda kalmis istek simdi ulasti: emir ACILMAZ.
+                raise HTTPException(status_code=409, detail="bu emir iptal edildi; yeniden önizleyip gönderin")
+        # Buradan emir kaydinin yazilmasina kadar await yok: iptal denetimi ile kayit arasina istek giremez.
         plan = _manual_plan(body, instrument)
         entry, sl, tp, lots = plan["entry"], plan["sl"], plan["tp"], plan["lots"]
         try:
@@ -246,6 +255,22 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
             raise HTTPException(status_code=422, detail=str(exc)) from None
         order = repo.get_order(key)
         return {"order": key, "state": order["state"] if order else None, "lots": lots, "sl": sl, "tp": tp}
+
+    @private.post("/trades/{client_id}/resolve")
+    async def resolve_manual_trade(client_id: str):
+        """Sonucu bilinmeyen elle emri sorar; emir ACMAZ.
+
+        Kayit varsa durumunu doner. Yoksa kimligi gecersiz kilar: ayni kimlikle sonradan ulasan istek
+        reddedilir, boylece uygulama kullaniciya guvenle "emir acilmadi" diyebilir.
+        """
+        if not CLIENT_ID.fullmatch(client_id):
+            raise HTTPException(status_code=422, detail="geçersiz emir kimliği")
+        order = repo.get_order(f"man-{client_id}")
+        if order is not None:
+            return {"found": True, "state": order["state"], "lots": float(order["payload"]["body"]["volume"])}
+        voided = [item for item in repo.get_setting(MANUAL_VOID_KEY, []) if item != client_id]
+        repo.set_setting(MANUAL_VOID_KEY, (voided + [client_id])[-MANUAL_VOID_KEEP:])
+        return {"found": False, "state": None, "lots": None}
 
     # ------------------------------------------------------------------ durdur / devam
     @private.post("/bot/stop")

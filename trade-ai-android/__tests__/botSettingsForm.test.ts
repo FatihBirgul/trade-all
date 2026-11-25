@@ -81,3 +81,16 @@ test("strategy names", () => {
   expect(strategyName("tb_ema_pullback_v1")).toBe("EMA geri çekilme (yeni)");
   expect(strategyName("bilinmeyen_x")).toBe("bilinmeyen_x");
 });
+
+test("apply refuses to write when the server value differs from what the confirmation showed", () => {
+  // Ekran 0,5 → 0,75 gösterdi; sunucuda değer bu arada 1 olmuş: kullanıcı yanlış karşılaştırmayı onayladı.
+  const plan = planChanges(settings(), { ...draftFrom(settings()), risk_pct: "0,75", news_enabled: false });
+  if (!plan.ok) throw new Error(plan.error);
+  const fresh = settings();
+  fresh.risk.risk_pct = 1;
+  expect(() => plan.apply(fresh)).toThrow(/sunucuda değişmiş/);
+  const other = settings();
+  other.news.enabled = false;
+  expect(() => plan.apply(other)).toThrow(/sunucuda değişmiş/);
+  expect(plan.apply(settings()).risk.risk_pct).toBe(0.75);
+});

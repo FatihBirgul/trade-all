@@ -131,7 +131,7 @@ test("a response from another origin is rejected", async () => {
 });
 
 test("gateway errors and unreadable success on a mutation are uncertain and not retried", async () => {
-  for (const status of [502, 503, 504]) {
+  for (const status of [408, 500, 502, 503, 504, 520]) {
     const transport = jest.fn().mockResolvedValue(ok({ detail: "Bad Gateway" }, status));
     const error = await createBotApi(config, transport).closeAll().catch((e) => e);
     expect(error).toMatchObject({ code: "HTTP_" + status, uncertain: true, status });
@@ -327,4 +327,16 @@ test("manual trade and strategy mode requests", async () => {
   expect(transport.mock.calls[2][0]).toBe(config.origin + "/strategies/tb_ema_pullback_v1/mode");
   await expect(async () => api.setStrategyMode("../bot/stop", "off")).rejects.toMatchObject({ code: "INVALID_REQUEST" });
   expect(transport).toHaveBeenCalledTimes(3);
+});
+
+test("resolveTrade asks about one client id without sending an order", async () => {
+  const transport = jest.fn().mockResolvedValue(ok({ found: false, state: null, lots: null }));
+  const api = createBotApi(config, transport);
+  await expect(api.resolveTrade("11111111-2222-3333-4444-555555555555")).resolves.toMatchObject({ found: false });
+  expect(transport.mock.calls[0][0]).toBe(config.origin + "/trades/11111111-2222-3333-4444-555555555555/resolve");
+  expect(transport.mock.calls[0][1].method).toBe("POST");
+  await expect(async () => api.resolveTrade("../bot/stop")).rejects.toMatchObject({ code: "INVALID_REQUEST" });
+  // Biçimi bozuk yanıt "emir yok" sayılmaz: kilit kalkmamalı.
+  const odd = jest.fn().mockResolvedValue(ok({ status: "ok" }));
+  await expect(createBotApi(config, odd).resolveTrade("11111111-2222-3333-4444-555555555555")).rejects.toMatchObject({ uncertain: true });
 });

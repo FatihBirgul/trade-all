@@ -12,7 +12,9 @@ import { Button, Card, Failure, Heading, Label, Loading, ScreenHeader } from "..
 export default function SettingsBot() {
   const bot = useBot();
   const { colors } = useTheme();
-  const [edited, setEdited] = useState<{ base: BotSettings; draft: Draft } | null>(null);
+  // Kullanıcının değiştirdiği alanlar. Sunucudan yeni kopya gelse de (ör. strateji kipi değişince) silinmez;
+  // yalnızca başarılı kayıttan sonra temizlenir.
+  const [edits, setEdits] = useState<Partial<Draft>>({});
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ text: string; bad: boolean } | null>(null);
   const ready = bot.phase === "ready";
@@ -22,21 +24,23 @@ export default function SettingsBot() {
   const strategies: BotStrategy[] = query.data?.[1] ?? [];
   const error = query.error ?? "";
   const load = query.reload;
-  // Sunucudan yeni ayar gelince form o değerlere döner; kullanıcının yazdığı taslak yalnızca aynı kopya içindir.
-  const draft: Draft | null = settings ? (edited && edited.base === settings ? edited.draft : draftFrom(settings)) : null;
-  const setDraft = (next: Draft) => {
-    if (settings) setEdited({ base: settings, draft: next });
-  };
+  const draft: Draft | null = settings ? { ...draftFrom(settings), ...edits } : null;
+  const setField = (change: Partial<Draft>) => setEdits((old) => ({ ...old, ...change }));
+  // Son okuma başarısızsa ekrandaki ayarlar eski olabilir: eski → yeni karşılaştırması yanıltmasın diye kayıt kapalıdır.
+  const outdated = Boolean(error) || query.loading;
 
-  async function run(action: () => Promise<unknown>, done: string) {
+  async function run(action: () => Promise<unknown>, done: string, saved = false) {
     if (busy) return;
     setBusy(true);
     setNotice(null);
     try {
       await action();
+      if (saved) setEdits({});
       setNotice({ text: done, bad: false });
     } catch (reason) {
-      setNotice({ text: reason instanceof Error ? reason.message : "İşlem tamamlanamadı.", bad: true });
+      const text = reason instanceof Error ? reason.message : "İşlem tamamlanamadı.";
+      setNotice({ text, bad: true });
+      Alert.alert("İşlem yapılamadı", text); // liste uzun: hata gözden kaçmasın
     } finally {
       setBusy(false);
       load(); // sunucudaki gerçek değerler yeniden gösterilir
@@ -44,6 +48,7 @@ export default function SettingsBot() {
   }
   function save() {
     if (!settings || !draft) return;
+    if (outdated) return setNotice({ text: "Ayarlar güncel değil; önce yeniden yükleyin.", bad: true });
     const plan = planChanges(settings, draft);
     if (!plan.ok) return setNotice({ text: plan.error, bad: true });
     if (plan.changes.length === 0) return setNotice({ text: "Değişiklik yok.", bad: false });
@@ -56,7 +61,7 @@ export default function SettingsBot() {
         {
           text: plan.riskier ? "Riski artır ve kaydet" : "Kaydet",
           style: plan.riskier ? "destructive" : "default",
-          onPress: () => void run(() => api.updateSettings(plan.apply), "Ayarlar kaydedildi."),
+          onPress: () => void run(() => api.updateSettings(plan.apply), "Ayarlar kaydedildi.", true),
         },
       ],
     );
@@ -70,10 +75,20 @@ export default function SettingsBot() {
       ]);
       return;
     }
+    const shadow = strategy.shadow;
+    const dryRun = bot.status?.dry_run !== false;
     Alert.alert(
       name + " canlıya alınsın mı?",
-      "Bu strateji GERÇEK PARA ile işlem açmaya başlar." +
-        (strategy.shadow.trades ? "\n\nGölge karnesi: " + strategy.shadow.trades + " işlem." : ""),
+      (dryRun
+        ? "Bot şu an DENEME modunda: strateji canlı işaretlenir, bot canlı moda geçtiğinde GERÇEK PARA ile işlem açar."
+        : "Bu strateji GERÇEK PARA ile işlem açmaya başlar.") +
+        (shadow.trades
+          ? "\n\nGölge karnesi: " + shadow.trades + " işlem" +
+            (shadow.win_rate != null ? ", kazanma %" + Math.round(shadow.win_rate * 100) : "") +
+            (shadow.avg_r != null ? ", ortalama " + String(Number(shadow.avg_r.toFixed(2))).replace(".", ",") + " R" : "") + "."
+          : "\n\nGölge karnesi yok.") +
+        (shadow.avg_r != null && shadow.avg_r <= 0 ? "\n\n⚠ Gölge sonuçları ortalamada ZARARDA." : "") +
+        (strategy.paused ? "\n\n⚠ Bot bu stratejiyi kötü sonuçlar nedeniyle duraklatmıştı; canlıya almak duraklatmayı kaldırır." : ""),
       [
         { text: "Vazgeç", style: "cancel" },
         {
@@ -108,7 +123,7 @@ export default function SettingsBot() {
                       keyboardType="decimal-pad"
                       editable={!busy}
                       value={draft[field.key] as string}
-                      onChangeText={(value) => setDraft({ ...draft, [field.key]: value })}
+                      onChangeText={(value) => setField({ [field.key]: value })}
                     />
                   </View>
                 ))}
@@ -120,10 +135,11 @@ export default function SettingsBot() {
                 ).map(([key, label]) => (
                   <View key={key} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 48 }}>
                     <Label>{label}</Label>
-                    <Switch accessibilityLabel={label} value={draft[key]} disabled={busy} onValueChange={(value) => setDraft({ ...draft, [key]: value })} />
+                    <Switch accessibilityLabel={label} value={draft[key]} disabled={busy} onValueChange={(value) => setField({ [key]: value })} />
                   </View>
                 ))}
-                <Button title="Kaydet" onPress={save} disabled={busy} />
+                <Button title="Kaydet" onPress={save} disabled={busy || outdated} />
+                {notice ? <Label style={{ color: notice.bad ? colors.red : colors.muted }}>{notice.text}</Label> : null}
                 <Label muted style={{ fontSize: 12 }}>
                   Deneme/canlı kipi Panel’den, strateji kipleri aşağıdan değiştirilir; ikisi de ayrı onay ister.
                 </Label>
@@ -161,7 +177,14 @@ export default function SettingsBot() {
               </Card>
             </>
           )}
-          {notice ? <Label style={{ color: notice.bad ? colors.red : colors.muted }}>{notice.text}</Label> : null}
+          {settings ? (
+            <Card>
+              <Label muted style={{ fontSize: 12 }}>
+                Son güncelleme: {query.loadedAt ? new Date(query.loadedAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }) : "—"}
+              </Label>
+              <Button title="Yenile" onPress={load} disabled={busy || query.loading} secondary />
+            </Card>
+          ) : null}
         </>
       ) : null}
       <Card>

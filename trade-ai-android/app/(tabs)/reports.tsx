@@ -5,7 +5,7 @@ import { MODE_LABEL, strategyName } from "../../src/bot/settingsForm";
 import { useBot } from "../../src/bot/state";
 import { useResource } from "../../src/resource";
 import type { BotReport, BotStrategy, Totals } from "../../src/bot/types";
-import { Card, Choices, Empty, Failure, Heading, Label, Loading, Row, ScreenHeader } from "../../src/ui";
+import { Button, Card, Choices, Empty, Failure, Heading, Label, Loading, Row, ScreenHeader } from "../../src/ui";
 
 const PERIODS = { Gün: "day", Hafta: "week", Ay: "month" } as const;
 type PeriodLabel = keyof typeof PERIODS;
@@ -39,6 +39,12 @@ export default function Reports() {
       {ready ? (
         <>
           <Choices values={Object.keys(PERIODS) as PeriodLabel[]} value={label} onChange={setLabel} />
+          <Card>
+            <Label muted style={{ fontSize: 12 }}>
+              Son güncelleme: {query.loadedAt ? new Date(query.loadedAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }) : "—"} · günler UTC saatine göre ayrılır
+            </Label>
+            <Button title="Yenile" onPress={load} disabled={loading} secondary />
+          </Card>
           {loading && !report ? <Loading /> : null}
           {error ? <Failure message={"Rapor alınamadı. " + error} retry={load} /> : null}
           {report ? (

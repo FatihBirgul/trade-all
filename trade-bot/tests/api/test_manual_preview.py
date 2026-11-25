@@ -96,3 +96,37 @@ async def test_symbols_lists_the_universe_with_market_state(tmp_path):
     async with client(weekend) as http:
         rows = {r["symbol"]: r for r in (await http.get("/symbols")).json()["symbols"]}
     assert rows["EURUSD"]["open"] is False and rows["BTCUSD"]["open"] is True
+
+
+async def test_resolve_reports_an_existing_order_without_sending_anything(tmp_path):
+    app = await started(tmp_path)
+    payload = {"symbol": "XAUUSD", "side": "BUY", "sl_distance": 5.0, "client_id": "sonuc-sor-0001"}
+    async with client(app) as http:
+        sent = (await http.post("/trades", json=payload)).json()
+        opened = len(app.fake.calls("POST", "/positions"))
+        result = await http.post("/trades/sonuc-sor-0001/resolve", json={})
+        assert result.status_code == 200
+        assert result.json() == {"found": True, "state": sent["state"], "lots": sent["lots"]}
+        assert len(app.fake.calls("POST", "/positions")) == opened == 1  # sormak emir acmaz
+        # Bulunan emir gecersiz kilinmaz: ayni kimlikle yeniden gelen istek hala "duplicate" doner.
+        again = await http.post("/trades", json=payload)
+        assert again.status_code == 200 and again.json()["duplicate"] is True
+    assert len(app.fake.calls("POST", "/positions")) == 1
+
+
+async def test_resolve_voids_an_order_that_never_arrived_so_a_late_request_cannot_open_it(tmp_path):
+    app = await started(tmp_path)
+    payload = {"symbol": "XAUUSD", "side": "BUY", "sl_distance": 5.0, "client_id": "yolda-kaldi-0001"}
+    async with client(app) as http:
+        result = await http.post("/trades/yolda-kaldi-0001/resolve", json={})
+        assert result.status_code == 200 and result.json() == {"found": False, "state": None, "lots": None}
+        late = await http.post("/trades", json=payload)  # yolda kalmis istek sonradan ulasti
+        assert late.status_code == 409 and "iptal" in late.json()["detail"]
+        assert app.fake.calls("POST", "/positions") == []
+        assert (await http.post("/trades/yolda-kaldi-0001/resolve", json={})).json()["found"] is False  # yinelenebilir
+        fresh = await http.post("/trades", json={**payload, "client_id": "yeni-emir-0002"})  # yeni kimlik calisir
+        assert fresh.status_code == 200
+        assert (await http.post("/trades/kisa/resolve", json={})).status_code == 422
+    async with client(app, authed=False) as http:
+        assert (await http.post("/trades/yolda-kaldi-0001/resolve", json={})).status_code in (401, 403)
+    assert len(app.fake.calls("POST", "/positions")) == 1

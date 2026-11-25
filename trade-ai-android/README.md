@@ -11,10 +11,12 @@ Bağlantı anahtarı yalnızca telefonun güvenli deposunda tutulur. Deneme modu
 
 ## İmzalı APK (kalıcı anahtar)
 
-APK iş akışı (`.github/workflows/android-apk.yml`) dört GitHub Secret tanımlıysa APK'yı kalıcı anahtarınızla imzalar;
-tanımlı değilse her derlemede üretilen geçici anahtarı kullanır ve bunu uyarı olarak yazar. Geçici anahtarla imzalı
-bir sürüm, sonraki sürümle **güncellenemez** (önce kaldırmak gerekir). Kalıcı anahtara ilk geçişte de eski uygulamayı
-bir kez kaldırmanız gerekir.
+APK iş akışı (`.github/workflows/android-apk.yml`) imza Secret'ları tanımlıysa APK'yı kalıcı anahtarınızla imzalar.
+Tanımlı değilse APK, React Native şablonunun **herkesçe bilinen test anahtarıyla** imzalanır ve iş akışı bunu uyarı
+olarak yazar. Bu sürümler birbirinin üstüne güncellenir, ama anahtar gizli olmadığı için aynı anahtarla imzalanmış
+başka bir APK da uygulamanın üstüne kurulabilir: yalnızca deneme içindir, gerçek parayla kullanmadan önce kalıcı
+anahtara geçin. Kalıcı anahtara ilk geçişte eski uygulamayı bir kez kaldırmanız gerekir; kaldırınca telefondaki
+bağlantı anahtarı da silinir, sunucuda `sudo tradebot-pair` ile yeniden eşleştirirsiniz.
 
 Anahtar deposunu bir kez, kendi bilgisayarınızda üretin (parolayı siz belirlersiniz; dosyayı ve parolayı saklayın —
 kaybolursa uygulama bir daha güncellenemez):
@@ -27,12 +29,15 @@ keytool -genkeypair -v -keystore tradebot-release.keystore -alias tradebot -keya
 base64 -w0 tradebot-release.keystore
 ```
 
+(macOS: `base64 -i tradebot-release.keystore`; Windows PowerShell:
+`[Convert]::ToBase64String([IO.File]::ReadAllBytes("tradebot-release.keystore"))`.)
+
 | Secret | Değer |
 |---|---|
 | `ANDROID_KEYSTORE_BASE64` | ikinci komutun çıktısı |
 | `ANDROID_KEYSTORE_PASSWORD` | anahtar deposu parolası |
 | `ANDROID_KEY_ALIAS` | `tradebot` |
-| `ANDROID_KEY_PASSWORD` | anahtar parolası (depo parolasıyla aynıysa boş bırakılabilir) |
+| `ANDROID_KEY_PASSWORD` | anahtar parolası (depo parolasıyla aynıysa bu Secret'ı hiç tanımlamayın) |
 
 Anahtar deposu ve parolalar repoya, sohbete ya da uygulamaya yazılmaz.
 

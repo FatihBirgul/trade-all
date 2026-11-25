@@ -12,7 +12,14 @@ import { ThemeProvider } from "../src/theme";
 const mockPush = jest.fn();
 jest.mock("expo-router", () => ({ router: { push: (...args: unknown[]) => mockPush(...args) } }));
 jest.mock("../src/bot/state", () => ({ useBot: jest.fn() }));
-jest.mock("expo-crypto", () => ({ randomUUID: () => "11111111-2222-3333-4444-555555555555" }));
+let mockUuid = 0;
+jest.mock("expo-crypto", () => ({ randomUUID: () => "11111111-2222-3333-4444-55555555555" + (mockUuid++ % 10) }));
+const mockStore = new Map<string, string>();
+jest.mock("expo-secure-store", () => ({
+  getItemAsync: jest.fn(async (key: string) => mockStore.get(key) ?? null),
+  setItemAsync: jest.fn(async (key: string, value: string) => void mockStore.set(key, value)),
+  deleteItemAsync: jest.fn(async (key: string) => void mockStore.delete(key)),
+}));
 jest.mock("react-native-safe-area-context", () => ({
   ...jest.requireActual("react-native-safe-area-context"),
   useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }),
@@ -51,7 +58,7 @@ function setBot(overrides: Record<string, unknown> = {}, phase = "ready") {
   const api = {
     reports: jest.fn().mockResolvedValue(report),
     strategies: jest.fn().mockResolvedValue(strategies),
-    settings: jest.fn().mockResolvedValue(settings()),
+    settings: jest.fn().mockImplementation(async () => settings()), // sunucu gibi: her okumada yeni nesne
     updateSettings: jest.fn().mockResolvedValue(settings()),
     setStrategyMode: jest.fn().mockResolvedValue({}),
     symbols: jest.fn().mockResolvedValue([
@@ -61,6 +68,7 @@ function setBot(overrides: Record<string, unknown> = {}, phase = "ready") {
     ]),
     previewTrade: jest.fn().mockResolvedValue(preview),
     openTrade: jest.fn().mockResolvedValue({ order: "man-x", state: "ACKED", lots: 0.08, sl: 1.0982, tp: 1.1042 }),
+    resolveTrade: jest.fn().mockResolvedValue({ found: true, state: "FILLED", lots: 0.08 }),
     ...overrides,
   };
   const bot = {
@@ -89,6 +97,8 @@ const pressDialog = async (text: string) => {
 };
 beforeEach(() => {
   mockPush.mockClear();
+  mockStore.clear();
+  mockUuid = 0;
   alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
 });
 afterEach(() => jest.restoreAllMocks());
@@ -187,6 +197,46 @@ test("a strategy goes live only through its own confirmed request and only when 
   expect(mockPush).toHaveBeenCalledWith("/connection");
 });
 
+test("typed settings survive a strategy change and a refused request shows the server reason", async () => {
+  const { api } = setBot();
+  const ui = await show(<SettingsBot />);
+  await waitFor(() => expect(ui.getByLabelText("İşlem başı risk")).toBeTruthy());
+  await fireEvent.changeText(ui.getByLabelText("İşlem başı risk"), "0,75");
+  api.setStrategyMode.mockRejectedValueOnce(new BotError("HTTP_409", "gölge sonuçları yetersiz", false, 409));
+  await fireEvent.press(ui.getByLabelText("Canlıya al fx_range_reversion_v6"));
+  expect(dialog().message).toContain("DENEME modunda"); // bot deneme modunda: yanlış "hemen gerçek para" denmez
+  expect(dialog().message).toContain("3 işlem, kazanma %33, ortalama -0,2 R");
+  expect(dialog().message).toContain("ZARARDA");
+  expect(dialog().message).toContain("duraklatmıştı");
+  await pressDialog("Canlıya al");
+  await waitFor(() => expect(dialog().title).toBe("İşlem yapılamadı"));
+  expect(dialog().message).toBe("gölge sonuçları yetersiz");
+  await waitFor(() => expect(api.settings).toHaveBeenCalledTimes(2)); // sunucudan yeni kopya geldi
+  await waitFor(() => expect(ui.getByLabelText("İşlem başı risk").props.value).toBe("0,75")); // yazılan silinmedi
+});
+
+test("settings that could not be re-read cannot be saved against a stale copy", async () => {
+  const { api } = setBot();
+  const ui = await show(<SettingsBot />);
+  await waitFor(() => expect(ui.getByLabelText("İşlem başı risk")).toBeTruthy());
+  api.settings.mockRejectedValue(new BotError("NETWORK"));
+  await fireEvent.press(ui.getByText("Yenile"));
+  await waitFor(() => expect(ui.getByText(/^Ayarlar alınamadı\./)).toBeTruthy());
+  await fireEvent.changeText(ui.getByLabelText("İşlem başı risk"), "1");
+  await fireEvent.press(ui.getByText("Kaydet"));
+  expect(alert).not.toHaveBeenCalled();
+  expect(api.updateSettings).not.toHaveBeenCalled();
+});
+
+test("reports can be refreshed and show when they were read", async () => {
+  const { api } = setBot();
+  const ui = await show(<Reports />);
+  await waitFor(() => expect(ui.getByText("Kapanan işlemler (tümü)")).toBeTruthy());
+  expect(ui.getByText(/^Son güncelleme: \d/)).toBeTruthy();
+  await fireEvent.press(ui.getByText("Yenile"));
+  await waitFor(() => expect(api.reports).toHaveBeenCalledTimes(2));
+});
+
 // ------------------------------------------------------------------ Elle işlem
 async function fillTrade(ui: Awaited<ReturnType<typeof show>>) {
   await waitFor(() => expect(ui.getByText("EURUSD")).toBeTruthy());
@@ -213,7 +263,7 @@ test("manual trade: preview, confirmation with the previewed numbers, single sen
   const ui = await show(<ManualTrade />);
   await fillTrade(ui);
   await fireEvent.press(ui.getByText("Önizle"));
-  await waitFor(() => expect(ui.getByText("Önizleme")).toBeTruthy());
+  await waitFor(() => expect(ui.getByText("Önizleme: EURUSD AL")).toBeTruthy());
   expect(api.previewTrade).toHaveBeenCalledWith({ symbol: "EURUSD", side: "BUY", sl_distance: 0.002, tp_distance: 0.004 });
   expect(within(ui.getByTestId("row-En çok zarar")).getByText("−16,00 USC (%0,49)")).toBeTruthy();
   expect(api.openTrade).not.toHaveBeenCalled();
@@ -221,13 +271,13 @@ test("manual trade: preview, confirmation with the previewed numbers, single sen
   expect(api.openTrade).not.toHaveBeenCalled(); // önce onay
   expect(dialog().title).toBe("EURUSD AL emri gönderilsin mi?");
   expect(dialog().message).toContain("0,08 lot");
-  expect(dialog().message).toContain("en çok −16,00 USC");
+  expect(dialog().message).toContain("en çok yaklaşık −16,00 USC");
   expect(dialog().message).toContain("GERÇEK hesapta"); // deneme modunda da gerçek
   await pressDialog("Emri gönder");
   expect(api.openTrade).toHaveBeenCalledTimes(1);
   expect(api.openTrade).toHaveBeenCalledWith(
     { symbol: "EURUSD", side: "BUY", sl_distance: 0.002, tp_distance: 0.004, lots: 0.08 },
-    "11111111-2222-3333-4444-555555555555",
+    "11111111-2222-3333-4444-555555555550",
   );
   await waitFor(() => expect(ui.getByText(/Emir gönderildi: 0,08 lot/)).toBeTruthy());
 });
@@ -242,9 +292,8 @@ test("editing any field discards the preview so a stale preview cannot be sent",
   expect(ui.queryByText("Emri gönder")).toBeNull();
 });
 
-test("uncertain result: no new order, the same client id is asked again", async () => {
-  const { api } = setBot();
-  api.openTrade.mockRejectedValueOnce(new BotError("NETWORK", undefined, true));
+async function sendUncertain(api: ReturnType<typeof setBot>["api"], error: Error = new BotError("NETWORK", undefined, true)) {
+  api.openTrade.mockRejectedValueOnce(error);
   const ui = await show(<ManualTrade />);
   await fillTrade(ui);
   await fireEvent.press(ui.getByText("Önizle"));
@@ -252,15 +301,109 @@ test("uncertain result: no new order, the same client id is asked again", async 
   await fireEvent.press(ui.getByText("Emri gönder"));
   await pressDialog("Emri gönder");
   await waitFor(() => expect(ui.getByText("Emrin sonucu bilinmiyor")).toBeTruthy());
+  return ui;
+}
+
+test("uncertain result: no new order; the check asks about the same id and never re-sends the order", async () => {
+  const { api } = setBot();
+  const ui = await sendUncertain(api);
   expect(api.openTrade).toHaveBeenCalledTimes(1); // kendiliğinden yeniden denenmedi
   await fireEvent.press(ui.getByText("Önizle")); // belirsizken yeni emir hazırlanamaz
   expect(api.previewTrade).toHaveBeenCalledTimes(1);
-  api.openTrade.mockResolvedValueOnce({ order: "man-x", state: "FILLED", lots: 0.08, sl: 1, tp: null, duplicate: true });
   await fireEvent.press(ui.getByText("Sonucu kontrol et"));
   await waitFor(() => expect(ui.getByText(/Emir daha önce alınmış: 0,08 lot/)).toBeTruthy());
-  expect(api.openTrade).toHaveBeenCalledTimes(2);
-  expect(api.openTrade.mock.calls[1][1]).toBe(api.openTrade.mock.calls[0][1]); // aynı kimlik
+  expect(api.openTrade).toHaveBeenCalledTimes(1); // kontrol emir GÖNDERMEZ
+  expect(api.resolveTrade).toHaveBeenCalledWith(api.openTrade.mock.calls[0][1]); // aynı kimlik
   expect(ui.queryByText("Emrin sonucu bilinmiyor")).toBeNull();
+});
+
+test("the check failing (429, 500, network) keeps the lock and the id", async () => {
+  const { api } = setBot();
+  const ui = await sendUncertain(api);
+  for (const error of [new BotError("HTTP_429", "çok istek", false, 429), new BotError("HTTP_500", undefined, true, 500), new BotError("NETWORK", undefined, true)]) {
+    api.resolveTrade.mockRejectedValueOnce(error);
+    await fireEvent.press(ui.getByText("Sonucu kontrol et"));
+    await waitFor(() => expect(ui.getByText(/Sonuç öğrenilemedi/)).toBeTruthy());
+    expect(ui.getByText("Emrin sonucu bilinmiyor")).toBeTruthy();
+  }
+  await fireEvent.press(ui.getByText("Önizle"));
+  expect(api.previewTrade).toHaveBeenCalledTimes(1);
+  expect(api.openTrade).toHaveBeenCalledTimes(1);
+  expect(new Set(api.resolveTrade.mock.calls.map((call: unknown[]) => call[0]))).toEqual(new Set([api.openTrade.mock.calls[0][1]]));
+});
+
+test("order that never reached the server is cancelled by the check, not opened", async () => {
+  const { api } = setBot({ resolveTrade: jest.fn().mockResolvedValue({ found: false, state: null, lots: null }) });
+  const ui = await sendUncertain(api);
+  await fireEvent.press(ui.getByText("Sonucu kontrol et"));
+  await waitFor(() => expect(ui.getByText(/pozisyon AÇILMADI/)).toBeTruthy());
+  expect(api.openTrade).toHaveBeenCalledTimes(1);
+  expect(ui.queryByText("Emrin sonucu bilinmiyor")).toBeNull();
+});
+
+test("the uncertain lock survives leaving the screen", async () => {
+  const { api } = setBot();
+  const first = await sendUncertain(api);
+  await first.unmount();
+  const ui = await show(<ManualTrade />);
+  await waitFor(() => expect(ui.getByText("Emrin sonucu bilinmiyor")).toBeTruthy());
+  await fireEvent.press(ui.getByText("Önizle"));
+  expect(api.previewTrade).toHaveBeenCalledTimes(1);
+  await fireEvent.press(ui.getByText("Sonucu kontrol et"));
+  await waitFor(() => expect(api.resolveTrade).toHaveBeenCalledWith(api.openTrade.mock.calls[0][1]));
+});
+
+test("a rejected or unresolved order is not reported as sent", async () => {
+  const { api } = setBot();
+  api.openTrade.mockResolvedValueOnce({ order: "man-x", state: "REJECTED", lots: 0.08, sl: 1, tp: null });
+  const ui = await show(<ManualTrade />);
+  await fillTrade(ui);
+  await fireEvent.press(ui.getByText("Önizle"));
+  await waitFor(() => expect(ui.getByText("Emri gönder")).toBeTruthy());
+  await fireEvent.press(ui.getByText("Emri gönder"));
+  await pressDialog("Emri gönder");
+  await waitFor(() => expect(ui.getByText(/Emir REDDEDİLDİ/)).toBeTruthy());
+  expect(ui.queryByText(/Emir gönderildi/)).toBeNull();
+});
+
+test("a late preview for other inputs is dropped and inputs are frozen while a request runs", async () => {
+  let release: (value: TradePreview) => void = () => {};
+  const { api } = setBot({
+    previewTrade: jest.fn().mockImplementation(() => new Promise<TradePreview>((resolve) => { release = resolve; })),
+  });
+  const ui = await show(<ManualTrade />);
+  await fillTrade(ui);
+  await fireEvent.press(ui.getByText("Önizle"));
+  await fireEvent.press(ui.getByText("SAT")); // istek sürerken yön değişmez
+  await act(async () => release({ ...preview, symbol: "XAUUSD" })); // başka sembolün önizlemesi
+  await waitFor(() => expect(ui.getByText(/başka bir işlem için geldi/)).toBeTruthy());
+  expect(ui.queryByText("Emri gönder")).toBeNull();
+  expect(api.openTrade).not.toHaveBeenCalled();
+});
+
+test("double confirmation sends one order with one id; an old preview must be renewed", async () => {
+  const { api } = setBot();
+  const ui = await show(<ManualTrade />);
+  await fillTrade(ui);
+  await fireEvent.press(ui.getByText("Önizle"));
+  await waitFor(() => expect(ui.getByText("Emri gönder")).toBeTruthy());
+  const now = jest.spyOn(Date, "now");
+  const base = Date.now();
+  now.mockReturnValue(base + 61_000);
+  await fireEvent.press(ui.getByText("Emri gönder"));
+  expect(ui.getByText(/Önizleme eskidi/)).toBeTruthy();
+  expect(ui.queryByText("Emri gönder")).toBeNull();
+  now.mockRestore();
+  await fireEvent.press(ui.getByText("Önizle"));
+  await waitFor(() => expect(ui.getByText("Emri gönder")).toBeTruthy());
+  await fireEvent.press(ui.getByText("Emri gönder"));
+  const button = dialog().buttons.find((candidate) => candidate.text === "Emri gönder");
+  await act(async () => {
+    button?.onPress?.();
+    button?.onPress?.();
+  });
+  await waitFor(() => expect(ui.getByText(/Emir gönderildi/)).toBeTruthy());
+  expect(api.openTrade).toHaveBeenCalledTimes(1);
 });
 
 test("server refusal shows its message and warnings are repeated in the confirmation", async () => {

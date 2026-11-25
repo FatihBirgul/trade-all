@@ -58,10 +58,15 @@ jobs:
           apk="$(find android/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)"
           test -n "$apk"
           if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
-            # Kalici anahtar yoksa derleme her seferinde uretilen gecici anahtarla imzali kalir: sonraki
-            # surum bunun ustune guncellenemez (once kaldirmak gerekir).
-            echo "::warning::Kalici imza anahtari (ANDROID_KEYSTORE_BASE64) tanimli degil; APK gecici anahtarla imzalandi. Bkz. trade-ai-android/README.md"
-            echo "APK_SIGNING=generated debug signing" >> "$GITHUB_ENV"
+            # Yarim yapilandirma sessizce test anahtarina dusmesin: digerlerinden biri tanimliysa hata.
+            if [ -n "$ANDROID_KEYSTORE_PASSWORD$ANDROID_KEY_ALIAS$ANDROID_KEY_PASSWORD" ]; then
+              echo "::error::Imza secret'lari eksik: ANDROID_KEYSTORE_BASE64 tanimli degil ama digerleri tanimli"
+              exit 1
+            fi
+            # Kalici anahtar yoksa APK, React Native sablonunun HERKESCE BILINEN test anahtariyla imzali kalir:
+            # ayni anahtarla imzalanan baska bir APK bu uygulamanin ustune kurulabilir. Yalnizca deneme icindir.
+            echo "::warning::Kalici imza anahtari (ANDROID_KEYSTORE_BASE64) tanimli degil; APK herkesce bilinen test anahtariyla imzalandi. Bkz. trade-ai-android/README.md"
+            echo "APK_SIGNING=public debug key (testing only)" >> "$GITHUB_ENV"
             exit 0
           fi
           if [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ]; then

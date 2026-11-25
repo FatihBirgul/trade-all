@@ -61,6 +61,8 @@ function parse(value: string): number | null {
   return Number(trimmed.replace(",", "."));
 }
 
+export const CHANGED = "Ayarlar bu arada sunucuda değişmiş; kaydedilmedi. Yenileyip yeniden deneyin.";
+
 export type Change = { label: string; from: string; to: string; riskier: boolean };
 export type Plan =
   | { ok: false; error: string }
@@ -87,7 +89,12 @@ export function planChanges(current: BotSettings, draft: Draft): Plan {
       to: text(value) + field.unit,
       riskier: field.riskier === "up" ? value > before : value < before,
     });
-    writers.push((settings) => field.write(settings, value));
+    writers.push((settings) => {
+      // Onay penceresi "eski → yeni"yi ekrandaki kopyadan gösterdi; sunucudaki değer başkaysa kullanıcı
+      // yanlış bir karşılaştırmayı onaylamış olur. Yazmadan durulur.
+      if (field.read(settings) !== before) throw new Error(CHANGED);
+      field.write(settings, value);
+    });
   }
   const mid = current.fusion.mid_score;
   const minScore = parse(draft.min_score);
@@ -104,7 +111,10 @@ export function planChanges(current: BotSettings, draft: Draft): Plan {
     if (value === before) continue;
     // Bir korumayı kapatmak riski artırır.
     changes.push({ label, from: before ? "Açık" : "Kapalı", to: value ? "Açık" : "Kapalı", riskier: !value });
-    writers.push((settings) => write(settings, value));
+    writers.push((settings) => {
+      if (read(settings) !== before) throw new Error(CHANGED);
+      write(settings, value);
+    });
   }
   return {
     ok: true,
