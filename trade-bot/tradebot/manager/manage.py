@@ -75,11 +75,13 @@ def decide(trade: Trade, *, bid: float, ask: float, atr_m15: float | None, cost_
 
     actions: list[Action] = []
     target: MoveSL | None = None
-    if reached(settings.be_at_r):
+    if settings.be_enabled and reached(settings.be_at_r):
         level = _grid(trade.entry + sign * max(cost_per_unit, 0.0), tick, toward_profit)
         if not trade.be_done or better(level, trade.sl):
             target = MoveSL(level, "breakeven")
-    if trade.partial_done and atr_m15 is not None and atr_m15 >= 0:
+    # Iz suren stop kismi kapatmadan sonra baslar; kismi kapatma kapaliysa ayni esige (partial_at_r) ulasinca.
+    trailing = trade.partial_done or (not settings.partial_enabled and reached(settings.partial_at_r))
+    if settings.trail_enabled and trailing and atr_m15 is not None and atr_m15 >= 0:
         level = _grid(price - sign * atr_m15 * settings.trail_atr_mult, tick, toward_loss)
         if target is None or better(level, target.price):
             target = MoveSL(level, "trail")
@@ -89,7 +91,7 @@ def decide(trade: Trade, *, bid: float, ask: float, atr_m15: float | None, cost_
         if better(target.price, trade.sl):
             actions.append(target)
 
-    if reached(settings.partial_at_r) and not trade.partial_done:
+    if settings.partial_enabled and reached(settings.partial_at_r) and not trade.partial_done:
         volume = _grid(trade.volume * settings.partial_fraction, instrument.volume_step, ROUND_FLOOR)
         remaining = trade.volume - volume
         if volume >= instrument.volume_min - 1e-12 and remaining >= instrument.volume_min - 1e-12:

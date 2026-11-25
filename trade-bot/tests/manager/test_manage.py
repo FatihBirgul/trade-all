@@ -136,3 +136,26 @@ def test_custom_thresholds():
     assert run(staged, bid=1.10300, settings=settings) == [PartialClose(0.03)]
     trailing = buy(sl=1.10003, be_done=True, partial_done=True)
     assert run(trailing, bid=1.10700, settings=settings) == [MoveSL(1.10500, "trail")]
+
+
+def test_stages_can_be_switched_off_one_by_one():
+    """Asama anahtarlari: kapatilan asama atlanir, digerleri calisir; stop asla gevsemez."""
+    no_be = ManageSettings(be_enabled=False)
+    assert run(buy(), bid=1.10300, settings=no_be) == []  # 1R: basa bas kapali
+    jump = run(buy(), bid=1.10600, settings=no_be)  # 2R: kismi kapatma yine yapilir, basa bas yok
+    assert moves(jump) == [] and any(isinstance(a, PartialClose) for a in jump)
+
+    no_partial = ManageSettings(partial_enabled=False)
+    actions = run(buy(be_done=True, sl=1.10003), bid=1.10600, settings=no_partial)
+    assert not any(isinstance(a, (PartialClose, NoOp)) for a in actions)
+    # Kismi kapatma kapaliyken iz suren stop ayni esikte (2R) baslar.
+    assert moves(actions) == [MoveSL(pytest.approx(1.10500), "trail")]
+    assert moves(run(buy(be_done=True, sl=1.10003), bid=1.10590, settings=no_partial)) == []  # 2R'den once iz yok
+
+    no_trail = ManageSettings(trail_enabled=False)
+    after_partial = buy(be_done=True, partial_done=True, sl=1.10003, volume=0.05)
+    assert moves(run(after_partial, bid=1.10900, settings=no_trail)) == []
+    assert moves(run(after_partial, bid=1.10900)) != []  # acikken izler
+
+    all_off = ManageSettings(be_enabled=False, partial_enabled=False, trail_enabled=False)
+    assert run(buy(), bid=1.11500, settings=all_off) == []  # hicbir asama yok; ilk stop yerinde kalir

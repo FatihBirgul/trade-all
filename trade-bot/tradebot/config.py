@@ -71,6 +71,11 @@ class ManageSettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    # Asamalar tek tek kapatilabilir. Kapatmak yalnizca kari koruyan adimi atlar; broker tarafindaki ilk stop
+    # (SL) her zaman yerinde kalir.
+    be_enabled: bool = True
+    partial_enabled: bool = True
+    trail_enabled: bool = True
     be_at_r: float = Field(default=1.0, gt=0, le=5)
     partial_at_r: float = Field(default=2.0, gt=0, le=10)
     partial_fraction: float = Field(default=0.5, gt=0, lt=1)
