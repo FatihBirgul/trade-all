@@ -32,6 +32,7 @@ async def app_with_news(tmp_path, rows, *, symbols=("XAUUSD",), state=None, **kw
     app = build(tmp_path, news=factory, **kwargs)
     quotes = {s: load_market(app.fake, s, NOW) for s in symbols}
     await app.bot.start()
+    app.notifier.sent[:] = [item for item in app.notifier.sent if item[0] != "capital_base"]  # acilis bildirimi
     for symbol, (bid, ask) in quotes.items():
         await feed_ticks(app, symbol, bid, ask, NOW)
     return app, state

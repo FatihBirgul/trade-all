@@ -35,8 +35,14 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
     async def health():
         state = repo.bot_state()
         fresh = state.heartbeat_at is not None and clock() - state.heartbeat_at <= HEARTBEAT_STALE
+        scan = getattr(bot, "last_scan", None)
+        # Herkese acik: yalnizca calisma durumu ve sayilar. Bakiye, pozisyon ya da sinyal icermez.
+        last_scan = None if scan is None else {
+            "at": scan.at, "scanned": scan.scanned, "closed": scan.closed, "errors": scan.errors,
+            "skipped": scan.skipped}
         return {"status": "ok" if fresh else "stale", "last_scan_at": state.last_scan_at,
-                "heartbeat_at": state.heartbeat_at, "stream_connected": bot.streams_up(), "halted": state.halted}
+                "heartbeat_at": state.heartbeat_at, "stream_connected": bot.streams_up(), "halted": state.halted,
+                "last_scan": last_scan}
 
     @public.post("/pair")
     async def pair(body: PairRequest):
@@ -202,6 +208,7 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
                 scorecard.mark_resumed(repo, strategy_id, clock())  # karne denetimi bu andan baslar
         repo.set_bot_settings(body)
         repo.add_event("info", "settings_changed", "Ayarlar güncellendi", body.model_dump(mode="json"))
+        await bot.settings_changed()  # canli moda ilk geciste kayip siniri tabani o andaki varliktan alinir
         return body.model_dump(mode="json")
 
     # ------------------------------------------------------------------ raporlar ve olaylar

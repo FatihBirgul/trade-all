@@ -64,6 +64,8 @@ async def started(tmp_path, *, symbol="XAUUSD", direction="BUY", now=NOW, **kwar
     app = build(tmp_path, now=now, **kwargs)
     bid, ask = load_market(app.fake, symbol, now, direction)
     await app.bot.start()
+    # Canli modda ilk acilis "sermaye tabani alindi" bildirimini uretir; testler sonrasina bakar.
+    app.notifier.sent[:] = [item for item in app.notifier.sent if item[0] != "capital_base"]
     await feed_ticks(app, symbol, bid, ask, now)
     return app
 

@@ -13,6 +13,8 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from . import schema
+
 log = logging.getLogger(__name__)
 
 Connect = Callable[[str, dict[str, str]], Awaitable[Any]]
@@ -21,8 +23,8 @@ Connect = Callable[[str, dict[str, str]], Awaitable[Any]]
 async def _default_connect(url: str, headers: dict[str, str]):
     from websockets.asyncio.client import connect
 
-    return await connect(url, additional_headers=headers, open_timeout=15, ping_interval=20,
-                         ping_timeout=20, max_size=4 * 1024 * 1024)
+    return await connect(url, additional_headers=headers, subprotocols=[schema.WS_SUBPROTOCOL],
+                         open_timeout=15, ping_interval=20, ping_timeout=20, max_size=4 * 1024 * 1024)
 
 
 class Stream:

@@ -524,6 +524,13 @@ async def test_start_capital_is_set_later_if_account_was_unreadable_at_start(tmp
     assert app.repo.bot_state().start_capital == 10_000.0
 
 
+async def test_scan_on_an_empty_account_reads_real_market_data_and_opens_nothing(tmp_path):
+    app = await started(tmp_path, balance=0.0)
+    summary = await app.bot.on_bar_close()
+    assert summary.opened == 0 and app.fake.calls("POST", "/positions") == []
+    assert len(app.fake.calls("GET", "/candles")) > 0  # tarama yine de gercek veriyi okur
+
+
 def test_revoke_removes_all_tokens(tmp_path):
     from tests.exness.test_client import settings
     from tradebot.api.auth import verify_token

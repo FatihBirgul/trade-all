@@ -1,0 +1,97 @@
+{
+ "base_currency": "CHF",
+ "calc_mode": "forex",
+ "category": "Minors",
+ "contract_size": "1000",
+ "description": "Swiss Franc vs Japanese Yen",
+ "exec_mode": "market",
+ "instrument": "CHFJPY",
+ "international_name": "CHF/JPY",
+ "margin_currency": "CHF",
+ "margin_percent": "1",
+ "point_digits": 3,
+ "quote_currency": "JPY",
+ "swap_long": "-9.4",
+ "swap_multipliers": [
+  {
+   "day": "MON",
+   "multiplier": 1
+  },
+  {
+   "day": "TUE",
+   "multiplier": 1
+  },
+  {
+   "day": "WED",
+   "multiplier": 3
+  },
+  {
+   "day": "THU",
+   "multiplier": 1
+  },
+  {
+   "day": "FRI",
+   "multiplier": 1
+  },
+  {
+   "day": "SAT",
+   "multiplier": 0
+  },
+  {
+   "day": "SUN",
+   "multiplier": 0
+  }
+ ],
+ "swap_short": "0",
+ "trade_mode": "enabled",
+ "trade_sessions": [
+  {
+   "trade_mode": "trading_disabled",
+   "week_end_time": "Sun, 22:04:59",
+   "week_start_time": "Sun, 00:00:00"
+  },
+  {
+   "trade_mode": "enabled",
+   "week_end_time": "Sun, 23:59:59",
+   "week_start_time": "Sun, 22:05:00"
+  },
+  {
+   "trade_mode": "enabled",
+   "week_end_time": "Mon, 23:59:59",
+   "week_start_time": "Mon, 00:00:00"
+  },
+  {
+   "trade_mode": "enabled",
+   "week_end_time": "Tue, 23:59:59",
+   "week_start_time": "Tue, 00:00:00"
+  },
+  {
+   "trade_mode": "enabled",
+   "week_end_time": "Wed, 23:59:59",
+   "week_start_time": "Wed, 00:00:00"
+  },
+  {
+   "trade_mode": "enabled",
+   "week_end_time": "Thu, 23:59:59",
+   "week_start_time": "Thu, 00:00:00"
+  },
+  {
+   "trade_mode": "enabled",
+   "week_end_time": "Fri, 21:58:59",
+   "week_start_time": "Fri, 00:00:00"
+  },
+  {
+   "trade_mode": "trading_disabled",
+   "week_end_time": "Fri, 23:59:59",
+   "week_start_time": "Fri, 21:59:00"
+  },
+  {
+   "trade_mode": "trading_disabled",
+   "week_end_time": "Sat, 23:59:59",
+   "week_start_time": "Sat, 00:00:00"
+  }
+ ],
+ "volume_max": "200",
+ "volume_min": "0.01",
+ "volume_step": "0.01"
+}

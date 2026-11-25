@@ -14,3 +14,5 @@ if ! sudo /usr/bin/systemctl is-active tradebot >/dev/null; then
   exit 1
 fi
 echo "dagitim tamam: $(git rev-parse --short HEAD)"
+# Servis acilisini ve Exness akislarini dogrula (yalnizca calisma durumu; hesap bilgisi yazilmaz).
+"$APP_DIR/trade-bot/deploy/status.sh" --wait 60 || true

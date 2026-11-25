@@ -656,6 +656,14 @@ def operation_path(account_id: str, operation_id: str) -> str:
     return f"/v1/trading/accounts/{_check_id(account_id, 'hesap')}/operations/{_check_id(operation_id, 'operasyon')}"
 
 
+# Kimlik hatasi kodlari (Trading Error Codes).
+AUTH_INVALID_API_KEY = 1000
+
+# Sunucu el sikismasinda bu alt-protokolu secer; istemci onermezse baglanti kurulamaz
+# (resmi kod ornegi: new WebSocket(url, 'exness-ws-protocol', ...)).
+WS_SUBPROTOCOL = "exness-ws-protocol"
+
+
 def ticks_ws_path(account_id: str) -> str:
     return f"/v1/server-events/accounts/{_check_id(account_id, 'hesap')}/ws/ticks"
 
