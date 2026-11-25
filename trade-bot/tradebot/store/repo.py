@@ -48,6 +48,8 @@ class Trade:
     be_done: bool = False
     partial_done: bool = False
     risk_amount: float | None = None
+    last_sl: float | None = None  # broker'in en son onayladigi SL; emir iptal olsa da kalir
+    planned_tp: float | None = None  # planlanan TP; broker'daki kaybolursa yeniden kurulur
     id: int | None = None
 
     @property

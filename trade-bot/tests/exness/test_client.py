@@ -194,7 +194,7 @@ async def test_rate_limiter_waits_for_window_instead_of_bursting():
 async def test_rate_limiter_matches_templates_ignoring_query_and_respects_global():
     fake = FakeTime()
     limiter = RateLimiter(clock=fake.clock, sleep=fake.sleep)
-    limiter.configure(global_rate=(3, 5.0), methods=[
+    limiter.configure(global_rate=(4, 5.0), methods=[  # 4'un 1'i emir isteklerine ayrilir: okumalar icin 3
         ("GET", "/v1/market-data/accounts/{account_id}/candles", 50, 1.0),
         ("DELETE", "/v1/trading/accounts/{account_id}/positions/{position_id}", 50, 1.0)])
     await limiter.acquire("GET", "/v1/market-data/accounts/1/candles?instrument=EURUSD")

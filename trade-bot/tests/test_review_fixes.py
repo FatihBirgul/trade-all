@@ -215,10 +215,23 @@ async def test_i2_reads_leave_room_for_orders_in_the_global_budget():
     for _ in range(9):
         await limiter.acquire("GET", "/v1/x")
     assert fake.sleeps == []
-    await limiter.acquire("POST", "/v1/trading/accounts/1/positions")  # ayrilan pay
+    await limiter.acquire("POST", "/v1/trading/accounts/1/positions")  # ayrilan pay hala bos
     assert fake.sleeps == []
-    await limiter.acquire("GET", "/v1/x")
-    assert sum(fake.sleeps) >= 60.0
+
+    fake = FakeTime()
+    limiter = RateLimiter(clock=fake.clock, sleep=fake.sleep)
+    limiter.configure(global_rate=(10, 60.0), methods=[])
+    for _ in range(10):
+        await limiter.acquire("GET", "/v1/x")
+    assert sum(fake.sleeps) >= 60.0  # onuncu okuma, emirlere ayrilan son yeri kullanamaz
+
+    small = RateLimiter(clock=fake.clock, sleep=fake.sleep)
+    small.configure(global_rate=(5, 60.0), methods=[])  # kucuk limitlerde de en az 1 yer ayrilir
+    fake.sleeps.clear()
+    for _ in range(4):
+        await small.acquire("GET", "/v1/x")
+    await small.acquire("DELETE", "/v1/trading/accounts/1/positions/7")
+    assert fake.sleeps == []
 
 
 # ---------------------------------------------------------------- I3
@@ -227,6 +240,10 @@ async def test_i3_event_during_another_positions_request_is_not_overwritten(tmp_
     await app.bot.on_bar_close()
     await app.fake.flush()
     first, second = app.repo.open_trades("bot")
+    # Ikinci islem kismen kapanmis ama `partial_done` henuz isaretlenmemis: yonetici bu turda yazacak.
+    await app.bot.executor.close(second.position_id, volume=0.01, user=True)
+    await app.fake.flush()
+    assert app.repo.get_trade(second.position_id).partial_done is False
     risk = first.initial_risk_r_price
     await app.fake.set_price(first.symbol, round(first.entry + risk, 2), round(first.entry + risk + 0.2, 2))
 
@@ -383,14 +400,14 @@ async def test_i9_catalog_refresh_stops_on_rate_limit_and_auth_errors():
         assert client.calls == 1  # kalan enstrumanlar icin istek gonderilmedi
 
 
-def test_catalog_ignores_incomplete_update_but_disables_trading():
+def test_catalog_ignores_incomplete_update():
     catalog = InstrumentCatalog(client=None)
     full = schema.parse_instrument(conditions("EURUSD"))
     catalog.update(full)
     catalog.update(schema.parse_instrument({"instrument": "EURUSD", "category": "Forex", "base_currency": "EUR",
                                             "quote_currency": "USD"}))
     kept = catalog.get("EURUSD")
-    assert kept.contract_size == 100000.0 and kept.tick_size == full.tick_size and kept.tradable is False
+    assert kept == full  # eksik guncelleme sozlesme bilgisini silmez, sembolu de kapatmaz
 
 
 # ---------------------------------------------------------------- I10
@@ -518,3 +535,321 @@ def test_revoke_removes_all_tokens(tmp_path):
     assert verify_token(repo, token)
     assert revoke_tokens(config) == 1
     assert not verify_token(repo, token)
+
+
+# ================================================================ ikinci inceleme (N1-N6)
+async def _tick(app, symbol="XAUUSD"):
+    await feed_ticks(app, symbol, *app.fake.prices[symbol], app.clock["now"], count=2)
+
+
+async def test_n1_guard_sends_nothing_when_it_cannot_verify(tmp_path):
+    app = await started(tmp_path)
+    app.fake.omit_sltp_in_event = True  # broker'da stop VAR; yalnizca olayda gelmedi
+    trade = await open_one(app)
+    app.advance(10)
+    await _tick(app)
+    app.fake.fail_next = ExnessUnavailable("503")  # dogrulama (anlik goruntu) basarisiz
+    await app.bot.manage_tick()
+    assert app.fake.calls("POST", "/orders") == [] and app.fake.calls("DELETE") == []
+    assert app.fake.calls("PATCH") == [] and "sl_missing" not in app.kinds()
+    await app.bot.manage_tick()  # kontrol hakki harcanmadi: hemen yeniden dogrulanir
+    assert app.repo.get_trade(trade.position_id).sltp_order_id is not None
+    assert app.fake.calls("POST", "/orders") == []
+
+
+async def test_n2_rearm_uses_last_confirmed_stop_and_restores_take_profit(tmp_path):
+    app = await started(tmp_path)
+    trade = await open_one(app)
+    risk = trade.initial_risk_r_price
+    await app.fake.set_price("XAUUSD", round(trade.entry + risk, 2), round(trade.entry + risk + 0.2, 2))
+    await app.bot.manage_tick()
+    await app.fake.flush()
+    breakeven = app.repo.get_trade(trade.position_id).sl
+    assert breakeven == pytest.approx(trade.entry + 0.01)
+
+    await app.fake.external_cancel_sltp(trade.position_id)  # stop emri broker'da kayboldu
+    lost = app.repo.get_trade(trade.position_id)
+    assert lost.sl is None and lost.last_sl == breakeven and lost.planned_tp == trade.tp2
+    app.advance(31)
+    await _tick(app)
+    await app.bot.manage_tick()
+    await app.fake.flush()
+    body = app.fake.calls("POST", "/orders")[-1][2]
+    assert float(body["stop_loss_price"]) == pytest.approx(breakeven)  # ilk (-1R) seviyeye geri donulmedi
+    assert float(body["take_profit_price"]) == pytest.approx(trade.tp2)
+    armed = app.repo.get_trade(trade.position_id)
+    assert armed.sl == pytest.approx(breakeven) and armed.tp2 == pytest.approx(trade.tp2)
+
+
+async def test_n2_dry_run_rearm_does_not_loosen_the_stop(tmp_path):
+    app = await started(tmp_path)
+    trade = await open_one(app)
+    risk = trade.initial_risk_r_price
+    await app.fake.set_price("XAUUSD", round(trade.entry + risk, 2), round(trade.entry + risk + 0.2, 2))
+    await app.bot.manage_tick()
+    await app.fake.flush()
+    breakeven = app.repo.get_trade(trade.position_id).sl
+    app.repo.set_bot_settings(BotSettings(dry_run=True))  # canlidayken dry-run'a alindi
+    await app.fake.external_cancel_sltp(trade.position_id)
+    app.advance(31)
+    await _tick(app)
+    await app.bot.manage_tick()
+    await app.fake.flush()
+    assert app.repo.get_trade(trade.position_id).sl == pytest.approx(breakeven)
+
+
+async def test_n2_position_is_closed_when_stop_cannot_be_rearmed(tmp_path):
+    app = await started(tmp_path)
+    app.fake.drop_sltp_on_open = True
+    trade = await open_one(app)
+    for attempt in range(5):
+        app.advance(61)
+        await _tick(app)
+        if attempt < 3:  # yalnizca stop kurma denemeleri reddedilir; kapama kabul edilir
+            app.fake.reject_next = (5005, "TRADING_RULE_INVALID_PRICE_LEVELS")
+        await app.bot.manage_tick()
+        await app.fake.flush()
+        if not app.repo.get_trade(trade.position_id).is_open:
+            break
+    app.fake.reject_next = None
+    assert len(app.fake.calls("POST", "/orders")) == 3  # uc deneme
+    assert not app.repo.get_trade(trade.position_id).is_open and len(app.fake.calls("DELETE")) == 1
+    assert app.kinds().count("sl_missing") == 2  # ilk tespit + kapatma; her denemede olay yok
+
+
+async def test_n3_given_up_order_filled_late_without_event_is_adopted_as_bot(tmp_path):
+    w = await make_world(tmp_path)
+    w.fake.auto_process = False
+    w.fake.lose_next_ack = True
+    key = await w.executor.open(candidate(), "bot")
+    w.advance(130)
+    await w.executor.resolve_unknown()
+    assert w.repo.get_order(key)["state"] == "CANCELLED"
+    w.fake.drop_events = True
+    await w.fake.flush()  # emir gec doldu, olay kayboldu
+    await w.executor.reconcile()
+    trade = w.repo.open_trades()[0]
+    assert (trade.origin, trade.setup_id, trade.manage) == ("bot", "setup000000000000000001", True)
+    assert w.repo.get_order(key)["state"] == "FILLED"
+
+
+async def test_n3_position_imported_as_manual_is_claimed_when_the_event_arrives(tmp_path):
+    w = await make_world(tmp_path)
+    w.fake.auto_process = False
+    w.fake.lose_next_ack = True
+    key = await w.executor.open(candidate(), "bot")
+    w.advance(130)
+    await w.executor.resolve_unknown()
+    w.advance(400)  # eslestirme penceresinin disinda
+    queued, w.fake._queue = w.fake._queue, []
+    for operation in queued:
+        w.fake._execute(operation)  # pozisyon acildi; olay henuz teslim edilmedi
+    await w.executor.reconcile()
+    assert w.repo.open_trades()[0].origin == "manual"  # mutabakat bunu taniyamadi
+    await w.fake.flush()  # olay, emrin kimligiyle geldi
+    trade = w.repo.open_trades()[0]
+    assert (trade.origin, trade.setup_id, trade.manage) == ("bot", "setup000000000000000001", True)
+    assert trade.tp1 == 1.1062 and trade.initial_risk_r_price == pytest.approx(0.0030)
+    assert w.repo.get_order(key)["position_id"] == trade.position_id
+
+
+async def test_n3_fill_event_without_position_does_not_orphan_the_trade(tmp_path):
+    w = await make_world(tmp_path)
+    original = w.fake.event_listeners.pop()
+
+    async def without_positions(raw):
+        raw["payload"].pop("positions", None)
+        await original(raw)
+    w.fake.event_listeners.append(without_positions)
+    key = await w.executor.open(candidate(), "bot")
+    await w.fake.flush()
+    assert w.repo.get_order(key)["state"] in ("ACKED", "PENDING", "UNKNOWN") and w.repo.open_trades() == []
+    w.advance(30)
+    await w.executor.resolve_unknown()
+    trade = w.repo.open_trades()[0]
+    assert (trade.origin, trade.setup_id) == ("bot", "setup000000000000000001")
+    assert w.repo.get_order(key)["state"] == "FILLED"
+
+
+async def test_n3_confirmed_order_is_never_cancelled_while_snapshot_is_down(tmp_path):
+    w = await make_world(tmp_path)
+    w.fake.drop_events = True
+    key = await w.executor.open(candidate(), "bot")
+    await w.fake.flush()
+    real_get = w.fake.get
+
+    async def snapshot_down(path):
+        if path.endswith("/snapshot"):
+            raise ExnessUnavailable("503")
+        return await real_get(path)
+    w.fake.get = snapshot_down
+    for _ in range(6):
+        w.advance(60)
+        await w.executor.resolve_unknown()
+    assert w.repo.get_order(key)["state"] == "ACKED"  # onaylandi: iptal sayilmaz
+    w.fake.get = real_get
+    await w.executor.resolve_unknown()
+    assert w.repo.open_trades()[0].origin == "bot" and w.repo.get_order(key)["state"] == "FILLED"
+
+
+async def test_n4_confirmed_order_with_lagging_snapshot_is_not_booked_as_closed(tmp_path):
+    w = await make_world(tmp_path)
+    w.fake.drop_events = True
+    key = await w.executor.open(candidate(), "bot")
+    await w.fake.flush()
+    real_snapshot = w.fake.snapshot
+    w.fake.snapshot = lambda: {**real_snapshot(), "positions": [], "orders": []}  # goruntu gecikmis
+    w.advance(30)
+    await w.executor.resolve_unknown()
+    assert w.repo.closed_trades() == [] and "trade_closed" not in w.notifier.kinds()
+    assert w.repo.get_order(key)["state"] == "ACKED"
+    w.fake.snapshot = real_snapshot
+    await w.executor.resolve_unknown()
+    assert w.repo.open_trades()[0].setup_id == "setup000000000000000001"
+
+
+async def test_n4_users_manual_trade_is_not_attributed_to_an_unsent_bot_order(tmp_path):
+    w = await make_world(tmp_path)
+    w.fake.fail_next = ExnessUnavailable("ConnectError")  # bot emri broker'a hic ulasmadi
+    key = await w.executor.open(candidate(), "bot")
+    w.fake.drop_events = True
+    w.advance(100)
+    manual = await w.fake.external_open("EURUSD", "BUY", 0.10)  # ayni sembol, yon ve hacim
+    await w.fake.set_price("EURUSD", 1.0990, 1.0992)
+    await w.fake.delete(f"/v1/trading/accounts/123456/positions/{manual}", "ext-close-9")
+    await w.fake.flush()
+    w.advance(40)
+    await w.executor.resolve_unknown()
+    assert w.repo.get_order(key)["state"] == "CANCELLED"
+    assert w.repo.bot_realized_pnl() == 0.0 and w.repo.closed_trades() == []
+
+
+async def test_n5_transient_auth_error_only_pauses_management_briefly(tmp_path):
+    app = await started(tmp_path)
+    trade = await open_one(app)
+    risk = trade.initial_risk_r_price
+    await app.fake.set_price("XAUUSD", round(trade.entry + risk, 2), round(trade.entry + risk + 0.2, 2))
+    app.fake.fail_next = ExnessAuthError("AUTH_INVALID_SIGNATURE", code=1001, status=401)
+    await app.bot.on_bar_close()
+    app.advance(10)
+    await _tick(app)
+    await app.bot.manage_tick()
+    assert app.fake.calls("PATCH") == []  # kisa bekleme
+    app.advance(25)
+    await _tick(app)
+    await app.bot.manage_tick()
+    await app.fake.flush()
+    assert len(app.fake.calls("PATCH")) == 1  # 30 sn sonra yonetim surer
+    await app.bot.heartbeat()
+    assert "auth_restored" in app.kinds()
+
+    app.fake.fail_next = ExnessAuthError("AUTH_INVALID_SIGNATURE", code=1001, status=401)
+    await app.bot.reconcile_now()  # ikinci olay: tarama disinda bir istekte
+    assert app.notifier.kinds().count("auth_error") == 2  # ilki kapanmisti; yenisi bildirilir
+
+
+async def test_n6_missing_trade_without_deal_needs_two_observations_and_is_corrected_later(tmp_path):
+    w = await make_world(tmp_path)
+    await w.executor.open(candidate(), "bot")
+    await w.fake.flush()
+    trade = w.repo.open_trades()[0]
+    w.advance(600)
+    w.fake.drop_events = True
+    await w.fake.set_price("EURUSD", 1.0970, 1.0972)  # stop calisti
+    hidden, w.fake.deals = w.fake.deals, []  # deal gecmisi gecikmeli
+
+    first = await reconcile(w.fake, w.repo, w.catalog, clock=lambda: w.clock["now"])
+    assert first.closed == [] and first.deferred == [trade.position_id]
+    assert w.repo.get_trade(trade.position_id).is_open  # tek gozlem yetmez
+    w.advance(30)
+    assert (await reconcile(w.fake, w.repo, w.catalog, clock=lambda: w.clock["now"])).closed == []
+    w.advance(31)
+    second = await reconcile(w.fake, w.repo, w.catalog, clock=lambda: w.clock["now"])
+    assert second.closed == [trade.position_id] and second.unexplained == [trade.position_id]
+    assert w.repo.bot_realized_pnl() == 0.0
+
+    w.fake.deals = hidden  # deal sonradan gecmise dustu
+    third = await reconcile(w.fake, w.repo, w.catalog, clock=lambda: w.clock["now"])
+    fixed = w.repo.get_trade(trade.position_id)
+    assert third.updated == [trade.position_id] and fixed.close_price == 1.0972
+    assert w.repo.bot_realized_pnl() == pytest.approx(-30.0, abs=0.01)
+    fourth = await reconcile(w.fake, w.repo, w.catalog, clock=lambda: w.clock["now"])
+    assert fourth.updated == [] and w.repo.bot_realized_pnl() == pytest.approx(-30.0, abs=0.01)
+
+
+async def test_n6_one_empty_snapshot_does_not_close_established_trades(tmp_path):
+    w = await make_world(tmp_path)
+    await w.executor.open(candidate(), "bot")
+    await w.fake.flush()
+    trade = w.repo.open_trades()[0]
+    w.advance(3600)
+    empty = schema.Snapshot(positions=(), orders=(), account=None)
+    report = await reconcile(w.fake, w.repo, w.catalog, clock=lambda: w.clock["now"], snapshot=empty)
+    assert report.closed == [] and w.repo.get_trade(trade.position_id).is_open
+    w.advance(120)
+    healthy = await reconcile(w.fake, w.repo, w.catalog, clock=lambda: w.clock["now"])
+    assert healthy.closed == [] and w.repo.get_setting("reconcile_missing") == {}
+
+
+async def test_i7_take_profit_dropped_by_stop_only_patch_is_detected_and_restored(tmp_path):
+    app = await started(tmp_path)
+    app.fake.patch_replaces = True  # API belgelenenin aksine verilmeyen alani siliyor
+    trade = await open_one(app)
+    risk = trade.initial_risk_r_price
+    await app.fake.set_price("XAUUSD", round(trade.entry + risk, 2), round(trade.entry + risk + 0.2, 2))
+    await app.bot.manage_tick()
+    await app.fake.flush()
+    assert "tp_lost" in app.kinds() and "tp_lost" in app.notifier.kinds()
+    restore = app.fake.calls("PATCH")[-1][2]
+    assert float(restore["take_profit_price"]) == pytest.approx(trade.tp2)
+
+
+async def test_breakeven_is_not_announced_when_operation_record_is_gone(tmp_path):
+    w = await make_world(tmp_path)
+    await w.executor.open(candidate(), "bot")
+    await w.fake.flush()
+    trade = w.repo.open_trades()[0]
+    await w.fake.set_price("EURUSD", 1.1040, 1.1042)
+    w.fake.auto_process = False  # degisiklik hic uygulanmayacak
+    w.fake.drop_events = True
+    key = await w.executor.modify(trade.position_id, sl=1.1003, stage="breakeven")
+    w.fake._queue.clear()
+    w.fake.operations.clear()  # operasyon kaydi yok: 404
+    w.advance(30)
+    await w.executor.resolve_unknown()
+    w.advance(130)
+    await w.executor.resolve_unknown()
+    assert w.repo.get_trade(trade.position_id).be_done is False
+    assert "sl_breakeven" not in w.notifier.kinds()
+    assert w.repo.get_order(key)["state"] == "CANCELLED"
+
+
+async def test_invalid_order_does_not_abort_the_scan(tmp_path):
+    app = await multi(tmp_path, ["XAUUSD", "XAGUSD"])
+    real_open = app.bot.executor.open
+    seen = []
+
+    async def flaky(cand, origin="bot"):
+        seen.append(cand.symbol)
+        if len(seen) == 1:
+            raise ValueError("hacim enstruman sinirlarinin disinda")
+        return await real_open(cand, origin)
+    app.bot.executor.open = flaky
+    summary = await app.bot.on_bar_close()
+    assert summary.candidates == 2 and summary.opened == 1 and "signal_invalid" in app.kinds()
+
+
+def test_existing_database_gains_new_columns(tmp_path):
+    import sqlite3
+    from tradebot.store.repo import Repo, Trade
+    path = tmp_path / "old.db"
+    Repo(path).close()
+    conn = sqlite3.connect(path)
+    conn.execute("ALTER TABLE trades DROP COLUMN last_sl")
+    conn.execute("ALTER TABLE trades DROP COLUMN planned_tp")
+    conn.commit()
+    conn.close()
+    repo = Repo(path)  # eski semali veritabani
+    saved = repo.upsert_trade(Trade(position_id="1", origin="bot", symbol="EURUSD", side="BUY", volume=0.1,
+                                    entry=1.1, last_sl=1.09, planned_tp=1.13))
+    assert (saved.last_sl, saved.planned_tp) == (1.09, 1.13)

@@ -34,6 +34,9 @@ class Runtime:
             for task in done:
                 task.result()  # hata varsa yukari tasinsin
         finally:
+            closer = getattr(self.bot.notifier, "aclose", None)
+            if closer is not None:
+                await closer()  # yoldaki bildirimler veritabani kapanmadan tamamlansin
             await self.client.aclose()
             self.repo.close()
 

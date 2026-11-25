@@ -19,7 +19,20 @@ def connect(path: Path | str) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=5000")
     conn.executescript(resources.files(__package__).joinpath("schema.sql").read_text(encoding="utf-8"))
+    _migrate(conn)
     return conn
+
+
+# Sonradan eklenen sutunlar: mevcut veritabanlarinda ALTER TABLE ile tamamlanir.
+_ADDED_COLUMNS = (("trades", "last_sl", "REAL"), ("trades", "planned_tp", "REAL"),
+                  ("bot_state", "heartbeat_at", "REAL"))
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    for table, column, kind in _ADDED_COLUMNS:
+        present = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in present:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
 
 
 @contextmanager

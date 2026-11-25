@@ -45,9 +45,14 @@ STREAM_ALERT_AFTER = 60.0
 QUOTE_MAX_AGE = 60.0
 EQUITY_SAMPLE_INTERVAL = 300.0
 RECONCILE_INTERVAL = 300.0  # olay kacirilmis olabilir: broker durumu duzenli olarak yeniden okunur
-AUTH_BACKOFF = 300.0  # kimlik reddinden sonra yonetim istekleri bu kadar sure durur
+AUTH_BACKOFF_START = 30.0  # kimlik reddinden sonra yonetim isteklerinin durdugu sure (art arda redde katlanir)
+AUTH_BACKOFF_MAX = 300.0
+AUTH_ALERT_TTL = 3600.0  # bu sureden sonra yeni bir kimlik reddi yeniden bildirilir
 STOP_GRACE = 5.0  # dolumdan sonra SL/TP emrinin gorulmesi icin taninan sure
 STOP_RECHECK = 30.0
+STOP_RECHECK_UNKNOWN = 300.0  # seviye bilinmiyorsa (elle mudahale gerekir) daha seyrek kontrol
+REARM_LIMIT = 3  # stop bu kadar denemede kurulamazsa pozisyon kapatilir
+ATR_MAX_AGE_BARS = 3
 TICK_CHUNK = 20
 
 
@@ -98,8 +103,13 @@ class Bot:
         self._events_stream = None
         self._event_connections = 0
         self._auth_alerted = False
+        self._auth_alerted_at = 0.0
+        self._auth_error_at = 0.0
+        self._auth_backoff = AUTH_BACKOFF_START
         self._auth_blocked_until = 0.0
         self._stop_checked: dict[str, float] = {}
+        self._stop_alerted: set[str] = set()
+        self._rearm_attempts: dict[str, int] = {}
         self._dry_logged: dict[str, str] = {}
 
     # ------------------------------------------------------------------ kayit ve bildirim
@@ -297,22 +307,39 @@ class Bot:
         return summary
 
     async def _auth_error(self, exc: ExnessError) -> None:
-        """Kimlik reddi: tek olay + tek bildirim; duzelene kadar yonetim istekleri de durur (dongu yok)."""
-        self._auth_blocked_until = self._clock() + AUTH_BACKOFF
-        if self._auth_alerted:
+        """Kimlik reddi: tek olay + tek bildirim; yonetim istekleri kisa bir sure durur (dongu yok).
+
+        Bekleme 30 sn'den baslar ve art arda retlerde 5 dakikaya kadar katlanir: tek seferlik bir 401
+        stop yonetimini dakikalarca durdurmaz. Basarili herhangi bir istek kilidi hemen acar.
+        """
+        now = self._clock()
+        self._auth_error_at = now
+        self._auth_blocked_until = now + self._auth_backoff
+        self._auth_backoff = min(self._auth_backoff * 2, AUTH_BACKOFF_MAX)
+        if self._auth_alerted and now - self._auth_alerted_at < AUTH_ALERT_TTL:
             log.error("kimlik dogrulamasi hala reddediliyor: %s", exc)
             return
-        self._auth_alerted = True
+        self._auth_alerted, self._auth_alerted_at = True, now
         await self._record(
             "error", "auth_error",
             f"Exness kimlik doğrulaması reddedildi: {exc}. Sunucu saatini (NTP) ve API anahtarını kontrol edin.",
             {"code": exc.code}, notify=True, title="API erişimi reddedildi")
 
     async def _auth_ok(self) -> None:
-        if self._auth_alerted:
-            self._auth_alerted = False
-            self._auth_blocked_until = 0.0
+        """Retten sonra basarili bir imzali istek goruldu: kilidi ac ve bir kez kaydet."""
+        if not self._auth_alerted and self._auth_blocked_until == 0.0:
+            return
+        if getattr(self.client, "last_ok_at", 0.0) <= self._auth_error_at:
+            return
+        was_alerted = self._auth_alerted
+        self._auth_alerted = False
+        self._auth_blocked_until = 0.0
+        self._auth_backoff = AUTH_BACKOFF_START
+        if was_alerted:
             await self._record("info", "auth_restored", "Exness kimlik doğrulaması yeniden çalışıyor.")
+
+    def _auth_blocked(self) -> bool:
+        return self._clock() < self._auth_blocked_until
 
     async def on_bar_close(self, tf: str = "M15") -> ScanSummary:
         now = self._clock()
@@ -432,7 +459,9 @@ class Bot:
         from forex.core import atr
 
         bars = self.candles.cached(symbol, "M15", 64)
-        return atr(bars) if len(bars) >= 15 else None
+        if len(bars) < 15 or self._clock() - (bars[-1]["time"] + BAR_SECONDS) > ATR_MAX_AGE_BARS * BAR_SECONDS:
+            return None  # mumlar bayat: eski oynaklikla stop izletme
+        return atr(bars)
 
     def _cost_per_unit(self, instrument: Instrument, settings: BotSettings) -> float:
         """Basa bas seviyesine eklenecek fiyat mesafesi: komisyonun fiyat karsiligi + 1 tick."""
@@ -444,48 +473,79 @@ class Bot:
                 cost += commission / (instrument.contract_size * bounds[0])
         return cost
 
+    def _rearm_level(self, trade: Trade) -> float | None:
+        """Eksik stop icin seviye: broker'in en son onayladigi SL ile ilk planlanan SL'den iyi olani.
+
+        Basa basa ya da kara cekilmis bir stop kaybolduysa ilk (-1R) seviyeye geri donulmez.
+        Kullanici stopu elle degistirdiyse onun son degeri esas alinir (bot gevsetmez, sikilastirmaz).
+        """
+        buy = trade.side == "BUY"
+        initial = None
+        if trade.initial_risk_r_price:
+            initial = trade.entry - trade.initial_risk_r_price if buy else trade.entry + trade.initial_risk_r_price
+        if trade.last_sl is not None and (trade.user_sl_override or initial is None):
+            return trade.last_sl
+        if trade.last_sl is None:
+            return initial
+        return max(trade.last_sl, initial) if buy else min(trade.last_sl, initial)
+
     async def _guard_stop(self, trade: Trade, quote: dict, now: float) -> bool:
         """Broker'da onaylanmis SL'i olmayan pozisyonu yakalar. True: bu turda baska islem yapma.
 
-        Her bot pozisyonunun broker tarafinda SL'i olmalidir. Dolum olayi SL/TP emrini tasimadiysa ya
-        da emir sonradan iptal edildiyse once broker'dan dogrulanir; gercekten yoksa stop yeniden
-        kurulur, fiyat stop seviyesini coktan gectiyse pozisyon kapatilir.
+        Her bot pozisyonunun broker tarafinda SL'i olmalidir. Once broker'dan dogrulanir; dogrulama
+        yapilamadiysa HICBIR sey gonderilmez (yanlis bilgiyle stop ezmek ya da pozisyon kapatmak, stopsuz
+        beklemekten kotudur). Gercekten yoksa stop (ve planlanan TP) yeniden kurulur; fiyat seviyeyi
+        gectiyse ya da stop tekrar tekrar kurulamiyorsa pozisyon kapatilir.
         """
+        position_id = trade.position_id
         if trade.sl is not None and trade.sltp_order_id:
+            self._rearm_attempts.pop(position_id, None)
+            self._stop_alerted.discard(position_id)
             return False
-        if now - trade.opened_at < STOP_GRACE or now - self._stop_checked.get(trade.position_id, 0.0) < STOP_RECHECK:
+        interval = STOP_RECHECK if self._rearm_level(trade) is not None else STOP_RECHECK_UNKNOWN
+        if now - trade.opened_at < STOP_GRACE or now - self._stop_checked.get(position_id, 0.0) < interval:
             return True
-        self._stop_checked[trade.position_id] = now
-        await self.executor.reconcile()  # goruntu SL/TP emirlerini de getirir
-        fresh = self.repo.get_trade(trade.position_id)
+        report = await self.executor.reconcile()  # goruntu SL/TP emirlerini de getirir
+        if report is None:
+            return True  # dogrulanamadi: bir sonraki turda yeniden dene (kontrol hakki harcanmaz)
+        self._stop_checked[position_id] = now
+        fresh = self.repo.get_trade(position_id)
         if fresh is None or not fresh.is_open or (fresh.sl is not None and fresh.sltp_order_id):
             return True
-        data = {"position_id": fresh.position_id, "symbol": fresh.symbol}
-        risk = fresh.initial_risk_r_price
-        if not risk:
-            await self._record("error", "sl_missing",
-                               f"{fresh.symbol} {fresh.side}: broker'da stop yok ve seviye bilinmiyor. "
-                               "Uygulamadan SL koyun ya da pozisyonu kapatın.", data, notify=True, title="Stop eksik")
+        data = {"position_id": position_id, "symbol": fresh.symbol}
+        first = position_id not in self._stop_alerted
+        self._stop_alerted.add(position_id)
+        level = self._rearm_level(fresh)
+        if level is None:
+            if first:
+                await self._record("error", "sl_missing",
+                                   f"{fresh.symbol} {fresh.side}: broker'da stop yok ve seviye bilinmiyor. "
+                                   "Uygulamadan SL koyun ya da pozisyonu kapatın.", data, notify=True,
+                                   title="Stop eksik")
             return True
         buy = fresh.side == "BUY"
-        level = fresh.entry - risk if buy else fresh.entry + risk
         price = quote["bid"] if buy else quote["ask"]
-        if (price <= level) if buy else (price >= level):
-            await self.executor.close(fresh.position_id, user=True)
-            await self._record("error", "sl_missing",
-                               f"{fresh.symbol} {fresh.side}: broker'da stop yoktu ve fiyat stop seviyesini geçti; "
-                               "pozisyon kapatılıyor.", data, notify=True, title="Stop eksik")
-        else:
-            await self.executor.modify(fresh.position_id, sl=level, tp=fresh.tp2)
-            await self._record("error", "sl_missing",
-                               f"{fresh.symbol} {fresh.side}: broker'da stop bulunamadı; {level:g} seviyesine "
-                               "yeniden kuruluyor.", {**data, "sl": level}, notify=True, title="Stop eksik")
+        attempts = self._rearm_attempts.get(position_id, 0)
+        if ((price <= level) if buy else (price >= level)) or attempts >= REARM_LIMIT:
+            if await self.executor.close(position_id, user=True) is not None:
+                reason = "fiyat stop seviyesini geçti" if attempts < REARM_LIMIT else "stop kurulamıyor"
+                await self._record("error", "sl_missing",
+                                   f"{fresh.symbol} {fresh.side}: broker'da stop yok ve {reason}; pozisyon kapatılıyor.",
+                                   {**data, "attempts": attempts}, notify=True, title="Stop eksik")
+            return True
+        if await self.executor.modify(position_id, sl=level, tp=fresh.planned_tp) is not None:
+            self._rearm_attempts[position_id] = attempts + 1
+            if first:
+                await self._record("error", "sl_missing",
+                                   f"{fresh.symbol} {fresh.side}: broker'da stop bulunamadı; {level:g} seviyesine "
+                                   "yeniden kuruluyor.", {**data, "sl": level}, notify=True, title="Stop eksik")
         return True
 
     async def manage_tick(self) -> None:
         settings = self.repo.get_bot_settings()
         now = self._clock()
-        if now < self._auth_blocked_until:
+        await self._auth_ok()
+        if self._auth_blocked():
             return  # kimlik reddi suruyor: reddedilecek istekleri gonderme
         for listed in self.repo.open_trades():
             # Onceki pozisyonun istegi beklenirken bu islem bir olayla degismis ya da kapanmis olabilir.
@@ -528,11 +588,18 @@ class Bot:
                     await self.executor.close(trade.position_id, volume=action.volume)
                 break  # pozisyon basina bir seferde tek istek; sonucu gelince devam edilir
 
-    async def reconcile_now(self) -> None:
-        """Broker durumunu REST ile yeniden okur (kacirilan olaylar icin)."""
+    async def reconcile_now(self) -> bool:
+        """Broker durumunu REST ile yeniden okur (kacirilan olaylar icin). Basariliysa True."""
+        if self._auth_blocked():
+            return False
         report = await self.executor.reconcile()
         if report is not None:
             self._set_account(report.account)
+        return report is not None
+
+    async def resolve_orders(self) -> None:
+        if not self._auth_blocked():
+            await self.executor.resolve_unknown()
 
     # ------------------------------------------------------------------ kalp atisi
     async def heartbeat(self) -> None:
@@ -552,10 +619,11 @@ class Bot:
             await self._record("info", "connection_restored", "Exness bağlantısı geri geldi.")
         await self._check_limits(self.repo.get_bot_settings())
         connections = getattr(self._events_stream, "connections", 0)
-        if connections != self._event_connections:
-            # Olay akisi yeniden baglandi: arada kacirilan olaylar icin durumu broker'dan toparla.
+        await self._auth_ok()
+        if connections != self._event_connections and await self.reconcile_now():
+            # Olay akisi yeniden baglandi: arada kacirilan olaylar icin durum broker'dan toparlandi.
+            # Basarisiz olursa sayac guncellenmez; bir sonraki kalp atisinda yeniden denenir.
             self._event_connections = connections
-            await self.reconcile_now()
         if self._tick_stream is not None:
             missing = [s for s in self._tick_symbols() if s not in self._subscribed]
             if missing:
@@ -634,7 +702,7 @@ class Bot:
             self._bar_loop(),
             self._every(MANAGE_INTERVAL, self.manage_tick, "yonetim"),
             self._every(HEARTBEAT_INTERVAL, self.heartbeat, "kalp atisi"),
-            self._every(RESOLVE_INTERVAL, self.executor.resolve_unknown, "emir cozumleme"),
+            self._every(RESOLVE_INTERVAL, self.resolve_orders, "emir cozumleme"),
             self._every(RECONCILE_INTERVAL, self.reconcile_now, "mutabakat"),
         )
 

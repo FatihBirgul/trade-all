@@ -31,6 +31,9 @@ log = logging.getLogger(__name__)
 ACK_TIMEOUT = 10.0  # ACK'ten sonra olay bu kadar surede gelmezse operasyon durumu sorgulanir
 UNKNOWN_TIMEOUT = 60.0  # operasyon kimligi olmayan emir bu kadar surede eslesmezse iptal sayilir
 ORDER_DEADLINE = 120.0  # sonucu hicbir yoldan ogrenilemeyen emir bu sureden sonra birakilir
+CONFIRMED_GIVE_UP = 900.0  # onaylanmis ama pozisyonu hic gorulmeyen emir bu sureden sonra kapatilir
+RECOVER_WINDOW_CONFIRMED = 300.0  # onaylanmis emir icin acilis deal'inin aranacagi pencere
+RECOVER_WINDOW_UNCONFIRMED = 30.0  # onay yoksa yalnizca emirden hemen sonra acilmis pozisyon eslesir
 COOLDOWN = 60.0  # reddedilen degisiklik/kapama sonrasi ayni pozisyon icin bekleme
 
 
@@ -136,7 +139,7 @@ class Executor:
                                                     digits=instrument.digits)
         key = f"mod-{position_id}-{uuid.uuid4().hex[:12]}"
         payload = {"path": path, "body": body, "symbol": trade.symbol, "sl": sl, "tp": tp, "user": user,
-                   "stage": stage}
+                   "stage": stage, "tp_before": trade.tp2}
         self.repo.insert_order(key, kind="modify", payload=payload, origin=trade.origin, position_id=position_id)
         await self._send(key, method, path, body)
         return key
@@ -225,16 +228,40 @@ class Executor:
         return self.repo.upsert_trade(trade)
 
     async def _modify_confirmed(self, order: dict) -> None:
-        """Basa bas hareketi broker tarafindan onaylandi: isaretle ve simdi bildir (istek aninda degil)."""
-        if order["payload"].get("stage") != "breakeven" or not order["position_id"]:
+        """Onaylanan SL/TP degisikliginin sonuclari: basa bas isareti/bildirimi ve TP kaybi denetimi.
+
+        Yalnizca broker'in onayladigi seviye istenenle ayniysa "uygulandi" sayilir; boylece durumu
+        ogrenilememis bir istek yuzunden yanlis "SL girise cekildi" bildirimi gitmez.
+        """
+        payload = order["payload"]
+        trade = self.repo.get_trade(order["position_id"]) if order["position_id"] else None
+        if trade is None or not trade.is_open:
             return
-        trade = self.repo.get_trade(order["position_id"])
-        if trade is None or not trade.is_open or trade.be_done:
-            return
-        self.repo.update_trade(trade.position_id, be_done=True)
-        level = order["payload"].get("sl")
-        await self._record("info", "sl_breakeven", f"{trade.symbol} {trade.side}: SL girişe çekildi ({level:g})",
-                           {"position_id": trade.position_id, "symbol": trade.symbol, "sl": level})
+        level = payload.get("sl")
+        applied = level is not None and trade.sl is not None and abs(trade.sl - level) < 1e-9
+        if payload.get("stage") == "breakeven" and applied and not trade.be_done:
+            self.repo.update_trade(trade.position_id, be_done=True)
+            await self._record("info", "sl_breakeven", f"{trade.symbol} {trade.side}: SL girişe çekildi ({level:g})",
+                               {"position_id": trade.position_id, "symbol": trade.symbol, "sl": level})
+        if (not payload.get("user") and payload.get("tp") is None and payload.get("tp_before") is not None
+                and trade.tp2 is None and trade.planned_tp is not None):
+            # Yalnizca SL gonderildi ama broker TP'yi de sildi: API verilmeyen alani korumuyor demektir.
+            await self._record(
+                "error", "tp_lost",
+                f"{trade.symbol} {trade.side}: SL değişikliği TP'yi sildi; TP {trade.planned_tp:g} yeniden kuruluyor.",
+                {"position_id": trade.position_id, "symbol": trade.symbol, "tp": trade.planned_tp})
+            await self.modify(trade.position_id, tp=trade.planned_tp)
+
+    def _claim(self, order: dict, trade: Trade) -> None:
+        """Mutabakatin `manual` diye ice aldigi pozisyon aslinda bu emrin: bot islemine cevir."""
+        meta = order["payload"]
+        requested = meta.get("sl")
+        self.repo.update_trade(
+            trade.position_id, origin=order["origin"], setup_id=order.get("setup_id"),
+            strategy_id=meta.get("strategy_id"), tp1=meta.get("tp1"), risk_amount=meta.get("risk_amount"),
+            manage=bool(meta.get("manage", True)),
+            planned_tp=meta.get("tp2") if meta.get("tp2") is not None else trade.planned_tp,
+            initial_risk_r_price=risk_distance(trade.side, trade.entry, requested if requested is not None else trade.sl))
 
     async def on_transaction(self, event: TxEvent) -> None:
         order = self._find_order(event)
@@ -250,11 +277,19 @@ class Executor:
                 # Emrin kayitli durumu ne olursa olsun (gec gelen dolum, iptal sayilmis emir dahil)
                 # bu pozisyon o emrindir: `manual` diye ice alinmamali.
                 position = next((p for p in event.positions if not p.closed), None)
-                if position is not None and self.repo.get_trade(position.id) is None:
+                existing = self.repo.get_trade(position.id) if position is not None else None
+                if position is not None and existing is None:
                     await self._announce_open(self._adopt(order, position, event.time or now))
-                if order["state"] != "FILLED":
+                elif existing is not None and existing.setup_id is None and not order["position_id"] \
+                        and (existing.origin != order["origin"] or order.get("setup_id")):
+                    self._claim(order, existing)  # mutabakat olaydan once gorup `manual` yazmisti
+                if position is not None:
                     self.repo.update_order_state(key, "FILLED", operation_id=event.operation_id,
-                                                 position_id=position.id if position else None)
+                                                 position_id=position.id)
+                elif event.operation_id and not order["operation_id"]:
+                    # Olay pozisyonu tasimiyor: emri acik birak; hangi pozisyonun acildigi broker'dan
+                    # (mutabakat) ogrenilir. Pozisyonsuz FILLED, o pozisyonu sahipsiz birakirdi.
+                    self.repo.update_order_state(key, order["state"], operation_id=event.operation_id)
             elif order["state"] in OPEN_STATES:
                 self.repo.update_order_state(key, "FILLED", operation_id=event.operation_id)
                 if order["kind"] == "modify":
@@ -334,6 +369,10 @@ class Executor:
                 trade.user_sl_override = True
             if trade.initial_risk_r_price is None:
                 trade.initial_risk_r_price = risk_distance(trade.side, trade.entry, sl)
+        if sl is not None:
+            trade.last_sl = sl
+        if tp is not None and (by_user or trade.planned_tp is None):
+            trade.planned_tp = tp  # TP'yi yalnizca kullanici degistirir; bot planlanani korur
         trade.sl, trade.tp2, trade.sltp_order_id = sl, tp, order_id
 
     # ------------------------------------------------------------------ toparlama
@@ -365,26 +404,46 @@ class Executor:
         """Broker ile mutabakat + bulunanlarin bildirimi. Hata olursa None (bir sonraki tur dener)."""
         try:
             report = await reconcile(self.client, self.repo, self.catalog, clock=self._clock, snapshot=snapshot)
+        except ExnessAuthError as exc:
+            if self._on_auth_error is not None:
+                await self._on_auth_error(exc)
+            return None
         except (ExnessError, ValueError) as exc:
             log.warning("mutabakat yapilamadi: %s", exc)
             return None
         await self.publish(report)
         return report
 
-    async def _recover_closed(self, order: dict) -> bool:
-        """Onaylanmis ama acik pozisyonu bulunamayan acma emri: pozisyon biz gormeden acilip kapanmis
-        olabilir. Deal gecmisinden bulunursa kapali bir islem olarak kaydedilir (kar/zarar limitlere girer)."""
+    async def _recover_closed(self, order: dict, *, confirmed: bool) -> bool:
+        """Acik pozisyonu bulunamayan acma emri: pozisyon biz gormeden acilip kapanmis olabilir.
+
+        Yalnizca kanit tamsa kapali bir bot islemi olarak kaydedilir: emre birebir uyan bir acilis
+        deal'i VE hacmin tamamini kapatan kapanis deal'leri. Operasyon onaylanmadiysa (ACK kayip)
+        yalnizca emirden hemen sonraki acilis eslesir; boylece kullanicinin ayni sembolde elle actigi
+        bir islem bota yazilmaz.
+        """
         body = order["payload"].get("body", {})
         try:
             deals = await fetch_deals(self.client, order["created_at"] - 5)
             volume = float(body.get("volume"))
+        except ExnessAuthError as exc:
+            if self._on_auth_error is not None:
+                await self._on_auth_error(exc)
+            return False
         except (ExnessError, TypeError, ValueError) as exc:
             log.warning("deal gecmisi okunamadi %s: %s", order["idempotency_key"], exc)
             return False
+        window = RECOVER_WINDOW_CONFIRMED if confirmed else RECOVER_WINDOW_UNCONFIRMED
         opening = next((d for d in deals if d.type == "open" and d.symbol == body.get("instrument")
                         and d.side is not None and d.side.lower() == body.get("side")
                         and d.volume is not None and abs(d.volume - volume) < 1e-6
+                        and d.time is not None and d.time <= order["created_at"] + window
                         and self.repo.get_trade(d.position_id) is None), None)
+        if opening is not None:
+            closed_volume = sum(d.volume or 0.0 for d in deals
+                                if d.type == "close" and d.position_id == opening.position_id)
+            if closed_volume < volume - 1e-6:
+                return False  # pozisyon hala acik olabilir (goruntu gecikmis): kapali diye yazma
         if opening is None:
             return False
         meta = order["payload"]
@@ -417,6 +476,7 @@ class Executor:
             return None
         now = self._clock()
         confirmed: set[str] = set()
+        gone: set[str] = set()
         need_reconcile = False
         for order in pending:
             key = order["idempotency_key"]
@@ -429,10 +489,19 @@ class Executor:
             try:
                 status = schema.parse_operation(
                     await self.client.get(schema.operation_path(self.client.account_id, order["operation_id"])))
-            except ExnessRejected:
-                # Operasyon kaydi artik yok (24 saat saklanir): broker durumuna bak.
-                confirmed.add(key)
-                need_reconcile = True
+            except ExnessAuthError as exc:
+                if self._on_auth_error is not None:
+                    await self._on_auth_error(exc)
+                return None  # kimlik sorunu surerken sorgulamaya devam etme
+            except ExnessRejected as exc:
+                if exc.status == 404 or exc.code == 3014:
+                    # Operasyon kaydi artik yok (24 saat saklanir). Sonuc bilinmiyor: "onaylandi"
+                    # sayma, broker durumuna bak.
+                    gone.add(key)
+                    need_reconcile = True
+                else:
+                    log.warning("operasyon durumu reddedildi %s: %s", key, exc)
+                    need_reconcile = need_reconcile or age >= ORDER_DEADLINE
                 continue
             except (ExnessError, ValueError) as exc:
                 log.warning("operasyon durumu okunamadi %s: %s", key, exc)
@@ -455,20 +524,34 @@ class Executor:
             if current is None or current["state"] not in OPEN_STATES:
                 continue
             created_age = now - current["created_at"]
-            if key in confirmed and report is not None:
-                if current["kind"] == "open" and await self._recover_closed(current):
-                    continue  # acilip kapanmis pozisyon gecmisten kaydedildi
+            if key in confirmed:
+                # Broker islemi onayladi: bu emir asla "iptal" sayilmaz. Mutabakat yapilamadiysa bekle.
+                if report is None:
+                    continue
+                if current["kind"] == "open":
+                    if await self._recover_closed(current, confirmed=True):
+                        continue  # acilip kapanmis pozisyon gecmisten kaydedildi
+                    if created_age >= CONFIRMED_GIVE_UP:
+                        # Onaylandi ama ne goruntude ne gecmiste izi var. Emri kapat (risk kapisinda
+                        # sonsuza dek yer tutmasin) ve kullaniciya bildir; gec gelen bilgi yine baglanir.
+                        self.repo.update_order_state(key, "FILLED")
+                        symbol = current["payload"].get("symbol")
+                        await self._record(
+                            "warning", "order_unknown",
+                            f"{symbol} açma emri onaylandı ama pozisyonu bulunamadı; hesabı kontrol edin",
+                            {"symbol": symbol, "order_kind": "open", "position_id": None})
+                    continue  # pozisyon henuz goruntude/gecmiste yok: acik birak, sonraki tur eslestirir
                 self.repo.update_order_state(key, "FILLED")
                 if current["kind"] == "modify":
                     await self._modify_confirmed(current)
                 continue
             if current["kind"] == "open" and report is not None and created_age >= UNKNOWN_TIMEOUT \
-                    and await self._recover_closed(current):
+                    and await self._recover_closed(current, confirmed=False):
                 continue
             limit = UNKNOWN_TIMEOUT if not current["operation_id"] else ORDER_DEADLINE
             if created_age >= limit and (report is not None or created_age >= 2 * ORDER_DEADLINE):
                 # Sonuc hicbir yoldan ogrenilemedi. Emri birak: pozisyonu kilitli tutma. Gercek durum
-                # mutabakatla zaten esitlendi; gec gelen bir dolum olayi yine bu emre baglanir.
+                # mutabakatla esitlenir; gec gelen bir dolum (olay ya da goruntu) yine bu emre baglanir.
                 self.repo.update_order_state(key, "CANCELLED", error="sonuç bilinmiyor; pozisyon bulunamadı")
                 symbol = current["payload"].get("symbol")
                 await self._record(
@@ -477,9 +560,8 @@ class Executor:
                     {"symbol": symbol, "order_kind": current["kind"], "position_id": current["position_id"]})
         return report
 
-
 _KINDS = {"open": "açma", "modify": "SL/TP değişikliği", "close": "kapama"}
 _REASONS = {"sl": "stop", "tp": "kâr al", "so": "stop out", "close": "kapatıldı", "external": "dışarıdan kapatıldı"}
 _TITLES = {"trade_opened": "İşlem açıldı", "trade_closed": "İşlem kapandı", "order_rejected": "Emir reddedildi",
            "order_unknown": "Emir sonucu bilinmiyor", "sl_breakeven": "SL girişe çekildi",
-           "trade_reopened": "Pozisyon yeniden izleniyor"}
+           "trade_reopened": "Pozisyon yeniden izleniyor", "tp_lost": "TP silindi"}

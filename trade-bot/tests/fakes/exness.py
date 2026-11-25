@@ -68,9 +68,11 @@ class FakeExness:
         self.lose_next_ack = False  # istek islenir ama yanit kaybolur
         self.reject_next: tuple[int, str] | None = None  # bir sonraki operasyon asenkron reddedilir
         self.account_status = "active"
+        self.last_ok_at = 0.0
         self.mid_request = None  # async cagri: istek kaydedildikten sonra, yanit donmeden once calisir
         self.omit_sltp_in_event = False  # dolum olayinda SL/TP emri gelmesin (broker'da yine vardir)
         self.drop_sltp_on_open = False  # broker SL/TP emrini hic olusturmasin
+        self.patch_replaces = False  # PATCH verilmeyen alani SILER (belgelenenin tersi; TP kaybi denetimi icin)
 
     # ------------------------------------------------------------------ yardimcilar
     def _id(self) -> str:
@@ -174,6 +176,7 @@ class FakeExness:
         if self.mid_request is not None:
             hook, self.mid_request = self.mid_request, None
             await hook()
+        self.last_ok_at = self.clock()
         return result
 
     async def get(self, path: str) -> dict:
@@ -359,6 +362,8 @@ class FakeExness:
                     order.pop(key, None)
                 else:
                     order[key] = body[key]
+            elif self.patch_replaces and operation["kind"] == "sltp_modify":
+                order.pop(key, None)
         order["update_time"] = iso(self.clock())
         operation["status"] = "confirmed"
         self._emit(operation, {"orders": [copy.deepcopy(order)]})
@@ -432,5 +437,12 @@ class FakeExness:
                      "create_time": iso(self.clock())}
             self.orders[order["order_id"]] = order
         order["stop_loss_price"] = str(sl)
+        self._emit(None, {"orders": [copy.deepcopy(order)]})
+        await self.flush()
+
+    async def external_cancel_sltp(self, position_id: str) -> None:
+        """Pozisyonun SL/TP emri broker tarafinda iptal oldu (stop artik yok)."""
+        order = self._sltp(position_id)
+        order["state"] = "cancelled"
         self._emit(None, {"orders": [copy.deepcopy(order)]})
         await self.flush()

@@ -61,7 +61,9 @@ class RateLimiter:
         found = [(w, 0) for m, pattern, w in self._methods if m == method.upper() and pattern.match(bare)]
         if self._global is not None:
             # Veri okuma (mum taramasi) genel kotayi tuketip stop tasima / kapama isteklerini bekletmesin.
-            reserve = int(self._global.limit * TRADING_RESERVE) if method.upper() == "GET" else 0
+            reserve = 0
+            if method.upper() == "GET" and self._global.limit >= 2:
+                reserve = max(1, int(self._global.limit * TRADING_RESERVE))
             found.append((self._global, reserve))
         return found
 

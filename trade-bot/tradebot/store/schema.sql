@@ -30,7 +30,9 @@ CREATE TABLE IF NOT EXISTS trades (
     manage INTEGER NOT NULL DEFAULT 1,
     sltp_order_id TEXT,
     be_done INTEGER NOT NULL DEFAULT 0,
-    partial_done INTEGER NOT NULL DEFAULT 0
+    partial_done INTEGER NOT NULL DEFAULT 0,
+    last_sl REAL,     -- broker'in en son onayladigi SL (SL/TP emri iptal olsa da silinmez)
+    planned_tp REAL   -- planlanan TP (broker'daki TP kaybolursa yeniden kurmak icin)
 );
 CREATE INDEX IF NOT EXISTS trades_open ON trades (closed_at) WHERE closed_at IS NULL;
 

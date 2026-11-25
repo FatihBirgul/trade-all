@@ -76,6 +76,18 @@ Inceleme 3 kritik, 13 onemli bulgu cikardi; gerileme testleri `tests/test_review
 - **Bilerek ertelenenler:** stop sonrasi ayni sembole yeniden giris icin bekleme suresi (Faz 2 sinyal katmani); swap ucretlerinin islem bazinda takibi; token'larin sure sonu; `/pair` kodunun 5 hatali denemeyle yakilabilmesi (API yalnizca 127.0.0.1'de).
 - **Ilk canli pozisyonda (en kucuk hacimle) dogrulanacaklar:** PATCH'in verilmeyen alani korudugu (I7), dolum olayinin SL/TP emrini tasidigi (I6), kimlik ve durum bicimleri (I4), yeniden baglanmada goruntu gelip gelmedigi (I10), cent hesapta `contract_size` carpani.
 
+## Ikinci bagimsiz dogrulama (2026-11-25) ve duzeltmeler
+Ikinci inceleme ilk turdaki bulgulari dogruladi (I6 ve I13 kismi), yeni kritik bulmadi, duzeltmelerin kendisinde 6 onemli sorun (N1–N6) buldu. Hepsi duzeltildi; testler `tests/test_review_fixes.py` sonunda.
+- **N1** Stop korumasi dogrulama (anlik goruntu) basarisiz olsa da emir gonderiyordu → dogrulanamadiysa hicbir sey gonderilmez ve kontrol hakki harcanmaz.
+- **N2** Eksik stop ilk (−1R) seviyeye kuruluyor ve TP dusuyordu → `trades.last_sl` (broker'in son onayladigi SL) ve `trades.planned_tp` ayri sutunlarda tutulur; stop, son onayli SL ile ilk SL'den iyi olanina, TP ile birlikte yeniden kurulur (kullanici stopu elle degistirdiyse onun son degeri). 3 basarisiz denemeden sonra pozisyon kapatilir. `sl_missing` olayi her denemede degil, ilk tespitte ve kapatmada uretilir. Stop korumasi dry-run'da da calisir; artik stopu gevsetmez.
+- **N3** Bot pozisyonu `manual` olarak ice alinabiliyordu → (a) birakilmis ya da pozisyonsuz tamamlanmis acma emirleri de eslestirilir (pozisyon emirden sonraki 5 dk icinde acildiysa); (b) mutabakatin `manual` yazdigi pozisyon, olay emrin kimligiyle gelince bot islemine cevrilir; (c) operasyonu onaylanmis emir asla iptal sayilmaz (15 dk sonra izi hala yoksa uyariyla kapatilir); (d) pozisyon tasimayan dolum olayi emri tamamlanmis saymaz.
+- **N4** Kor donemde kapanmis pozisyonun kaydi icin artik hacmin tamamini kapatan deal'ler sart; operasyon onaylanmadiysa yalnizca emirden sonraki 30 sn icindeki acilis eslesir (kullanicinin elle islemi bota yazilmaz).
+- **N5** Kimlik kilidi: bekleme 30 sn'den baslar, art arda retlerde 5 dk'ya kadar katlanir; basarili herhangi bir imzali istek kilidi acar (`ExnessClient.last_ok_at`); uyari 1 saat sonra yeniden verilebilir; operasyon sorgusu ve mutabakattaki kimlik hatalari da ayni yoldan gecer.
+- **N6** Kapanis deal'i olmadan "pozisyon yok" → en az 60 sn arayla iki gozlem sart (tek bos goruntu hicbir islemi kapatmaz); deal'i bulunamadan kapatilan islem icin gecmis 24 saat boyunca yeniden aranir ve kar/zarar sonradan yazilir.
+- **I7 icin tespit eklendi:** yalnizca SL gonderilen bir degisiklikten sonra broker'daki TP kaybolursa `tp_lost` olayi/bildirimi uretilir ve TP yeniden kurulur.
+- Kucukler: operasyon kaydi bulunamayan (404) degisiklik "onaylandi" sayilmaz, basa bas yalnizca broker'daki SL istenenle ayniysa duyurulur; dolum olayi SL'i tasimadiysa mutabakat bunu kullanici degisikligi saymaz; eksik `instrument_event` artik sembolu kapatmaz (yok sayilir); kucuk genel limitlerde de emirler icin en az 1 istek ayrilir; ayni `client_id` ile tekrar gelen elle islem ilk emrin degerlerini dondurur; kapanista bildirimler tamamlanir; ATR 3 mumdan eskiyse iz surme yapilmaz; mevcut veritabanlari icin sutun gocu (`ALTER TABLE`).
+- **Not:** Bu ikinci tur duzeltmeler ucuncu bir bagimsiz incelemeden gecmedi. `dry_run=false` oncesinde, kesif ciktisiyla yapilacak sema duzeltmeleriyle birlikte yeniden incelenmeli.
+
 ## Faz 1 durumu
 Kod tarafi tamam (Task 1–14 adim 5). Kullanicidan beklenenler:
 1. Repo push yetkisi (Claude GitHub App) — commit'ler yerelde.

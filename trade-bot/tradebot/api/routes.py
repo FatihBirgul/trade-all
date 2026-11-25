@@ -109,6 +109,15 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
             raise HTTPException(status_code=404, detail="sembol bulunamadı") from None
         if not instrument.tradable:
             raise HTTPException(status_code=409, detail="sembol işleme kapalı")
+        if body.client_id is not None:
+            previous = repo.get_order(f"man-{body.client_id}")
+            if previous is not None:
+                # Ayni istek yeniden geldi (uygulama zaman asimi): yeni emir yok, ilk emrin bilgisi doner.
+                sent = previous["payload"]
+                if sent.get("symbol") != body.symbol or sent.get("side") != body.side:
+                    raise HTTPException(status_code=409, detail="bu client_id başka bir emir için kullanıldı")
+                return {"order": previous["idempotency_key"], "state": previous["state"], "duplicate": True,
+                        "lots": float(sent["body"]["volume"]), "sl": sent.get("sl"), "tp": sent.get("tp2")}
         quote = bot.quotes.quote(body.symbol)
         if quote is None or clock() - quote["time"] > QUOTE_MAX_AGE:
             raise HTTPException(status_code=409, detail="güncel fiyat yok")

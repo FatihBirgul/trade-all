@@ -18,6 +18,12 @@ from ..store.repo import Repo, Trade
 OPEN_STATES = ("PENDING", "ACKED", "UNKNOWN")
 HISTORY_DAYS = 30
 FRESH_SECONDS = 120.0  # bu kadar yeni bir islem, tek bir anlik goruntuye dayanarak kapatilmaz
+MISSING_CONFIRM_SECONDS = 60.0  # kapanis deal'i yoksa: en az bu kadar arayla iki kez "yok" gorulmeli
+ADOPT_WINDOW = 300.0  # birakilmis bir acma emrine baglanabilecek pozisyonun acilis penceresi
+ORDER_LOOKBACK = 86_400.0
+UNEXPLAINED_RETRY = 86_400.0  # deal'i bulunamadan kapatilan islem icin gecmis bu sure boyunca yeniden aranir
+_MISSING = "reconcile_missing"
+_UNEXPLAINED = "reconcile_unexplained"
 SNAPSHOT_RETRIES = 3
 _EPS = 1e-9
 
@@ -77,7 +83,8 @@ def trade_from_order(order: dict, position: Position, symbol: str, fallback_time
         initial_risk_r_price=risk_distance(position.side, entry, requested if requested is not None else position.sl),
         risk_amount=meta.get("risk_amount"), strategy_id=meta.get("strategy_id"), setup_id=order.get("setup_id"),
         opened_at=position.opened_at or fallback_time, sltp_order_id=position.sltp_order_id,
-        manage=bool(meta.get("manage", True)))
+        manage=bool(meta.get("manage", True)), last_sl=position.sl,
+        planned_tp=meta.get("tp2") if meta.get("tp2") is not None else position.tp)
 
 
 def manual_trade(position: Position, symbol: str, fallback_time: float) -> Trade:
@@ -88,13 +95,25 @@ def manual_trade(position: Position, symbol: str, fallback_time: float) -> Trade
         position_id=position.id, origin="manual", symbol=symbol, side=position.side, volume=position.volume,
         initial_volume=position.initial_volume or position.volume, entry=entry, sl=position.sl, tp2=position.tp,
         initial_risk_r_price=risk_distance(position.side, entry, position.sl), manage=False,
-        opened_at=position.opened_at or fallback_time, sltp_order_id=position.sltp_order_id)
+        opened_at=position.opened_at or fallback_time, sltp_order_id=position.sltp_order_id,
+        last_sl=position.sl, planned_tp=position.tp)
 
 
 def _matching_order(repo: Repo, position: Position, taken: set[str]) -> dict | None:
-    """Sonucu bilinmeyen acma emirlerinden bu pozisyona uyan en eskisi."""
-    for order in repo.orders_in(OPEN_STATES):
-        if order["kind"] != "open" or order["idempotency_key"] in taken:
+    """Bu pozisyonu acmis olabilecek, pozisyonu henuz bilinmeyen acma emri (en eskisi).
+
+    Sonucu beklenen emirlerin yani sira, sonucu ogrenilemedigi icin birakilmis (CANCELLED) ya da
+    pozisyonu gorulmeden tamamlanmis sayilan (FILLED, pozisyonsuz) emirler de aday olur; ama onlar
+    yalnizca pozisyon emirden hemen sonra acildiysa eslesir. Boylece botun kendi pozisyonu gec gelen
+    bilgi yuzunden `manual` sayilip limitlerin ve yonetimin disinda kalmaz.
+    """
+    since = (position.opened_at - ORDER_LOOKBACK) if position.opened_at else 0.0
+    for order in repo.orders_in((*OPEN_STATES, "CANCELLED", "FILLED")):
+        if order["kind"] != "open" or order["idempotency_key"] in taken or order["position_id"]:
+            continue
+        waiting = order["state"] in OPEN_STATES
+        if not waiting and (position.opened_at is None or order["created_at"] < since
+                            or position.opened_at > order["created_at"] + ADOPT_WINDOW):
             continue
         body = order["payload"].get("body", {})
         try:
@@ -106,6 +125,12 @@ def _matching_order(repo: Repo, position: Position, taken: set[str]) -> dict | N
                 and abs(volume - reference) < 1e-6
                 and (position.opened_at is None or position.opened_at >= order["created_at"] - 5)):
             return order
+    return None
+
+
+def _requested_stop(repo: Repo, position_id: str) -> float | None:
+    for order in repo.orders_for_position(position_id, "open"):
+        return order["payload"].get("sl")
     return None
 
 
@@ -191,19 +216,30 @@ async def reconcile(client, repo: Repo, catalog, *, clock: Callable[[], float] =
             trade.volume, changed = position.volume, True
         if _differs(position.sl, trade.sl):
             if position.sl is not None and not _set_by_bot(repo, trade.position_id, position.sl):
-                trade.user_sl_override = True  # kullanici botun disindan degistirmis
+                requested = _requested_stop(repo, trade.position_id) if trade.sl is None else None
+                # Dolum olayi SL/TP emrini tasimadiysa broker'daki SL botun istedigi SL'dir: kullanici degil.
+                if requested is None or abs(requested - position.sl) > 1e-9:
+                    trade.user_sl_override = True  # kullanici botun disindan degistirmis
             if trade.initial_risk_r_price is None:
                 trade.initial_risk_r_price = risk_distance(trade.side, trade.entry, position.sl)
             trade.sl, changed = position.sl, True
+        if position.sl is not None and _differs(position.sl, trade.last_sl):
+            trade.last_sl, changed = position.sl, True
         if _differs(position.tp, trade.tp2):
             trade.tp2, changed = position.tp, True
+            if position.tp is not None:
+                trade.planned_tp = position.tp
         if position.sltp_order_id != trade.sltp_order_id:
             trade.sltp_order_id, changed = position.sltp_order_id, True
         if changed:
             repo.upsert_trade(trade)
             report.updated.append(trade.position_id)
 
-    affected = missing + reduced
+    seen_missing: dict = repo.get_setting(_MISSING, {})
+    unexplained: dict = {k: v for k, v in repo.get_setting(_UNEXPLAINED, {}).items()
+                         if now - v["at"] < UNEXPLAINED_RETRY}
+    retry = [t for t in (repo.get_trade(pid) for pid in unexplained) if t is not None]
+    affected = missing + reduced + retry
     if affected:
         since = max(min(t.opened_at for t in affected) - 60, now - HISTORY_DAYS * 86400)
         try:
@@ -218,16 +254,34 @@ async def reconcile(client, repo: Repo, catalog, *, clock: Callable[[], float] =
             if deal.position_id in ids:
                 repo.add_realized(deal.position_id, deal.id, deal.time or now, deal_pnl(deal))
                 last[deal.position_id] = deal
+        for trade in retry:
+            # Daha once deal'i bulunamadan kapatilmisti; deal artik gecmiste gorunuyorsa kayip/kar yazildi.
+            deal = last.get(trade.position_id)
+            if deal is not None:
+                repo.conn.execute("UPDATE trades SET close_price = ?, closed_at = ? WHERE position_id = ?",
+                                  (deal.price, deal.time or now, trade.position_id))
+                unexplained.pop(trade.position_id, None)
+                report.updated.append(trade.position_id)
         for trade in missing:
             deal = last.get(trade.position_id)
-            if deal is None and now - trade.opened_at < FRESH_SECONDS:
-                # Kapanis deal'i yok ve islem cok yeni: goruntu buyuk olasilikla bayat. Kapatma;
-                # bir sonraki mutabakat karar verir.
-                report.deferred.append(trade.position_id)
-                continue
+            if deal is None:
+                # Kapandigina dair kanit (deal) yok. Tek bir goruntu yanlis ya da bayat olabilir: islem
+                # cok yeniyse ya da "yok" ilk kez goruluyorsa kapatma. En az MISSING_CONFIRM_SECONDS
+                # arayla ikinci kez de yoksa kapat, ama deal'i sonraki mutabakatlarda aramaya devam et.
+                first = seen_missing.setdefault(trade.position_id, now)
+                if now - trade.opened_at < FRESH_SECONDS or now - first < MISSING_CONFIRM_SECONDS:
+                    report.deferred.append(trade.position_id)
+                    continue
+                unexplained[trade.position_id] = {"at": now}
+                report.unexplained.append(trade.position_id)
             repo.close_trade(trade.position_id, close_price=deal.price if deal else None,
                              closed_at=(deal.time if deal and deal.time else now))
+            seen_missing.pop(trade.position_id, None)
             report.closed.append(trade.position_id)
-            if deal is None:
-                report.unexplained.append(trade.position_id)
+    still_missing = {t.position_id for t in missing}
+    seen_missing = {pid: at for pid, at in seen_missing.items() if pid in still_missing}
+    if seen_missing != repo.get_setting(_MISSING, {}):
+        repo.set_setting(_MISSING, seen_missing)
+    if unexplained != repo.get_setting(_UNEXPLAINED, {}):
+        repo.set_setting(_UNEXPLAINED, unexplained)
     return report

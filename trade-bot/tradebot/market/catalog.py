@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 import logging
 
 from ..exness import schema
@@ -55,9 +54,11 @@ class InstrumentCatalog:
                         instrument.broker_symbol)
             return
         if current is not None and (instrument.tick_size <= 0 or instrument.contract_size <= 0):
-            # Eksik bir guncelleme (or. kismi olay yuku) bilinen sozlesme bilgisini silmesin:
-            # acik pozisyonun yonetimi ve kapatilmasi bu bilgilere bagli. Yalnizca isleme kapat.
-            instrument = dataclasses.replace(current, tradable=False)
+            # Eksik bir guncelleme (or. kismi olay yuku) bilinen sozlesme bilgisini silmesin: acik
+            # pozisyonun yonetimi ve kapatilmasi bu bilgilere bagli. Guncelleme yok sayilir; tam bilgi
+            # bir sonraki katalog yenilemesinde gelir.
+            log.warning("katalog: %s icin eksik guncelleme yok sayildi", instrument.symbol)
+            return
         self._by_symbol[instrument.symbol] = instrument
         self._by_broker[instrument.broker_symbol] = instrument
 

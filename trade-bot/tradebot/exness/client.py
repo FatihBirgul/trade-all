@@ -32,6 +32,7 @@ class ExnessClient:
         self._host = (schema.base_url(settings.exness_ap_host, allow_insecure_loopback=True)
                       if settings.exness_ap_host else None)
         self._clock = clock
+        self.last_ok_at = 0.0  # son basarili (2xx) imzali istek; kimlik sorununun gectigini gosterir
         # Yonlendirme izlenmez: imzali basliklar baska bir hosta tasinmamali.
         self._http = httpx.AsyncClient(transport=transport, timeout=timeout, follow_redirects=False)
 
@@ -88,7 +89,9 @@ class ExnessClient:
             response = await self._http.send(request)
         except httpx.HTTPError as exc:
             raise ExnessUnavailable(f"ag hatasi: {type(exc).__name__}") from None
-        return self._interpret(response)
+        data = self._interpret(response)
+        self.last_ok_at = self._clock()
+        return data
 
     @staticmethod
     def _interpret(response: httpx.Response) -> dict:
