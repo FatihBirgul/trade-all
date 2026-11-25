@@ -1,0 +1,11 @@
+{"event_type": "transaction_event", "status": "success", "event_time": "2026-12-14T13:00:00+00:00",
+ "payload": {
+   "orders": [{"order_id": "1003", "position_id": "2001", "order_type": "market", "state": "filled", "direction": "sell",
+               "instrument": "EURUSD", "price": "1.0800", "volume": "1.0", "reason": "sl",
+               "create_time": "2026-12-14T13:00:00+00:00"}],
+   "positions": [{"position_id": "2001", "direction": "buy", "instrument": "EURUSD", "initial_volume": "1.0",
+                  "volume": "0", "open_price": "1.0834", "state": "closed", "create_time": "2026-12-14T11:46:30+00:00"}],
+   "deals": [{"deal_id": "3002", "order_id": "1003", "position_id": "2001", "type": "close", "direction": "sell",
+              "instrument": "EURUSD", "volume": "1.0", "price": "1.0800", "commission": "-0.20",
+              "profit": {"amount": "-340.00", "currency": "USC"}, "create_time": "2026-12-14T13:00:00+00:00"}],
+   "account_state": {"balance": "9660.00", "equity": "9660.00", "used_margin": "0.00", "leverage": "100"}}}

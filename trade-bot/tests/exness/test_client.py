@@ -222,3 +222,10 @@ async def test_client_uses_rate_limiter():
     await client.get("/v1/a")
     await client.get("/v1/b")
     assert sum(fake.sleeps) >= 2.0 and len(recorder.requests) == 2
+
+
+async def test_path_needing_url_escaping_is_refused_before_sending():
+    client, rec = client_with(ok({}))
+    with pytest.raises(ValueError):
+        await client.get("/v1/x?from=2026-03-16T12:00:00+00:00 bad")
+    assert rec.requests == []

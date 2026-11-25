@@ -1,0 +1,13 @@
+{"orders": [
+   {"order_id": "1001", "order_type": "limit", "state": "placed", "direction": "buy", "instrument": "EURUSD",
+    "price": "1.0800", "volume": "1.0", "stop_loss_price": "1.0750", "take_profit_price": "1.0900",
+    "create_time": "2026-12-14T11:46:30+00:00"},
+   {"order_id": "1002", "position_id": "2001", "order_type": "sltp", "state": "placed",
+    "stop_loss_price": "1.0750", "take_profit_price": "1.0950", "create_time": "2026-12-14T11:46:31+00:00"}],
+ "positions": [
+   {"position_id": "2001", "direction": "buy", "instrument": "EURUSD", "initial_volume": "1.0", "volume": "0.5",
+    "open_price": "1.0800", "state": "open", "margin_rate": "1.0", "create_time": "2026-12-14T11:46:30+00:00",
+    "commission": "-0.10", "swap": "0"},
+   {"position_id": "2002", "direction": "sell", "instrument": "XAUUSD", "initial_volume": "0.01", "volume": "0.01",
+    "open_price": "2650.125", "state": "open", "create_time": "2026-12-14T12:00:00+00:00"}],
+ "account_state": {"balance": "3000.00", "equity": "3012.50", "used_margin": "100.00"}}

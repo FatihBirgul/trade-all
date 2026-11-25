@@ -80,8 +80,12 @@ class ExnessClient:
         headers = self._headers(method, path, body, idempotency_key)
         if payload is not None:
             headers["Content-Type"] = "application/json"
+        request = self._http.build_request(method, host + path, content=body or None, headers=headers)
+        if request.url.raw_path != path.encode("ascii", "strict"):
+            # Imzalanan yol gonderilenle birebir ayni olmali; kacis gerektiren bir yol programlama hatasidir.
+            raise ValueError("istek yolu URL kacisi gerektiriyor; imza ile uyusmaz")
         try:
-            response = await self._http.request(method, host + path, content=body or None, headers=headers)
+            response = await self._http.send(request)
         except httpx.HTTPError as exc:
             raise ExnessUnavailable(f"ag hatasi: {type(exc).__name__}") from None
         return self._interpret(response)

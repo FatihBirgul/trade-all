@@ -1,0 +1,12 @@
+{"items": [
+  {"event_time": "2026-12-14T11:46:30+00:00",
+   "deal": {"deal_id": "3001", "position_id": "2001", "type": "open", "direction": "buy", "instrument": "EURUSD",
+            "volume": "1.0", "price": "1.0834", "commission": "-0.10", "create_time": "2026-12-14T11:46:30+00:00"}},
+  {"event_time": "2026-12-14T13:00:00+00:00",
+   "deal": {"deal_id": "3002", "order_id": "1003", "position_id": "2001", "type": "close", "direction": "sell",
+            "instrument": "EURUSD", "volume": "1.0", "price": "1.0800", "commission": "-0.10",
+            "profit": {"amount": "-340.00", "currency": "USC"}, "create_time": "2026-12-14T13:00:00+00:00"}},
+  {"event_time": "2026-12-14T14:00:00+00:00",
+   "deal": {"deal_id": "3003", "type": "balance", "profit": {"amount": "500", "currency": "USC"},
+            "create_time": "2026-12-14T14:00:00+00:00"}}],
+ "next_cursor": "abc", "has_more": true}

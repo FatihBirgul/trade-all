@@ -1,0 +1,2 @@
+{"event_type": "account_state_event", "event_time": "2026-12-14T11:46:30+00:00",
+ "payload": {"account_state": {"balance": "10000.00", "equity": "10018.00", "used_margin": "100.00"}}}

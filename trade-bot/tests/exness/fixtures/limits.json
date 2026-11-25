@@ -1,0 +1,21 @@
+{"limits": {
+  "rest": {"global_account_rate": {"limit": 600, "window_seconds": 60},
+           "methods": [
+             {"api_operation_id": "getCandleHistory", "http_method": "GET",
+              "path": "/v1/market-data/accounts/{account_id}/candles", "rate_limit": {"limit": 120, "window_seconds": 60},
+              "limits": {"max_candles_per_request": 1000}},
+             {"api_operation_id": "openPosition", "http_method": "POST",
+              "path": "/v1/trading/accounts/{account_id}/positions", "rate_limit": {"limit": 30, "window_seconds": 60}},
+             {"api_operation_id": "getDealsHistory", "http_method": "GET",
+              "path": "/v1/history/accounts/{account_id}/deals", "rate_limit": {"limit": 30, "window_seconds": 60},
+              "limits": {"history_range_days": 31, "history_age_days": 365}}]},
+  "websocket": {"global_account_limits": {"max_active_connections": 5, "max_inbound_message_bytes": 4096,
+                  "connection_rate": {"limit": 10, "window_seconds": 60, "burst": 5},
+                  "inbound_message_rate": {"limit": 60, "window_seconds": 60, "burst": 20},
+                  "strikes": {"refill_amount": 1, "threshold": 5, "period_ms": 60000}},
+                "endpoints": [
+                  {"api_operation_id": "getWSTicks", "http_method": "POST",
+                   "path": "/v1/server-events/accounts/{account_id}/ws/ticks",
+                   "connection_rate": {"limit": 10, "window_seconds": 60, "burst": 5},
+                   "inbound_message_rate": {"limit": 60, "window_seconds": 60, "burst": 20},
+                   "subscription_operation_rate": {"ticks": {"limit": 100, "window_seconds": 1, "burst": 100}}}]}}}

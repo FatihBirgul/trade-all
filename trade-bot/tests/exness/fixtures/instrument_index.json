@@ -1,0 +1,2 @@
+{"instrument": "US30", "category": "Indices", "quote_currency": "USD", "point_digits": 1,
+ "contract_size": "1", "volume_min": "0.01", "volume_max": "100", "volume_step": "0.01", "trade_mode": "enabled"}

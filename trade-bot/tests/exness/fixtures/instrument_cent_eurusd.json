@@ -1,0 +1,4 @@
+{"instrument": "EURUSDc", "category": "Forex", "base_currency": "EUR", "quote_currency": "USD",
+ "margin_currency": "EUR", "point_digits": 5, "exec_mode": "market", "calc_mode": "forex",
+ "contract_size": "1000", "volume_min": "0.01", "volume_max": "200", "volume_step": "0.01", "trade_mode": "enabled",
+ "trade_sessions": [{"trade_mode": "enabled", "week_start_time": "Sun, 21:05:00", "week_end_time": "Fri, 20:59:00"}]}
