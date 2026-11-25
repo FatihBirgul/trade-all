@@ -12,6 +12,7 @@ from ..store.repo import Repo
 from .adapter import Candidate
 
 MAX_BARS = 96
+BAR_SECONDS = 900
 REASONS = ("shadow", "low_score", "paused")
 
 
@@ -23,6 +24,13 @@ class ShadowBook:
         """Sanal islemi kaydeder; ayni setup ikinci kez kaydedilmez (False)."""
         if reason not in REASONS:
             raise ValueError("gecersiz golge nedeni")
+        # Suren bir egilimde ayni strateji her mumda yeniden CONFIRMED olur. Canli islemde sembol basina
+        # tek pozisyon acilir; golgede de ayni sembol/strateji/yon icin acik kayit varken yenisi acilmaz.
+        # Yoksa tek bir hareket, karne esigindeki "20 sanal islem"in tamamini uretebilirdi.
+        if self._db.execute(
+                "SELECT 1 FROM shadow_trades WHERE symbol = ? AND strategy_id = ? AND side = ? AND closed_at IS NULL",
+                (candidate.symbol, candidate.strategy_id, candidate.side)).fetchone():
+            return False
         cursor = self._db.execute(
             "INSERT OR IGNORE INTO shadow_trades (symbol, side, strategy_id, setup_id, reason, entry, sl, tp, score, "
             "opened_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -45,7 +53,9 @@ class ShadowBook:
             if risk <= 0:
                 continue
             sign = 1.0 if side == "BUY" else -1.0
-            after = [b for b in bars if b["time"] >= opened_at]  # acilistan sonra baslayan mumlar
+            # Islem, mum kapanisindan birkac saniye sonra (yeni mumun icinde) acilir; o mum da sayilir.
+            # Yalnizca acilistan once kapanmis mumlar disarida kalir.
+            after = [b for b in bars if b["time"] + BAR_SECONDS > opened_at]
             result = closed_at = None
             for bar in after[:MAX_BARS]:
                 stop_hit = bar["low"] <= stop if side == "BUY" else bar["high"] >= stop
@@ -55,11 +65,11 @@ class ShadowBook:
                 elif target_hit:
                     result = abs(target - entry) / risk
                 if result is not None:
-                    closed_at = bar["time"] + 900
+                    closed_at = bar["time"] + BAR_SECONDS
                     break
             if result is None and len(after) >= MAX_BARS:
                 last = after[MAX_BARS - 1]
-                result, closed_at = (last["close"] - entry) * sign / risk, last["time"] + 900
+                result, closed_at = (last["close"] - entry) * sign / risk, last["time"] + BAR_SECONDS
             if result is None:
                 continue
             self._db.execute("UPDATE shadow_trades SET closed_at = ?, result_r = ? WHERE id = ?",
@@ -67,12 +77,15 @@ class ShadowBook:
             closed.append({"id": trade_id, "symbol": symbol, "strategy_id": strategy_id, "result_r": result})
         return closed
 
-    def stats(self, strategy_id: str, reason: str | None = None) -> dict:
+    def stats(self, strategy_id: str, reason: str | None = None, since: float | None = None) -> dict:
         sql = "SELECT result_r FROM shadow_trades WHERE strategy_id = ? AND closed_at IS NOT NULL"
         args: list = [strategy_id]
         if reason is not None:
             sql += " AND reason = ?"
             args.append(reason)
+        if since is not None:
+            sql += " AND opened_at >= ?"
+            args.append(float(since))
         results = [row[0] for row in self._db.execute(sql, args)]
         if not results:
             return {"trades": 0, "wins": 0, "win_rate": None, "avg_r": None}

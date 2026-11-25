@@ -13,7 +13,7 @@ import json
 from ..config import FUSION_MODULES, BotSettings, strategy_mode
 from ..store.repo import Repo, Trade
 from . import v9
-from .shadow import ShadowBook
+from .shadow import REASONS, ShadowBook
 
 _RESUMED = "strategy_resumed_at"
 _PAUSED = "paused_strategies"
@@ -74,7 +74,13 @@ def scorecard(repo: Repo, settings: BotSettings) -> dict:
         strategies[strategy_id] = {
             "mode": strategy_mode(settings, strategy_id), "paused": held.get(strategy_id),
             "live": _stats([r for t, r in rows if t.strategy_id == strategy_id]),
-            "shadow": shadow.stats(strategy_id)}
+            "shadow": shadow.stats(strategy_id),
+            # Nedenler ayri anlam tasir: `shadow`/`paused` canli kosullarda acilacak islemlerdir,
+            # `low_score` ise canlida zaten acilmayacak dusuk puanli adaylardir. Canliya alma karari
+            # duraklatmadan SONRAKI `paused` sonuclarina bakmalidir.
+            "shadow_by_reason": {reason: shadow.stats(strategy_id, reason) for reason in REASONS},
+            "shadow_since_pause": (shadow.stats(strategy_id, "paused", since=held[strategy_id].get("at"))
+                                   if strategy_id in held else None)}
     modules = {module: {"support": [], "against": [], "abstain": []} for module in FUSION_MODULES}
     for trade, result in rows:
         try:

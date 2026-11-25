@@ -776,10 +776,14 @@ class Bot:
             day = datetime.fromtimestamp(self._clock(), timezone.utc).strftime("%Y-%m-%d")
             if self.repo.get_setting("news_warned_day") != day:
                 self.repo.set_setting("news_warned_day", day)
+                missing = self.news.never_fetched()
                 await self._record(
                     "warning", "news_unavailable",
-                    "Haber takvimi 24 saattir alınamıyor. Bot çalışmaya devam ediyor ama haber penceresi "
-                    "koruması güncel değil.", notify=True, title="Haber takvimi alınamıyor")
+                    ("Haber takvimi hiç alınamadı. Bot çalışmaya devam ediyor ama haber penceresi koruması "
+                     "ÇALIŞMIYOR: önemli haberlerde de işlem açılabilir." if missing else
+                     "Haber takvimi 24 saattir alınamıyor. Bot çalışmaya devam ediyor ama haber penceresi "
+                     "koruması güncel değil."),
+                    {"never_fetched": missing}, notify=True, title="Haber takvimi alınamıyor")
 
     async def _check_scorecard(self) -> None:
         """Karnesi bozulan stratejiyi duraklatir: golge kipine alir (izlenir, emir acmaz) ve bir kez bildirir."""

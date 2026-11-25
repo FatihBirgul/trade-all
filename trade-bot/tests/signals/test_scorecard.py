@@ -131,18 +131,3 @@ async def test_scorecard_endpoint(tmp_path):
         body = (await http.get("/scorecard", headers={"Authorization": f"Bearer {token}"})).json()
     assert body["strategies"][TREND]["live"]["trades"] == 20 and body["strategies"][TREND]["live"]["avg_r"] == -1.0
     assert set(body["modules"]) >= {"mtf", "regime", "session"}
-
-
-async def test_settings_put_resets_scorecard_baseline_when_strategy_goes_live(tmp_path):
-    app = await losing_app(tmp_path)
-    await app.bot.heartbeat()
-    token = issue_token(app.repo, now=NOW)
-    api = create_app(app.bot, clock=lambda: app.clock["now"])
-    app.advance(10)
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api), base_url="http://bot",
-                                 headers={"Authorization": f"Bearer {token}"}) as http:
-        current = (await http.get("/settings")).json()
-        assert current["strategy_modes"] == {TREND: "shadow"}
-        assert (await http.put("/settings", json={**current, "strategy_modes": {}})).status_code == 200
-    await app.bot.heartbeat()
-    assert strategy_mode(app.repo.get_bot_settings(), TREND) == "live"

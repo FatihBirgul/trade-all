@@ -107,7 +107,18 @@ def evaluate_all(provider, symbol: str, *, equity: float, risk_pct: float, commi
         return result
 
     first = run(active)
-    if first.candidate is not None or first.report is None:
+    if first.report is None:
+        return [first]
+    live = [s for s in active if modes.get(s, "live") == "live"]
+    if first.candidate is not None:
+        if first.mode == "live" or not live:
+            return [first]
+        # Yonlendirici golge (ya da duraklatilmis) bir strateji secti. O kaydedilir, ama canli
+        # stratejilerin sansi kesilmez: yalnizca canli olanlarla yeniden degerlendirilir. Ters yonlu
+        # bir aday kabul edilmez (golge strateji de olsa ters yon onayi V9'da sert vetodur).
+        second = run(live)
+        if second.candidate is not None and second.candidate.side == first.candidate.side:
+            return [first, second]
         return [first]
     routing = getattr(first.report, "routing", None) or {}
     if routing.get("status") != "selected":
@@ -115,6 +126,7 @@ def evaluate_all(provider, symbol: str, *, equity: float, risk_pct: float, commi
     routed = routing.get("strategy_id")
     others = [s.get("strategy_id") for s in getattr(first.report, "strategies", [])
               if s.get("status") == "CONFIRMED" and s.get("strategy_id") != routed and s.get("strategy_id") in active]
+    others.sort(key=lambda s: modes.get(s, "live") != "live")  # once canli stratejiler
     found = [result for result in (run([strategy]) for strategy in others[:MAX_EXTRA_STRATEGIES])
              if result.candidate is not None]
     return found[:1] or [first]

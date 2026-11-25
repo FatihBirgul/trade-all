@@ -74,8 +74,13 @@ class NewsCalendar:
         return value if isinstance(value, dict) else {}
 
     def events(self) -> list[NewsEvent]:
-        rows = self._stored().get("events") or []
-        return [NewsEvent(**row) for row in rows if isinstance(row, dict)]
+        events = []
+        for row in self._stored().get("events") or []:
+            try:  # bozuk ya da eski bicimli kayit taramayi durdurmamali
+                events.append(NewsEvent(**row))
+            except TypeError:
+                continue
+        return events
 
     def fetched_at(self) -> float | None:
         return self._stored().get("fetched_at")
@@ -92,12 +97,17 @@ class NewsCalendar:
         age = self.age()
         return age is None or age >= REFRESH_SECONDS
 
+    def never_fetched(self) -> bool:
+        return self.fetched_at() is None
+
     def stale(self) -> bool:
-        """24 saattir gecerli takvim alinamiyor mu? (Hic alinamadiysa ilk denemeden itibaren sayilir.)"""
+        """Gecerli bir takvim yok mu? Hic alinamadiysa hemen, alindiysa 24 saat yenilenemeyince.
+
+        Hic alinamamis takvim "eski" degil, YOKtur: haber penceresi korumasi calismaz ve kullanici
+        bunu 24 saat beklemeden (ve servis yeniden baslasa da) gormelidir.
+        """
         age = self.age()
-        if age is not None:
-            return age >= STALE_SECONDS
-        return self._first_attempt is not None and self._clock() - self._first_attempt >= STALE_SECONDS
+        return age is None or age >= STALE_SECONDS
 
     async def refresh(self) -> bool:
         now = self._clock()

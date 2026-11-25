@@ -91,11 +91,21 @@ async def test_garbage_response_is_a_failure_not_an_empty_calendar(tmp_path):
         assert len(calendar.events()) == 5
 
 
-async def test_never_fetched_becomes_stale_after_24h(tmp_path):
+async def test_never_fetched_calendar_is_stale_at_once(tmp_path):
+    """Hic alinamamis takvim 'eski' degil yoktur: koruma calismaz ve bu hemen gorulmelidir
+    (24 saat beklemeden; servis her gun yeniden baslasa da)."""
     def boom(request):
         raise httpx.ConnectError("no route")
     calendar, _, _, clock = make(tmp_path, boom)
+    assert calendar.stale() is True and calendar.never_fetched() is True
     assert await calendar.refresh() is False
-    assert calendar.stale() is False
-    clock["now"] += STALE_SECONDS + 1
     assert calendar.stale() is True
+
+
+async def test_corrupt_stored_event_does_not_break_reading(tmp_path):
+    calendar, repo, _, _ = make(tmp_path, lambda request: httpx.Response(200, json=[]))
+    repo.set_setting("news_calendar", {"fetched_at": 1.0, "events": [
+        {"currency": "USD", "title": "NFP", "at": 5.0, "impact": "high"},
+        {"currency": "USD", "title": "eksik alan"},
+        {"currency": "EUR", "title": "fazla alan", "at": 6.0, "impact": "high", "yeni": 1}, "bozuk"]})
+    assert [e.title for e in calendar.events()] == ["NFP"]

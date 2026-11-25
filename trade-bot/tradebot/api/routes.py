@@ -15,6 +15,7 @@ from . import auth
 from .models import (CloseAllRequest, CloseRequest, DeviceRequest, ManualTrade, PairRequest, PositionPatch,
                      ResumeRequest, StrategyModeRequest)
 
+MAX_LEVEL_DISTANCE = 0.5  # kullanici SL/TP seviyesi fiyattan en cok bu oranda uzak olabilir
 CLOSE_ALL_PHRASE = "CLOSE-ALL"
 HEARTBEAT_STALE = 120.0
 
@@ -84,11 +85,28 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
             raise HTTPException(status_code=404, detail="açık pozisyon bulunamadı")
         return trade
 
+    def _check_levels(trade, sl: float | None, tp: float | None) -> None:
+        """Kullanicinin verdigi SL/TP: yon ve akla yatkinlik. Yazim hatasi (binlik ayrac, eksik hane)
+        korumayi fiilen kaldirabilir; broker boyle bir seviyeyi kabul eder ve bot geri almaz."""
+        quote = bot.quotes.quote(trade.symbol)
+        reference = (quote["bid"] if trade.side == "BUY" else quote["ask"]) if quote else trade.entry
+        buy = trade.side == "BUY"
+        for name, value, below in (("SL", sl, buy), ("TP", tp, not buy)):
+            if value is None:
+                continue
+            if abs(value - reference) / reference > MAX_LEVEL_DISTANCE:
+                raise HTTPException(status_code=422,
+                                    detail=f"{name} {value:g} anlık fiyattan ({reference:g}) çok uzak; yazım hatası olabilir")
+            if (value >= reference) if below else (value <= reference):
+                side = "altında" if below else "üstünde"
+                raise HTTPException(status_code=422, detail=f"{name} anlık fiyatın ({reference:g}) {side} olmalı")
+
     @private.patch("/positions/{position_id}")
     async def patch_position(position_id: str, body: PositionPatch):
-        _open_trade(position_id)
+        trade = _open_trade(position_id)
         key = None
         if body.sl is not None or body.tp is not None:
+            _check_levels(trade, body.sl, body.tp)
             # Kullanicinin koydugu SL: bot bunu zarar yonune geri almaz (user_sl_override).
             key = await bot.executor.modify(position_id, sl=body.sl, tp=body.tp, user=True)
             if key is None:
@@ -203,9 +221,19 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
     @private.put("/settings")
     async def put_settings(body: BotSettings):
         previous = repo.get_bot_settings()
-        for strategy_id in v9.builtin_strategy_ids():
-            if strategy_mode(body, strategy_id) == "live" and strategy_mode(previous, strategy_id) != "live":
-                scorecard.mark_resumed(repo, strategy_id, clock())  # karne denetimi bu andan baslar
+        # Bir stratejiyi canliya almak gercek islem acar ve bilincli onay ister; bu yalnizca
+        # POST /strategies/{id}/mode (confirm=true) ile yapilir. Aksi halde eski bir ayar kopyasini
+        # geri gonderen istemci, botun duraklattigi stratejiyi farkinda olmadan yeniden acardi.
+        revived = sorted(s for s in v9.builtin_strategy_ids()
+                         if strategy_mode(body, s) == "live" and strategy_mode(previous, s) != "live")
+        if revived:
+            raise HTTPException(
+                status_code=409,
+                detail="strateji bu yoldan canlıya alınamaz (" + ", ".join(revived) + "); güncel ayarları "
+                       "yeniden okuyun ya da strateji kipini onaylayarak değiştirin")
+        unknown = sorted(set(body.strategy_modes) - v9.builtin_strategy_ids())
+        if unknown:
+            raise HTTPException(status_code=422, detail="bilinmeyen strateji: " + ", ".join(unknown))
         repo.set_bot_settings(body)
         repo.add_event("info", "settings_changed", "Ayarlar güncellendi", body.model_dump(mode="json"))
         await bot.settings_changed()  # canli moda ilk geciste kayip siniri tabani o andaki varliktan alinir
@@ -271,7 +299,10 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
             if not body.confirm:
                 raise HTTPException(status_code=409,
                                     detail="stratejiyi canlıya almak gerçek işlem açar; onay için confirm=true gönderin")
-            scorecard.mark_resumed(repo, strategy_id, clock())
+            if strategy_id in scorecard.paused(repo):
+                # Yalnizca botun duraklattigi strateji icin karne denetimi bu andan yeniden baslar.
+                # Hic duraklatilmamis stratejiyi kapatip acmak sayaci sifirlamaz.
+                scorecard.mark_resumed(repo, strategy_id, clock())
         settings.strategy_modes[strategy_id] = body.mode
         if settings.enabled_strategies is not None and body.mode != "off":
             settings.enabled_strategies.add(strategy_id)

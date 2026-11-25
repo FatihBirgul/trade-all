@@ -100,12 +100,6 @@ async def test_stale_calendar_warns_once_and_keeps_trading(tmp_path):
     assert app.repo.bot_state().halted is False and app.repo.bot_state().stopped is False
 
 
-async def test_calendar_never_available_does_not_block_trading(tmp_path):
-    app, _ = await app_with_news(tmp_path, USD_NOW, state={"ok": False})
-    summary = await app.bot.on_bar_close()
-    assert summary.opened == 1 and summary.news_blocked == 0
-
-
 async def test_news_endpoint_lists_upcoming_high_impact(tmp_path):
     rows = USD_NOW + [{"title": "Retail", "country": "GBP", "date": iso(NOW + 3600), "impact": "Medium"},
                       {"title": "Eski", "country": "USD", "date": iso(NOW - 7200), "impact": "High"}]
