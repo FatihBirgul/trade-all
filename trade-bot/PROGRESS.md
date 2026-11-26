@@ -371,3 +371,36 @@ olması algılanmıyor; hata yollarındaki gizli bilgi kalıpları `test_log_sec
 24 saat beklemez; sürekli bozuk bir işlem günlüğe her 2 saniyede iz yazmaz (ilk görülüşte bir kez); gölge işlemde
 mum listesinin ortasında 5 günden uzun veri boşluğu varsa da sonuç tahmin edilmez; kılavuzda geri yüklemeden sonra
 başlatma anı için uyarı.
+
+## Dry-run gözlemleri
+
+Kaynak: `deploy-trade-bot.yml` (`mode: status`) çıktısındaki `saglik:` ve `ozet:` satırları (son 24 saatlik pencere).
+Yalnızca sayılar ve nedenler; hesap bilgisi yok.
+
+### 2026-11-26 06:31 UTC (gece / Asya seansı sonu)
+
+- **Sağlık:** `status: ok`, akışlar bağlı, son tarama 06:30 UTC (30/30 sembol fiyatlı, hata 0), `failing_loops` boş,
+  yedek güncel (son yedek 00:08 UTC), `last_data_rejects` boş.
+- **Gece (22:48 → 06:31 UTC):** beklenen 31 taramanın 31'i yapıldı; yeni atlanan tarama ya da hata yok
+  (özetteki `stream_down: 10` ve `errors: 1` önceki günden, 22:48 okumasında da vardı).
+  Aday 9 → 49, "açılırdı" 3 → 7, gölge işlem 3 → 20.
+- **24 saat toplamı:** 67 tarama, 1931 sembol değerlendirmesi, 49 aday, 7 açılırdı, 0 emir (deneme modu),
+  20 gölge, 12 haber engeli, 0 portföy engeli.
+- **Kararlar:** WAIT 1332, STALE_DATA 354, INSUFFICIENT_DATA 229, NO_TRADE 9.
+- **Veto nedenleri:** uygun strateji yok 1228; eksik mum 128 (çoğu PR #14 öncesi; son taramada yok); üst zaman
+  dilimi yönü/tetik yok ya da çelişkili 86; bayat tick 30; karşıt strateji/fiyat kanıtı 18; `max_spread` eksik 17
+  (yeniden başlatma sonrası ısınma); spread politikayı aşıyor 8; yüksek oynaklık 1.
+- **"Açılırdı" örnekleri (hepsi net R/R 2.0):**
+
+  | UTC | Sembol | Yön | Strateji | Puan | Stop % | Risk % |
+  |---|---|---|---|---|---|---|
+  | 25 Kas 20:30 | AUDNZD | SELL | fx_failed_breakout_v6 | 59.1 | 0.076 | 0.24 |
+  | 26 Kas 01:30 | GBPCHF | SELL | fx_failed_breakout_v6 | 63.6 | 0.086 | 0.34 |
+  | 26 Kas 01:45 | AUDCAD | SELL | fx_failed_breakout_v6 | 63.6 | 0.182 | 0.36 |
+  | 26 Kas 03:45 | EURCAD | SELL | fx_trend_momentum_v6 | 90.9 | 0.042 | 0.50 |
+  | 26 Kas 03:45 | GBPCAD | SELL | fx_trend_momentum_v6 | 81.8 | 0.042 | 0.49 |
+
+- **Dikkat:** 03:45'teki iki işlem aynı anda, aynı yönde, CAD karşısında ve çok dar stopla (%0.04) çıktı; ikisi
+  birlikte ~%1 risk. Portföy engeli devreye girmedi (0). Canlıda birbirine bağlı iki pozisyonun aynı anda açılması
+  isteniyor mu, akşam kararında sorulacak. Bu işlemlerin sonucu (ne olurdu) özet uç noktasında yok; gölge karnesinden
+  ayrıca okunmalı.
