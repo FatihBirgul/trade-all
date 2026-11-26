@@ -60,3 +60,17 @@ def simulate(side: str, entry: float, stop: float, tp1: float, tp2: float, at: f
     last = to_r(after[-1]["close"]) if after else 0.0
     return {"first": first, "r": None, "open_r": round(realized + remaining * last, 3), "closed_at": None,
             "bars": len(after), "mfe_r": round(best, 2), "mae_r": round(worst, 2)}
+
+
+def shape(side: str, entry: float, stop: float, at: float, bars: list[dict]) -> dict:
+    """Islemin kurulusu: stop mesafesi (% ve ATR kati) ve girisin son kapanisa gore yeri.
+
+    `late_r` > 0: fiyat, sinyal mumunun kapanisindan girise kadar islem yonunde ilerlemis (gec giris).
+    """
+    risk = abs(entry - stop)
+    sign = 1.0 if side == "BUY" else -1.0
+    before = [b for b in bars if b["time"] + BAR_SECONDS <= at]
+    width = atr(before)
+    return {"stop_pct": round(risk / entry * 100.0, 4) if entry else None,
+            "stop_atr": round(risk / width, 2) if width else None,
+            "late_r": round((entry - before[-1]["close"]) * sign / risk, 3) if before and risk > 0 else None}

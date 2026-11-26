@@ -227,7 +227,9 @@ async def test_outcomes_report_r_results_without_account_data(tmp_path):
     signal = body["signals"][0]
     assert signal["symbol"] == "XAUUSD" and signal["side"] == "BUY" and signal["dry_run"] is True
     assert signal["result"] is not None and signal["result"]["bars"] >= 1
-    assert set(signal) == {"at", "symbol", "side", "strategy_id", "score", "dry_run", "result"}
+    assert set(signal) == {"at", "symbol", "side", "strategy_id", "score", "dry_run", "result", "stop_pct",
+                           "stop_atr", "late_r", "spread_r", "spread_now_r"}
+    assert signal["stop_atr"] > 0 and signal["spread_r"] > 0 and signal["spread_now_r"] > 0
     assert sum(row[1] for row in body["hourly"]) == 4  # dort tarama
     text = response.text
     for secret in ("123456", "10000", "lots", "risk_amount", "entry", "equity", "balance"):

@@ -826,7 +826,9 @@ class Bot:
         equity = self.account.equity if self.account is not None else 0.0
         data = {**dataclasses.asdict(candidate), "dry_run": settings.dry_run, "score": score, "votes": votes,
                 # Varliga oranla risk (%): tutarin kendisi bakiyeyi ele verir, oran vermez.
-                "risk_pct": round(candidate.risk_amount / equity * 100.0, 4) if equity > 0 else None}
+                "risk_pct": round(candidate.risk_amount / equity * 100.0, 4) if equity > 0 else None,
+                # Giristeki spread'in stop mesafesine orani: islemin pesin maliyeti (R cinsinden).
+                "spread_r": self._spread_r(candidate)}
         text = (f"{candidate.symbol} {candidate.side} {candidate.lots:g} lot @ {candidate.entry:g}, "
                 f"SL {candidate.stop_loss:g}, TP {candidate.take_profit_2:g} ({candidate.strategy_id})")
         if settings.dry_run:
@@ -1169,6 +1171,10 @@ class Bot:
         out["samples"] = out["samples"][-SUMMARY_SAMPLES:]
         return out
 
+    def _spread_r(self, candidate: Candidate) -> float | None:
+        spread, risk = self._spread(candidate.symbol), abs(candidate.entry - candidate.stop_loss)
+        return round(spread / risk, 4) if spread is not None and risk > 0 else None
+
     def dryrun_outcomes(self, hours: float = 48.0) -> dict:
         """Deneme modundaki "acilirdi" sinyallerinin ve sanal islemlerin sonucu + saatlik veri sagligi.
 
@@ -1207,15 +1213,23 @@ class Bot:
                 count = min(1500, int((now - event["at"]) // 900) + 40)
                 bars = self.candles.cached(str(data["symbol"]), "M15", count)
                 item["result"] = outcome.simulate(str(data["side"]), *levels, event["at"], bars, **rules)
+                item.update(outcome.shape(str(data["side"]), levels[0], levels[1], event["at"], bars))
+                spread = self._spread(str(data["symbol"]))
+                item["spread_r"] = data.get("spread_r")  # giristeki (eski kayitlarda yok)
+                item["spread_now_r"] = (round(spread / abs(levels[0] - levels[1]), 3)
+                                        if spread is not None and levels[0] != levels[1] else None)
             except (KeyError, TypeError, ValueError):
                 pass
             signals.append(item)
         shadows = [{"symbol": r[0], "side": r[1], "strategy_id": r[2], "reason": r[3],
                     "score": round(r[4], 1) if r[4] is not None else None, "opened_at": r[5], "closed_at": r[6],
-                    "result_r": round(r[7], 3) if r[7] is not None else None}
+                    "result_r": round(r[7], 3) if r[7] is not None else None,
+                    "stop_pct": round(abs(r[8] - r[9]) / r[8] * 100.0, 4) if r[8] else None,
+                    "target_r": round(abs(r[10] - r[8]) / abs(r[8] - r[9]), 2) if r[8] != r[9] else None,
+                    "spread_r": round(r[11] / abs(r[8] - r[9]), 3) if r[11] is not None and r[8] != r[9] else None}
                    for r in self.repo.conn.execute(
-                       "SELECT symbol, side, strategy_id, reason, score, opened_at, closed_at, result_r "
-                       "FROM shadow_trades WHERE opened_at >= ? ORDER BY opened_at", (since,))]
+                       "SELECT symbol, side, strategy_id, reason, score, opened_at, closed_at, result_r, "
+                       "entry, sl, tp, spread FROM shadow_trades WHERE opened_at >= ? ORDER BY opened_at", (since,))]
         return {"hours": round((now - since) / 3600.0, 2), "rules": rules, "signals": signals, "shadows": shadows,
                 "hourly": [[hour, *row.values()] for hour, row in sorted(hourly.items())]}
 
