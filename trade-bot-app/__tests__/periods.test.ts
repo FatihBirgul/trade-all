@@ -1,4 +1,5 @@
 import { currentPeriodPnl, periodKey } from "../src/bot/periods";
+import { centNote, majorText } from "../src/bot/presentation";
 
 const at = (iso: string) => Date.parse(iso) / 1000;
 
@@ -17,4 +18,16 @@ test("the current period comes from its bucket, never from the all-time total", 
   const periods = { bot: [], manual: [], all: [{ period: "2027-W01", pnl: 400 }, { period: "2027-W02", pnl: 100 }] };
   expect(currentPeriodPnl({ period: "week", periods }, at("2027-01-15T10:00:00Z"))).toBe(100);
   expect(currentPeriodPnl({ period: "week", periods }, at("2027-01-22T10:00:00Z"))).toBe(0); // bu hafta işlem yok
+});
+
+test("cent accounts show the major-currency equivalent; other accounts show nothing extra", () => {
+  expect(majorText(3000, "USC")).toBe("≈ 30,00 USD");
+  expect(majorText(303274, "USC")).toBe("≈ 3.032,74 USD");
+  expect(majorText(-360, "USC", true)).toBe("≈ −3,60 USD");
+  expect(majorText(1500, "EUC")).toBe("≈ 15,00 EUR");
+  expect(majorText(3000, "USD")).toBe("");
+  expect(majorText(null, "USC")).toBe("");
+  expect(majorText(3000, null)).toBe("");
+  expect(centNote("USC")).toBe("Tutarlar USC (cent) cinsindendir: 100 USC = 1 USD.");
+  expect(centNote("USD")).toBe("");
 });

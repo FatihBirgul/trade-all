@@ -1,0 +1,177 @@
+{
+ "events": [
+  {
+   "id": 6,
+   "at": 1800002700.0,
+   "level": "info",
+   "kind": "scan",
+   "message": "Tarama: 4 sembol, 0 aday, 0 emir",
+   "data": {
+    "at": 1800002700.0,
+    "scanned": 4,
+    "closed": 0,
+    "candidates": 0,
+    "opened": 0,
+    "blocked": 0,
+    "news_blocked": 0,
+    "observed": 0,
+    "shadowed": 0,
+    "errors": 0,
+    "skipped": null,
+    "quoted": 1,
+    "candle_retries": 0,
+    "would_open": 0,
+    "reasons": {
+     "PROVIDER_UNAVAILABLE": 3,
+     "NO_TRADE": 1
+    },
+    "blocked_reasons": {},
+    "veto_reasons": {
+     "provider unavailable: quote": 3,
+     "minimum lot exceeds risk budget": 1
+    },
+    "data_rejects": {
+     "BTCUSD": "provider unavailable: quote",
+     "EURUSD": "provider unavailable: quote",
+     "GBPUSD": "provider unavailable: quote"
+    }
+   }
+  },
+  {
+   "id": 5,
+   "at": 1800001800.0,
+   "level": "info",
+   "kind": "scan",
+   "message": "Tarama: 4 sembol, 0 aday, 0 emir",
+   "data": {
+    "at": 1800001800.0,
+    "scanned": 4,
+    "closed": 0,
+    "candidates": 0,
+    "opened": 0,
+    "blocked": 0,
+    "news_blocked": 0,
+    "observed": 0,
+    "shadowed": 0,
+    "errors": 0,
+    "skipped": null,
+    "quoted": 1,
+    "candle_retries": 0,
+    "would_open": 0,
+    "reasons": {
+     "PROVIDER_UNAVAILABLE": 3,
+     "NO_TRADE": 1
+    },
+    "blocked_reasons": {},
+    "veto_reasons": {
+     "provider unavailable: quote": 3,
+     "minimum lot exceeds risk budget": 1
+    },
+    "data_rejects": {
+     "BTCUSD": "provider unavailable: quote",
+     "EURUSD": "provider unavailable: quote",
+     "GBPUSD": "provider unavailable: quote"
+    }
+   }
+  },
+  {
+   "id": 4,
+   "at": 1800000900.0,
+   "level": "info",
+   "kind": "scan",
+   "message": "Tarama: 4 sembol, 0 aday, 0 emir",
+   "data": {
+    "at": 1800000900.0,
+    "scanned": 4,
+    "closed": 0,
+    "candidates": 0,
+    "opened": 0,
+    "blocked": 0,
+    "news_blocked": 0,
+    "observed": 0,
+    "shadowed": 0,
+    "errors": 0,
+    "skipped": null,
+    "quoted": 1,
+    "candle_retries": 0,
+    "would_open": 0,
+    "reasons": {
+     "PROVIDER_UNAVAILABLE": 3,
+     "NO_TRADE": 1
+    },
+    "blocked_reasons": {},
+    "veto_reasons": {
+     "provider unavailable: quote": 3,
+     "minimum lot exceeds risk budget": 1
+    },
+    "data_rejects": {
+     "BTCUSD": "provider unavailable: quote",
+     "EURUSD": "provider unavailable: quote",
+     "GBPUSD": "provider unavailable: quote"
+    }
+   }
+  },
+  {
+   "id": 3,
+   "at": 1800000000.0,
+   "level": "info",
+   "kind": "scan",
+   "message": "Tarama: 4 sembol, 0 aday, 0 emir",
+   "data": {
+    "at": 1800000000.0,
+    "scanned": 4,
+    "closed": 0,
+    "candidates": 0,
+    "opened": 0,
+    "blocked": 0,
+    "news_blocked": 0,
+    "observed": 0,
+    "shadowed": 0,
+    "errors": 0,
+    "skipped": null,
+    "quoted": 1,
+    "candle_retries": 0,
+    "would_open": 0,
+    "reasons": {
+     "PROVIDER_UNAVAILABLE": 3,
+     "NO_TRADE": 1
+    },
+    "blocked_reasons": {},
+    "veto_reasons": {
+     "provider unavailable: quote": 3,
+     "minimum lot exceeds risk budget": 1
+    },
+    "data_rejects": {
+     "BTCUSD": "provider unavailable: quote",
+     "EURUSD": "provider unavailable: quote",
+     "GBPUSD": "provider unavailable: quote"
+    }
+   }
+  },
+  {
+   "id": 2,
+   "at": 1800000000.0,
+   "level": "info",
+   "kind": "bot_started",
+   "message": "Bot başladı (sürüm 0.1.0, deneme modu): 4 sembol izleniyor",
+   "data": {
+    "universe": 4,
+    "catalog_errors": 0,
+    "dry_run": true,
+    "version": "0.1.0"
+   }
+  },
+  {
+   "id": 1,
+   "at": 1800000000.0,
+   "level": "info",
+   "kind": "capital_seen",
+   "message": "Deneme modu: hesapta okunan ilk varlık 3000.00 USC (bakiye 3000.00). Kayıp sınırı tabanı canlıya geçişte o andaki varlıktan alınacak.",
+   "data": {
+    "equity": 3000.0,
+    "balance": 3000.0,
+    "currency": "USC"
+   }
+  }
+ ]
+}

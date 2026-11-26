@@ -481,4 +481,46 @@ run([
     assert.match(await text(page, "report-totals"), /5,00 USD \/ 7,00 USD/);
     assert.match(await text(page, "report-totals"), /%80 \(4\/5\)/);
   }],
+  ["cent hesap: Panel gerçek hesabın biçimini gösterir (USC ve yanında ≈ USD)", async (page) => {
+    await mock(page, "cent_idle"); // gerçek hesabın büyüklüğü: 3000 USC, deneme modu
+    await pair(page);
+    assert.equal(fixture("cent_idle", "status").currency, "USC");
+    assert.match(await text(page, "equity"), /3\.000,00 USC/);
+    assert.match(await text(page, "equity-major"), /≈ 30,00 USD/);
+    assert.match(await page.getByTestId("screen-panel").innerText(), /Bakiye 3\.000,00 USC/);
+    assert.match(await text(page, "pnl-caption"), /100 USC = 1 USD/);
+    await shot(page, "29-cent-hesap-panel");
+    await page.getByTestId("go-live").click();
+    assert.match(await text(page, "confirm"), /3\.000,00 USC, ≈ 30,00 USD/);
+  }],
+  ["cent hesap: açık işlemler, raporlar ve elle işlem önizlemesi USC ve ≈ USD gösterir", async (page) => {
+    const preview = fixture("cent_active", "trade_preview").body;
+    await mock(page, "cent_active", { "POST /trades/preview": { body: preview } });
+    await pair(page);
+    assert.match(await text(page, "equity"), /303\.274,00 USC/);
+    assert.match(await text(page, "equity-major"), /≈ 3\.032,74 USD/);
+    assert.match(await text(page, "pnl-Bugün"), /\+3\.274,00/);
+    await shot(page, "30-cent-hesap-panel-canli");
+    await page.getByTestId("tab-positions").click();
+    assert.match(await page.getByTestId("screen-positions").innerText(), /−380,00 USC \(≈ −3,80 USD\)/);
+    await shot(page, "31-cent-hesap-pozisyonlar");
+    await page.getByTestId("tab-reports").click();
+    assert.match(await text(page, "report-pnl"), /\+3\.654,00 USC/);
+    assert.match(await text(page, "report-major"), /≈ \+36,54 USD/);
+    await shot(page, "32-cent-hesap-raporlar");
+    await page.getByTestId("tab-positions").click();
+    await page.getByTestId("new-trade").click();
+    await page.getByTestId("symbol-" + preview.symbol).click();
+    await page.getByLabel("Zarar durdurma mesafesi (zorunlu)").fill("4");
+    await page.getByTestId("preview").click();
+    assert.match(await text(page, "preview-card"), /USC/);
+    assert.match(await text(page, "preview-major"), /≈ .* USD/);
+  }],
+  ["USD hesapta ≈ karşılığı gösterilmez", async (page) => {
+    await mock(page, "live_active");
+    await pair(page);
+    await page.getByTestId("equity").waitFor();
+    assert.equal(await page.getByTestId("equity-major").count(), 0);
+    assert.doesNotMatch(await text(page, "pnl-caption"), /cent/);
+  }],
 ]);

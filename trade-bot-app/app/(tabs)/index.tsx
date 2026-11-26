@@ -4,7 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
 import { setStatusBarStyle } from "expo-status-bar";
 import { currentPeriodPnl } from "../../src/bot/periods";
-import { REAL_ACTION_NOTE, agoText, amountText, botStateText, pnlText, vetoText } from "../../src/bot/presentation";
+import { REAL_ACTION_NOTE, agoText, amountText, botStateText, centNote, majorText, pnlText, vetoText } from "../../src/bot/presentation";
 import { useBot } from "../../src/bot/state";
 import { useConfirm } from "../../src/ui/confirm";
 import { DataGate } from "../../src/ui/DataGate";
@@ -76,7 +76,7 @@ export default function Panel() {
   }
   async function goLive() {
     // Canlı mod gerçek para ile emir gönderir: iki ayrı onay.
-    const first = await confirm({ title: "Canlı moda geçilsin mi?", message: "Bot GERÇEK PARA ile emir göndermeye başlar ve kendi kararıyla işlem açar.\n\nKayıp sınırları şu anki varlık (" + amountText(status?.equity, currency) + ") üzerinden ölçülmeye başlar.", confirm: "Canlıya geçmek istiyorum", danger: true });
+    const first = await confirm({ title: "Canlı moda geçilsin mi?", message: "Bot GERÇEK PARA ile emir göndermeye başlar ve kendi kararıyla işlem açar.\n\nKayıp sınırları şu anki varlık (" + amountText(status?.equity, currency) + (majorText(status?.equity, currency) ? ", " + majorText(status?.equity, currency) : "") + ") üzerinden ölçülmeye başlar.", confirm: "Canlıya geçmek istiyorum", danger: true });
     if (first && (await confirm({ title: "Emin misiniz?", message: "Bu andan itibaren bot gerçek hesapta işlem açabilir.", confirm: "Evet, canlıya geç", danger: true })))
       await run(() => bot.api.setDryRun(false), "Canlı moda geçildi.");
   }
@@ -108,6 +108,7 @@ export default function Panel() {
         </View>
         <Text style={{ color: c.heroText, fontSize: 14, marginTop: 18 }}>Toplam varlık</Text>
         <Text testID="equity" style={{ color: c.white, fontSize: 40, fontWeight: "900", letterSpacing: -1 }}>{amountText(status.equity, currency)}</Text>
+        {majorText(status.equity, currency) ? <Text testID="equity-major" style={{ color: c.white, fontSize: 17, fontWeight: "700" }}>{majorText(status.equity, currency)}</Text> : null}
         <Text style={{ color: c.heroText, fontSize: 14 }}>Bakiye {amountText(status.balance, currency)} · Serbest {amountText(status.margin_free, currency)}</Text>
       </>
     ) : (
@@ -134,7 +135,7 @@ export default function Panel() {
                 </Card>
               ))}
             </View>
-            <T testID="pnl-caption" muted size={12} style={{ paddingHorizontal: 6 }}>Bugün, açık işlemlerin anlık kâr/zararını da içerir. Bu hafta ve bu ay yalnızca kapanan işlemlerdir (UTC takvimi).</T>
+            <T testID="pnl-caption" muted size={12} style={{ paddingHorizontal: 6 }}>Bugün, açık işlemlerin anlık kâr/zararını da içerir. Bu hafta ve bu ay yalnızca kapanan işlemlerdir (UTC takvimi).{centNote(currency) ? " " + centNote(currency) : ""}</T>
             {week.error || month.error ? <Notice text={"Hafta/ay kâr-zararı alınamadı: " + (week.error || month.error)} /> : null}
 
             <Card testID="bot-card">

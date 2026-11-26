@@ -22,7 +22,8 @@ kendi penceresiyle sorulur (`src/ui/confirm.tsx`).
 ## Yapı
 - `src/bot/`: sunucu istemcisi, durum yönetimi, doğrulama kuralları (ekrandan bağımsız; birim testleri `__tests__/`).
 - `src/ui/`: görsel bileşenler ve renkler (`theme.ts`).
-- `fixtures/`: **gerçek sunucu kodunun** ürettiği yanıtlar (borsa ve hesap sahte). Yeniden üretmek için:
+- `fixtures/`: **gerçek sunucu kodunun** ürettiği yanıtlar (borsa ve hesap sahte). `cent_idle` ve `cent_active`
+  gerçek hesap gibi cent (USC) hesaptır: tutarlar USC, yanında ≈ USD karşılığıyla gösterilir. Yeniden üretmek için:
   `cd ../trade-bot && .venv/bin/python tools/capture_app_fixtures.py ../trade-bot-app/fixtures`
 - `e2e/`: her ekranın bu yanıtlarla veri gösterdiğini kanıtlayan tarayıcı testleri; görüntüler `screenshots/`.
 
@@ -42,7 +43,7 @@ npm run typecheck && npm run lint && npm test
 ```bash
 npm run screens
 ```
-`npm run screens` web derlemesini alır, 34 ekran testini çalıştırır ve `screenshots/` klasörünü yeniler.
+`npm run screens` web derlemesini alır, 37 ekran testini çalıştırır ve `screenshots/` klasörünü yeniler.
 
 ## APK
 `.github/workflows/trade-bot-app.yml`: her itmede denetimler; commit mesajında `[apk]` varsa (ya da elle

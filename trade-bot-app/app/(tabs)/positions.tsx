@@ -3,7 +3,7 @@ import { Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { checkLevel, parsePrice } from "../../src/bot/levels";
-import { REAL_ACTION_NOTE, pnlText, priceText, rText } from "../../src/bot/presentation";
+import { REAL_ACTION_NOTE, majorText, pnlText, priceText, rText } from "../../src/bot/presentation";
 import { strategyName } from "../../src/bot/settingsForm";
 import { useBot } from "../../src/bot/state";
 import type { BotPosition, PositionPatch } from "../../src/bot/types";
@@ -163,7 +163,7 @@ export default function Positions() {
     <Screen
       testID="screen-positions"
       title="Pozisyonlar"
-      subtitle={ready ? (<T muted size={14}>{bot.positions.length} açık{bot.positions.length ? " · " : ""}{bot.positions.length ? (known ? <T weight="800" size={14} style={{ color: tone(openPnl) }}>{pnlText(openPnl, bot.status?.currency)}</T> : "anlık kâr/zarar bilinmiyor") : null}</T>) : undefined}
+      subtitle={ready ? (<T muted size={14}>{bot.positions.length} açık{bot.positions.length ? " · " : ""}{bot.positions.length ? (known ? <T weight="800" size={14} style={{ color: tone(openPnl) }}>{pnlText(openPnl, bot.status?.currency)}{majorText(openPnl, bot.status?.currency, true) ? " (" + majorText(openPnl, bot.status?.currency, true) + ")" : ""}</T> : "anlık kâr/zarar bilinmiyor") : null}</T>) : undefined}
       right={
         <Pressable testID="new-trade" accessibilityRole="button" accessibilityLabel="Elle işlem aç" onPress={() => router.push("/manual-trade")} style={{ width: 50, height: 50, borderRadius: 25, backgroundColor: c.hero, alignItems: "center", justifyContent: "center" }}>
           <Ionicons name="add" size={28} color={c.white} />

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { View } from "react-native";
-import { amountText, pnlText, priceText, timeText } from "../../src/bot/presentation";
+import { amountText, centNote, majorText, pnlText, priceText, timeText } from "../../src/bot/presentation";
 import { MODE_LABEL, strategyName } from "../../src/bot/settingsForm";
 import { useBot } from "../../src/bot/state";
 import type { ReportPeriod, Totals } from "../../src/bot/types";
@@ -34,6 +34,7 @@ export default function Reports() {
             <Card testID="report-totals">
               <T muted size={14}>Toplam kâr/zarar · tüm zamanlar</T>
               <T testID="report-pnl" weight="900" size={34} style={{ color: tone(data.totals.all.pnl) }}>{pnlText(data.totals.all.pnl, currency)}</T>
+              {majorText(data.totals.all.pnl, currency, true) ? <T testID="report-major" weight="700" size={15}>{majorText(data.totals.all.pnl, currency, true)} · {centNote(currency)}</T> : null}
               <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
                 <Pill label={data.totals.all.trades + " işlem"} />
                 <Pill label={"Kazanma " + rate(data.totals.all)} />

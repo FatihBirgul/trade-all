@@ -1,0 +1,448 @@
+{
+ "strategies": {
+  "fx_confirmed_breakout_v6": {
+   "mode": "live",
+   "paused": null,
+   "live": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   },
+   "shadow": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null
+   },
+   "shadow_by_reason": {
+    "shadow": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "low_score": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "paused": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    }
+   },
+   "shadow_since_pause": null
+  },
+  "fx_failed_breakout_v6": {
+   "mode": "live",
+   "paused": null,
+   "live": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   },
+   "shadow": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null
+   },
+   "shadow_by_reason": {
+    "shadow": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "low_score": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "paused": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    }
+   },
+   "shadow_since_pause": null
+  },
+  "fx_range_reversion_v6": {
+   "mode": "live",
+   "paused": null,
+   "live": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   },
+   "shadow": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null
+   },
+   "shadow_by_reason": {
+    "shadow": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "low_score": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "paused": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    }
+   },
+   "shadow_since_pause": null
+  },
+  "fx_trend_momentum_v6": {
+   "mode": "live",
+   "paused": null,
+   "live": {
+    "trades": 1,
+    "wins": 1,
+    "win_rate": 1.0,
+    "avg_r": 2.506172839506173,
+    "profit_factor": null
+   },
+   "shadow": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null
+   },
+   "shadow_by_reason": {
+    "shadow": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "low_score": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "paused": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    }
+   },
+   "shadow_since_pause": null
+  },
+  "tb_donchian_breakout_v1": {
+   "mode": "shadow",
+   "paused": null,
+   "live": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   },
+   "shadow": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null
+   },
+   "shadow_by_reason": {
+    "shadow": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "low_score": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "paused": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    }
+   },
+   "shadow_since_pause": null
+  },
+  "tb_ema_pullback_v1": {
+   "mode": "shadow",
+   "paused": null,
+   "live": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   },
+   "shadow": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null
+   },
+   "shadow_by_reason": {
+    "shadow": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "low_score": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "paused": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    }
+   },
+   "shadow_since_pause": null
+  }
+ },
+ "modules": {
+  "mtf": {
+   "support": {
+    "trades": 1,
+    "wins": 1,
+    "win_rate": 1.0,
+    "avg_r": 2.506172839506173,
+    "profit_factor": null
+   },
+   "against": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   },
+   "abstain": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   }
+  },
+  "regime": {
+   "support": {
+    "trades": 1,
+    "wins": 1,
+    "win_rate": 1.0,
+    "avg_r": 2.506172839506173,
+    "profit_factor": null
+   },
+   "against": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   },
+   "abstain": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   }
+  },
+  "candle_pattern": {
+   "support": {
+    "trades": 1,
+    "wins": 1,
+    "win_rate": 1.0,
+    "avg_r": 2.506172839506173,
+    "profit_factor": null
+   },
+   "against": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   },
+   "abstain": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   }
+  },
+  "chart_pattern": {
+   "support": {
+    "trades": 1,
+    "wins": 1,
+    "win_rate": 1.0,
+    "avg_r": 2.506172839506173,
+    "profit_factor": null
+   },
+   "against": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   },
+   "abstain": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   }
+  },
+  "structure": {
+   "support": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   },
+   "against": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   },
+   "abstain": {
+    "trades": 1,
+    "wins": 1,
+    "win_rate": 1.0,
+    "avg_r": 2.506172839506173,
+    "profit_factor": null
+   }
+  },
+  "momentum": {
+   "support": {
+    "trades": 1,
+    "wins": 1,
+    "win_rate": 1.0,
+    "avg_r": 2.506172839506173,
+    "profit_factor": null
+   },
+   "against": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   },
+   "abstain": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   }
+  },
+  "confluence": {
+   "support": {
+    "trades": 1,
+    "wins": 1,
+    "win_rate": 1.0,
+    "avg_r": 2.506172839506173,
+    "profit_factor": null
+   },
+   "against": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   },
+   "abstain": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   }
+  },
+  "other_strategies": {
+   "support": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   },
+   "against": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   },
+   "abstain": {
+    "trades": 1,
+    "wins": 1,
+    "win_rate": 1.0,
+    "avg_r": 2.506172839506173,
+    "profit_factor": null
+   }
+  },
+  "session": {
+   "support": {
+    "trades": 1,
+    "wins": 1,
+    "win_rate": 1.0,
+    "avg_r": 2.506172839506173,
+    "profit_factor": null
+   },
+   "against": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   },
+   "abstain": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   }
+  }
+ },
+ "totals": {
+  "trades": 1,
+  "wins": 1,
+  "win_rate": 1.0,
+  "avg_r": 2.506172839506173,
+  "profit_factor": null
+ }
+}

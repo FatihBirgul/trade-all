@@ -3,7 +3,7 @@ import { Pressable, View } from "react-native";
 import * as Crypto from "expo-crypto";
 import { parsePrice } from "../src/bot/levels";
 import { PREVIEW_MAX_AGE_MS, RISK_PCT_MAX, RISK_PCT_MIN, clearPending, loadPending, previewMatches, resultNotice, sameRequest, savePending, type PendingTrade } from "../src/bot/manualTrade";
-import { REAL_ACTION_NOTE, amountText, priceText } from "../src/bot/presentation";
+import { REAL_ACTION_NOTE, amountText, majorText, priceText } from "../src/bot/presentation";
 import { useBot } from "../src/bot/state";
 import type { BotSymbol, PreviewRequest, TradePreview, TradeRequest } from "../src/bot/types";
 import { useConfirm } from "../src/ui/confirm";
@@ -273,6 +273,7 @@ export default function ManualTrade() {
                 <Row name="En çok zarar" value={"−" + amountText(preview.data.loss, preview.data.currency) + (preview.data.loss_pct != null ? " (%" + priceText(Math.round(preview.data.loss_pct * 100) / 100) + ")" : "")} color={c.down} />
                 {preview.data.profit != null ? <Row name="Hedefte kâr" value={"+" + amountText(preview.data.profit, preview.data.currency)} color={c.up} /> : null}
                 {preview.data.rr != null ? <Row name="Kâr / zarar oranı" value={priceText(preview.data.rr)} /> : null}
+                {majorText(preview.data.loss, preview.data.currency) ? <T testID="preview-major" muted size={13}>En çok zarar {majorText(preview.data.loss, preview.data.currency)}{preview.data.profit != null ? ", hedefte kâr " + majorText(preview.data.profit, preview.data.currency) : ""}.</T> : null}
                 {preview.data.warnings.map((warning) => <Notice key={warning} text={warning} />)}
                 <Button testID="send" title="Emri gönder" icon="send" onPress={() => void confirmSend()} busy={busy} disabled={locked} />
               </Card>

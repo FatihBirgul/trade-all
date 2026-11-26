@@ -36,9 +36,9 @@ async def next_bar(app):
     return summary
 
 
-async def dry_idle(folder):
+async def dry_idle(folder, **account):
     """Bugunku uretim durumu: deneme modu, taramalar yapiliyor, pozisyon ve kapanmis islem yok."""
-    app = await started(folder, dry_run=True)
+    app = await started(folder, dry_run=True, **account)
     await app.bot.on_bar_close()
     for _ in range(3):
         await next_bar(app)
@@ -46,9 +46,9 @@ async def dry_idle(folder):
     return app
 
 
-async def live_active(folder):
+async def live_active(folder, **account):
     """Canli: bir bot islemi karla kapandi, bir bot islemi ve bir elle islem acik."""
-    app = await started(folder)
+    app = await started(folder, **account)
     await app.bot.on_bar_close()
     await app.fake.flush()
     trade = app.repo.open_trades("bot")[0]
@@ -99,9 +99,14 @@ async def capture(app, target: Path):
 
 
 async def main(out: Path):
-    for name, build in (("dry_idle", dry_idle), ("live_active", live_active)):
+    # Cent hesap (USC; 100 USC = 1 USD): gercek hesap boyledir. `cent_idle` gercek hesabin buyuklugunde (3000 USC),
+    # deneme modunda. `cent_active` islem acilabilsin diye buyuk bir cent hesaptir (en kucuk lot kucuk hesaba sigmaz).
+    scenarios = (("dry_idle", dry_idle, {}), ("live_active", live_active, {}),
+                 ("cent_idle", dry_idle, {"currency": "USC", "balance": 3_000.0}),
+                 ("cent_active", live_active, {"currency": "USC", "balance": 300_000.0}))
+    for name, build, account in scenarios:
         with tempfile.TemporaryDirectory() as folder:
-            app = await build(Path(folder))
+            app = await build(Path(folder), **account)
             await capture(app, out / name)
             app.repo.close()
             print(name, "ok")

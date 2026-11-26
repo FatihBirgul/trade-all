@@ -87,3 +87,15 @@ const VETO: [RegExp, string][] = [
   [/reward\/risk/, "kâr/zarar oranı yetersiz"],
 ];
 export const vetoText = (reason: string): string => VETO.find(([pattern]) => pattern.test(reason))?.[1] ?? reason;
+
+// Cent hesaplar (Exness): tutarlar ana para biriminin yüzde biri cinsindendir (100 USC = 1 USD).
+export const CENT_CURRENCY: Record<string, string> = { USC: "USD", EUC: "EUR", GBC: "GBP" };
+export const isCent = (currency: string | null | undefined): boolean => !!currency && currency in CENT_CURRENCY;
+// Cent hesapta tutarın ana para birimindeki karşılığı: "≈ 30,00 USD". Cent hesap değilse boş metin.
+export function majorText(value: number | null | undefined, currency: string | null | undefined, signed = false): string {
+  if (value == null || !Number.isFinite(value) || !currency || !isCent(currency)) return "";
+  const major = CENT_CURRENCY[currency];
+  return "≈ " + (signed ? pnlText(value / 100, major) : amountText(value / 100, major));
+}
+export const centNote = (currency: string | null | undefined): string =>
+  currency && isCent(currency) ? "Tutarlar " + currency + " (cent) cinsindendir: 100 " + currency + " = 1 " + CENT_CURRENCY[currency] + "." : "";

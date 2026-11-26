@@ -1,0 +1,26 @@
+{
+ "status": 200,
+ "body": {
+  "symbol": "XAUUSD",
+  "side": "BUY",
+  "entry": 2024.1000000000001,
+  "sl": 2020.0500000000002,
+  "tp": 2032.2,
+  "lots": 0.01,
+  "suggested_lots": 0.0,
+  "loss": 404.9999999999955,
+  "profit": 809.9999999999909,
+  "loss_pct": 13.49999999999985,
+  "rr": 2.0,
+  "risk_pct": 0.5,
+  "settings_risk_pct": 0.5,
+  "currency": "USC",
+  "volume_min": 0.01,
+  "volume_step": 0.01,
+  "volume_max": 200.0,
+  "warnings": [
+   "Hesap küçük: en küçük lot (0.01) bile risk sınırınızı aşıyor",
+   "Bu lotla zarar, risk sınırınızın (%0.5) üstünde"
+  ]
+ }
+}
