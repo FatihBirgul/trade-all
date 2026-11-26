@@ -109,6 +109,32 @@ def _closed(history: History, symbol: str, tf: str, now: float, count: int) -> l
 
 
 # ---------------------------------------------------------------- A) swing ailesi
+def max_cost_of(job: dict) -> float | None:
+    """Isteki maliyet siniri (yuzde) -> oran; alan yoksa kapi uygulanmaz."""
+    value = job.get("max_spread_stop_pct")
+    return float(value) / 100.0 if value else None
+
+
+class CostGate:
+    """Maliyet kapisi + tekrar ayiklama. Kapiya takilan bir kurulum acilmadigi icin sonraki mumlarda yeniden
+    sinyal verir; her tekrar ayri bir "kaybedilen islem" sayilirsa sayi siser. Bu yuzden takilan islem sanal olarak
+    izlenir: o kapanana kadar ayni anahtarin (strateji / sembol) yeni TAKILAN sinyalleri kaydedilmez. Kapidan
+    gecen bir sinyal ise her zaman alinir."""
+
+    def __init__(self, max_cost: float | None):
+        self.max_cost = max_cost
+        self._until: dict[str, float] = {}
+
+    def blocks(self, ratio: float) -> bool:
+        return self.max_cost is not None and ratio > self.max_cost
+
+    def repeat(self, key: str, now: float) -> bool:
+        return now < self._until.get(key, 0.0)
+
+    def record(self, key: str, closed_at: float | None) -> None:
+        self._until[key] = closed_at if closed_at is not None else float("inf")
+
+
 def h4_state(history: History, symbol: str):
     """`an` -> o anda kapanmis 4H mumlarindan ATR ve son ONAYLI donus noktalari (iz suren stop icin)."""
     bars = history.all(symbol, "H4")
@@ -153,6 +179,7 @@ def swing_trades(symbol: str, kind: str, history: History, spreads: Spreads, sta
     ayni stratejinin sonraki sinyalini engellemez (gercekte acilmayacagi icin)."""
     active = [m for m in modules("strategy") if m.id in SWING_IDS + PLAN_IDS + FIXED_IDS]
     state = h4_state(history, symbol)
+    gate = CostGate(max_cost)
     m15_all = history.all(symbol, "M15")
     trades: list[dict] = []
     open_until = {m.id: 0.0 for m in active}
@@ -186,6 +213,9 @@ def swing_trades(symbol: str, kind: str, history: History, spreads: Spreads, sta
             risk = (entry - signal.stop) * sign
             if risk <= 0:
                 continue
+            blocked = gate.blocks(spread / risk)
+            if blocked and gate.repeat(module.id, now):
+                continue  # ayni takilan kurulumun tekrari: bir kez sayilir
             after = m15_all[index + 1:index + 1 + outcome.SWING_MAX_BARS]
             spread_at = lambda moment: spreads.at(symbol, moment)  # noqa: E731
             results, extra = {}, {}
@@ -213,11 +243,11 @@ def swing_trades(symbol: str, kind: str, history: History, spreads: Spreads, sta
                          "volume_ratio": signal.plan.get("volume_ratio"), "stretch": signal.plan.get("stretch"),
                          "weekend": (int(now // DAY) + 3) % 7 >= 5, "exit": result["first"]}  # 1970-01-01 persembe
             daily = atr(upper["D1"])
-            blocked = max_cost is not None and spread / risk > max_cost
             trades.append({"strategy_id": module.id, "symbol": symbol, "side": signal.side, "at": now,
                            "results": results, "spread_r": round(spread / risk, 4), "cost_blocked": blocked,
                            "stop_daily_atr": round(risk / daily, 2) if daily else None, **extra})
             if blocked:
+                gate.record(module.id, reference)
                 continue  # islem acilmadi: strateji bu sembolde mesgul sayilmaz
             open_until[module.id] = reference if reference is not None else float("inf")
     return trades
@@ -287,7 +317,8 @@ def _swing_periods(rows: list[dict], split: float, target) -> dict:
 
 
 def cost_gate(everything: list[dict], key) -> dict:
-    """Maliyet kapisina takilan islemler: sayi, oran ve acilsalardi sonuclari (R)."""
+    """Maliyet kapisina takilan islemler: sayi, oran ve acilsalardi sonuclari (R). Tekrarlar ayiklanmistir
+    (bkz. `CostGate`): `blocked`, art arda gelen ayni kurulumu bir kez sayar."""
     blocked = sorted((t for t in everything if t.get("cost_blocked")), key=lambda t: t["at"])
     return {"signals": len(everything), "blocked": len(blocked),
             "blocked_pct": round(100.0 * len(blocked) / len(everything), 1) if everything else None,
@@ -412,7 +443,7 @@ def v9_symbol(args: tuple) -> dict:
 
     provider = Provider(backtest._Catalog([instrument]), backtest._Candles(history, clock), Quotes(), lambda: account)
     start, end, deadline = job["v9_start"], job["end"], job["deadline"]
-    max_cost = float(job["max_spread_stop_pct"]) / 100.0 if job.get("max_spread_stop_pct") else None
+    gate = CostGate(max_cost_of(job))
     m15 = history.all(symbol, "M15")
     trades, evaluations, errors, open_until, done = [], 0, 0, 0.0, True
     for index, bar in enumerate(m15):
@@ -434,6 +465,10 @@ def v9_symbol(args: tuple) -> dict:
         c = candidates[0]
         sign = 1.0 if c.side == "BUY" else -1.0
         spread = spreads.at(symbol, clock.now)
+        risk = abs(c.entry - c.stop_loss)
+        blocked = bool(risk > 0 and gate.blocks(spread / risk))
+        if blocked and gate.repeat(symbol, clock.now):
+            continue  # ayni takilan kurulumun tekrari: bir kez sayilir
         before = m15[max(0, index - 40):index + 1]
         base = outcome.simulate(c.side, c.entry, c.stop_loss, c.take_profit_1, c.take_profit_2, clock.now,
                                 before + m15[index + 1:index + 1 + backtest.MAX_HOLD_BARS], spread=spread, **job["rules"])
@@ -449,7 +484,6 @@ def v9_symbol(args: tuple) -> dict:
         if base is None:
             errors += 1
             continue
-        blocked = bool(max_cost is not None and risk > 0 and spread / risk > max_cost)
         trades.append({"strategy_id": c.strategy_id, "symbol": symbol, "side": c.side, "at": clock.now,
                        "cost_blocked": blocked,
                        "r": base["r"], "closed_at": base["closed_at"], "open_r": base.get("open_r"),
@@ -457,7 +491,9 @@ def v9_symbol(args: tuple) -> dict:
                        "wide_open_r": wide.get("open_r") if wide else None,
                        "wide_open": wide is not None and wide["r"] is None,
                        "spread_r": round(spread / risk, 4) if risk > 0 else None})
-        if not blocked:  # kapiya takilan islem acilmadi: sembol mesgul sayilmaz
+        if blocked:  # kapiya takilan islem acilmadi: sembol mesgul sayilmaz
+            gate.record(symbol, base["closed_at"])
+        else:
             open_until = base["closed_at"] if base["closed_at"] is not None else float("inf")
     return {"symbol": symbol, "done": done, "trades": trades, "evaluations": evaluations, "errors": errors}
 
@@ -489,7 +525,7 @@ def run_job(job_path: Path, pool_factory=None) -> dict:
     began = time.time()
     signature = f"{VERSION}:{job['v9_start']}:{job['end']}:{job.get('max_spread_stop_pct')}"
     # A asamasinin imzasi girdileri de kapsar: semboller ya da spread profili degisirse yeniden hesaplanir.
-    max_cost = float(job["max_spread_stop_pct"]) / 100.0 if job.get("max_spread_stop_pct") else None
+    max_cost = max_cost_of(job)
     inputs = hashlib.sha1(json.dumps([symbols, job["spreads"], job["start"], max_cost],
                                      sort_keys=True).encode()).hexdigest()[:12]
     # A asamasi (swing + WEEK TRADE yeniden uretimi) ayni pencere icin bir kez hesaplanir; V9 turlari yeniden kullanir.

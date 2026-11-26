@@ -698,3 +698,12 @@ mumluk, canlı 120 mumluk pencere kullanır (sentetik veride 245 sinyalin 4'ü f
    Test kurulumunda ortak sahte piyasanın oranı ~%17 olduğundan testler %25 ile başlar; kapının kendisi
    `tests/test_cost_gate.py`'de varsayılanla sınanır.
 2. **Lot tavanları** (%5 stop zararı, 50 kat varlık) onaylandı; değişmedi.
+
+**Bağımsız inceleme (PR #27):** kritik bulgu yok; canlı kapı her emir ve gölge yolundan önce, atlanamıyor,
+hiçbir şeyi gevşetmiyor, elle işlemleri etkilemiyor. Düzeltilen: ileri testte kapıya takılan aynı kurulum her
+mumda yeniden sayılıyordu ("kaybedilen işlem" sayısı şişiyordu); artık takılan işlem sanal olarak izlenir ve
+kapanana kadar aynı strateji/sembolün takılan tekrarları sayılmaz (`forward.CostGate`). Eklenen testler: fiyat
+bilinmiyorsa aday geçmez; yüzde → oran dönüşümü; tekrar ayıklama. Bilinen sınırlar: canlı özetteki `cost_blocked`
+tarama başına ADAY sayar (aynı kurulum art arda taramalarda yeniden sayılır; `candidates` de böyle sayılır);
+kapı sayıları uygulamada henüz gösterilmiyor (yalnızca özet uçlarında); sınır değiştirilirse ileri testin V9
+aşaması baştan hesaplanır.

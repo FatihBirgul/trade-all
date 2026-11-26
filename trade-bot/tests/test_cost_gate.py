@@ -101,8 +101,9 @@ def test_forward_test_totals_exclude_blocked_trades_and_report_what_the_gate_rem
     assert v9["all"]["cost_gate"]["would_have"]["sum_r"] == -1.0
 
 
-def test_blocked_signal_does_not_keep_the_strategy_busy():
-    """Kapiya takilan islem acilmadigi icin ayni stratejinin sonraki sinyali alinabilir."""
+def test_blocked_setups_are_counted_once_and_never_overlap():
+    """Kapiya takilan kurulum acilmadigi icin sonraki mumlarda yeniden sinyal verir; tekrarlar AYRI islem sayilmaz.
+    Takilan islemler ust uste binmeyen bir dizi olusturur ("kaybedilen islem" sayisi sismez)."""
     from tests.signals.market_gen import T0, market
     from tradebot import backtest
     history = backtest.History()
@@ -114,7 +115,44 @@ def test_blocked_signal_does_not_keep_the_strategy_busy():
     free = [t for t in forward.swing_trades("X", "forex", history, tight, start, end) if t["strategy_id"] in ids]
     gated = [t for t in forward.swing_trades("X", "forex", history, tight, start, end, 0.15) if t["strategy_id"] in ids]
     blocked = [t for t in gated if t["cost_blocked"]]
-    assert blocked and all(t["spread_r"] > 0.15 for t in blocked)
-    assert all(t["spread_r"] <= 0.15 for t in gated if not t["cost_blocked"])
-    assert len(gated) > len(free)  # engellenen islemler stratejiyi mesgul etmedigi icin daha cok sinyal goruldu
-    assert not any(t.get("cost_blocked") for t in free)
+    opened = [t for t in gated if not t["cost_blocked"]]
+    assert blocked and opened and all(t["spread_r"] > 0.15 for t in blocked)
+    assert all(t["spread_r"] <= 0.15 for t in opened) and not any(t.get("cost_blocked") for t in free)
+    for rows in (blocked, opened):  # iki dizi de kendi icinde ust uste binmez
+        for previous, current in zip(rows, rows[1:]):
+            closed = previous["results"][forward.PLAN_KEY][1]
+            assert closed is not None and current["at"] >= closed
+    over = sum(1 for t in free if t["spread_r"] > 0.15)
+    assert len(blocked) <= over * 1.5 + 3  # tekrarlar sayilsaydi bu sayinin iki katindan fazlasi cikardi
+
+
+def test_gate_helper_units_and_percent_conversion():
+    assert forward.max_cost_of({"max_spread_stop_pct": 15}) == 0.15 and forward.max_cost_of({}) is None
+    gate = forward.CostGate(0.15)
+    assert gate.blocks(0.1501) and not gate.blocks(0.15) and not forward.CostGate(None).blocks(9.0)
+    assert not gate.repeat("a", 100.0)
+    gate.record("a", 500.0)
+    assert gate.repeat("a", 499.0) and not gate.repeat("a", 500.0) and not gate.repeat("b", 100.0)
+    gate.record("a", None)  # sonuclanmayan sanal islem: veri sonuna kadar tekrar sayilmaz
+    assert gate.repeat("a", 1e12)
+
+
+async def test_candidate_is_blocked_when_the_spread_is_unknown(tmp_path):
+    """Fiyat (spread) bilinmiyorsa maliyet olculemez: aday GECMEZ."""
+    from tradebot.signals.adapter import Candidate, Evaluation
+    app = await started(tmp_path)
+    await app.bot.on_bar_close()
+    entry = app.bot.quotes.quote("XAUUSD")["ask"]
+    candidate = Candidate(symbol="XAUUSD", side="BUY", entry=entry, stop_loss=entry - 20.0, take_profit_1=entry + 40.0,
+                          take_profit_2=entry + 60.0, lots=0.01, strategy_id="fx_trend_momentum_v6",
+                          setup_id="fiyatsiz-aday", net_rr=2.0, analysis_id="b" * 64, risk_amount=20.0)
+    from tradebot.app import ScanSummary
+    known, unknown = ScanSummary(at=app.clock["now"]), ScanSummary(at=app.clock["now"])
+    settings = app.repo.get_bot_settings()
+    instrument = app.bot.catalog.get("XAUUSD")
+    before = len(app.fake.requests)
+    app.bot.quotes._last.clear()
+    await app.bot._consider(Evaluation("XAUUSD", "BUY_CANDIDATE", ("test",), candidate, None, mode="live"), instrument,
+                            settings, unknown)
+    assert unknown.cost_blocked == 1 and unknown.opened == 0 and len(app.fake.requests) == before
+    assert isinstance(known.cost_blocked, int)
