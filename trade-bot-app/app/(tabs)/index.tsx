@@ -1,6 +1,9 @@
-import React, { useRef, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "expo-router";
+import { setStatusBarStyle } from "expo-status-bar";
+import { currentPeriodPnl } from "../../src/bot/periods";
 import { REAL_ACTION_NOTE, agoText, amountText, botStateText, pnlText, vetoText } from "../../src/bot/presentation";
 import { useBot } from "../../src/bot/state";
 import { useConfirm } from "../../src/ui/confirm";
@@ -21,6 +24,13 @@ export default function Panel() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ text: string; bad: boolean } | null>(null);
   const running = useRef(false); // çift dokunuş aynı isteği iki kez göndermesin
+  // Panel'in üstü koyu renklidir: bu sekme görünürken durum çubuğu simgeleri açık olur.
+  useFocusEffect(
+    useCallback(() => {
+      setStatusBarStyle("light");
+      return () => setStatusBarStyle("dark");
+    }, []),
+  );
   const status = bot.status;
   const currency = status?.currency;
 
@@ -81,8 +91,9 @@ export default function Panel() {
   const nowSeconds = status?.server_time ?? (bot.lastOkAt ?? 0) / 1000;
   const periods: [string, number | null | undefined, boolean][] = [
     ["Bugün", status?.pnl_today.total, false],
-    ["Bu hafta", week.data?.totals.all.pnl, week.loading && !week.data],
-    ["Bu ay", month.data?.totals.all.pnl, month.loading && !month.data],
+    // Raporun `totals` alanı tüm zamanların toplamıdır; bu hafta / bu ay kendi kovasından okunur.
+    ["Bu hafta", week.data ? currentPeriodPnl(week.data, nowSeconds) : null, week.loading && !week.data],
+    ["Bu ay", month.data ? currentPeriodPnl(month.data, nowSeconds) : null, month.loading && !month.data],
   ];
   const openPnl = bot.positions.reduce((sum, position) => sum + (position.unrealized_pnl ?? 0), 0);
   const activity = summary.data;
@@ -123,20 +134,21 @@ export default function Panel() {
                 </Card>
               ))}
             </View>
+            <T testID="pnl-caption" muted size={12} style={{ paddingHorizontal: 6 }}>Bugün, açık işlemlerin anlık kâr/zararını da içerir. Bu hafta ve bu ay yalnızca kapanan işlemlerdir (UTC takvimi).</T>
             {week.error || month.error ? <Notice text={"Hafta/ay kâr-zararı alınamadı: " + (week.error || month.error)} /> : null}
 
             <Card testID="bot-card">
               <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
                 <IconBubble icon={status.halted || status.stopped ? "pause" : "pulse"} color={stateColor} bg={stateSoft} />
                 <View style={{ flex: 1 }}>
-                  <T testID="bot-state" weight="800" size={18}>{state.label}</T>
+                  <T testID="bot-state" weight="800" size={18} style={bot.heartbeatStale ? { color: c.down } : undefined}>{bot.heartbeatStale ? "Bot yanıt vermiyor (son bilinen: " + state.label + ")" : state.label}</T>
                   <T muted size={13}>Son tarama {agoText(status.last_scan_at, nowSeconds)} · Exness {status.stream_connected ? "bağlı" : "kopuk"}</T>
                 </View>
               </View>
               <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
                 <Pill label={status.open_bot + " bot işlemi"} />
                 <Pill label={status.open_manual + " elle işlem"} />
-                {bot.positions.length ? <Pill label={pnlText(openPnl, null) + " açık"} color={tone(openPnl)} bg={soft(openPnl)} /> : null}
+                {bot.positions.length && bot.positions.every((position) => position.unrealized_pnl != null) ? <Pill label={pnlText(openPnl, null) + " açık"} color={tone(openPnl)} bg={soft(openPnl)} /> : null}
               </View>
               {status.halted || status.stopped ? (
                 <Button testID="resume" title="Botu devam ettir" icon="play" onPress={() => void resume()} busy={busy} />
@@ -153,7 +165,8 @@ export default function Panel() {
                 <>
                   <T size={15}>
                     <T weight="900">{activity.scans}</T> tarama yaptı, <T weight="900">{activity.candidates}</T> aday buldu,{" "}
-                    {activity.dry_run ? (<><T weight="900">{activity.would_open}</T> işlem açardı (deneme modu).</>) : (<><T weight="900">{activity.opened}</T> işlem açtı.</>)}
+                    {activity.opened > 0 || !activity.dry_run ? (<><T weight="900">{activity.opened}</T> işlem açtı{activity.would_open > 0 ? ", " : "."}</>) : null}
+                    {activity.would_open > 0 || (activity.dry_run && activity.opened === 0) ? (<><T weight="900">{activity.would_open}</T> işlem açardı (deneme modu).</>) : null}
                     {" "}{activity.shadowed} gölge kayıt, {activity.news_blocked} haber beklemesi.
                   </T>
                   {vetoes.length ? <T muted size={13}>En sık bekleme nedenleri: {vetoes.map(([reason, count]) => vetoText(reason) + " (" + count + ")").join(" · ")}</T> : null}

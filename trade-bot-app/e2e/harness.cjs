@@ -36,6 +36,7 @@ async function mock(page, scenario, overrides = {}) {
     const reply = (status, body) => route.fulfill({ status, headers: CORS, contentType: "application/json", body: JSON.stringify(body) });
     const custom = overrides[key];
     if (custom === "hang") return; // yanıt hiç gelmez: "yükleniyor" durumu
+    if (custom === "abort") return route.abort("failed"); // ağ hatası: isteğin sonucu bilinmez
     if (typeof custom === "function") { const r = await custom(request, url); return reply(r.status ?? 200, r.body); }
     if (custom) return reply(custom.status ?? 200, custom.body);
     if (request.method() !== "GET" && !/^\/pair$/.test(url)) return reply(404, { detail: "testte tanımlı değil: " + key });

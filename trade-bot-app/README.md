@@ -42,7 +42,7 @@ npm run typecheck && npm run lint && npm test
 ```bash
 npm run screens
 ```
-`npm run screens` web derlemesini alır, 22 ekran testini çalıştırır ve `screenshots/` klasörünü yeniler.
+`npm run screens` web derlemesini alır, 34 ekran testini çalıştırır ve `screenshots/` klasörünü yeniler.
 
 ## APK
 `.github/workflows/trade-bot-app.yml`: her itmede denetimler; commit mesajında `[apk]` varsa (ya da elle

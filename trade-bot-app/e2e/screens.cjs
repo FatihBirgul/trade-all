@@ -50,6 +50,8 @@ run([
     assert.match(await text(page, "pnl-Bu ay"), /\+124,24/);
     assert.match(await text(page, "bot-card"), /1 bot işlemi/);
     assert.match(await text(page, "bot-card"), /1 elle işlem/);
+    assert.match(await page.getByTestId("screen-panel").innerText(), /Bakiye 10\.124,24 USD · Serbest 10\.111,64 USD/);
+    assert.match(await text(page, "pnl-caption"), /yalnızca kapanan işlemlerdir/);
     await shot(page, "04-panel-canli");
   }],
   ["panel: veri gelene kadar yükleniyor, gelmezse hata ve yeniden dene", async (page) => {
@@ -112,7 +114,11 @@ run([
     assert.match(card, /2024,1/); // giriş
     assert.match(card, /2023,29/); // stop
     assert.match(card, /−12,40|-12,40/);
+    assert.match(card, /Şimdi\s*2023,9/);
+    assert.match(card, /Hedef\s*2026,54/); // hedef = Exness'teki kâr al emri (tp2)
+    assert.match(card, /Ara hedef 2025,73/);
     assert.match(await text(page, "position-" + manual.position_id), /Elle/);
+    assert.match(await text(page, "position-" + manual.position_id), /Hedef\s*2027,34/);
     await shot(page, "09-pozisyonlar");
   }],
   ["pozisyonlar: stop düzenleme yön denetimi ve kapatma onayı", async (page) => {
@@ -131,9 +137,17 @@ run([
     await shot(page, "10-pozisyon-duzenle");
     await page.getByLabel("Yeni stop (zarar durdur)").fill("2023,50");
     await page.getByTestId("save-" + bot.position_id).click();
-    await page.waitForFunction((n) => true, null);
+    // Her seviye değişikliği eski → yeni değerleriyle onaylatılır.
+    assert.match(await text(page, "confirm"), /Stop: 2023,29 → 2023,5/);
+    assert.match(await text(page, "confirm"), /Anlık fiyat: 2023,9/);
+    assert.equal(calls.filter((call) => call.method === "PATCH").length, 0);
+    await page.getByTestId("confirm-yes").click();
     await page.getByText("Seviye değişikliği gönderildi.").waitFor();
     assert.deepEqual(calls.find((call) => call.method === "PATCH").body, { sl: 2023.5 });
+    // Gönderilen değer kutuda kalmaz: sonraki düzenlemede eski stop yeniden gönderilemez.
+    await page.getByTestId("edit-" + bot.position_id).click();
+    assert.equal(await page.getByLabel("Yeni stop (zarar durdur)").inputValue(), "");
+    await page.getByRole("button", { name: "Vazgeç" }).click();
     await page.getByTestId("close-" + bot.position_id).click();
     assert.match(await text(page, "confirm"), /Pozisyon kapatılsın mı/);
     await page.getByTestId("confirm-yes").click();
@@ -294,5 +308,177 @@ run([
     await page.getByTestId("open-connection").waitFor({ timeout: 15000 });
     assert.equal(await page.getByTestId("equity").count(), 0);
     await shot(page, "25-baglanti-iptal");
+  }],
+  ["panel: bu hafta ve bu ay kendi döneminden okunur, tüm zamanların toplamından değil", async (page) => {
+    // Sunucunun `totals` alanı tüm zamanların toplamıdır (500); bu haftanın kovası 100, bu ayınki 50.
+    const report = (period, rows) => ({ ...fixture("live_active", "reports_" + period), totals: { bot: { pnl: 500, trades: 9, wins: 5, win_rate: 0.55 }, manual: { pnl: 0, trades: 0, wins: 0, win_rate: null }, all: { pnl: 500, trades: 9, wins: 5, win_rate: 0.55 } }, periods: { bot: rows, manual: [], all: rows } });
+    await mock(page, "live_active", { "GET /reports": (request, url) => ({ body: /period=week/.test(url) ? report("week", [{ period: "2027-W01", pnl: 400, trades: 7 }, { period: "2027-W02", pnl: 100, trades: 2 }]) : /period=month/.test(url) ? report("month", [{ period: "2026-12", pnl: 450, trades: 8 }, { period: "2027-01", pnl: 50, trades: 1 }]) : report("day", [{ period: "2027-01-15", pnl: 30, trades: 1 }]) }) });
+    await pair(page);
+    assert.match(await text(page, "pnl-Bu hafta"), /\+100,00/);
+    assert.match(await text(page, "pnl-Bu ay"), /\+50,00/);
+    assert.doesNotMatch(await page.getByTestId("screen-panel").innerText(), /500,00/);
+    await page.getByTestId("tab-reports").click();
+    assert.match(await text(page, "report-totals"), /tüm zamanlar/);
+    assert.match(await text(page, "report-pnl"), /\+500,00 USD/);
+  }],
+  ["panel: son 24 saat kartı hem açılan hem açılırdı sayısını gösterir", async (page) => {
+    await mock(page, "dry_idle", { "GET /health/summary": { body: { ...fixture("dry_idle", "summary"), dry_run: true, opened: 3, would_open: 2 } } });
+    await pair(page);
+    assert.match(await text(page, "activity-card"), /3 işlem açtı/);
+    assert.match(await text(page, "activity-card"), /2 işlem açardı/);
+  }],
+  ["panel: canlıya geçiş iki onaydan sonra doğru isteği gönderir; hızlı çift dokunuş geçemez", async (page) => {
+    const calls = await mock(page, "dry_idle", { "PUT /settings": (request) => ({ body: request.postDataJSON() }) });
+    await pair(page);
+    await page.getByTestId("go-live").click();
+    await page.getByTestId("confirm").waitFor();
+    // Pencere yeni açıldı: onay düğmesi kısa süre basılamaz (çift dokunuş iki onayı birden geçemesin).
+    await page.getByTestId("confirm-yes").click({ force: true, clickCount: 2, timeout: 1000 }).catch(() => {});
+    assert.match(await text(page, "confirm"), /GERÇEK PARA/); // hâlâ ilk onay
+    assert.equal(calls.filter((call) => call.method === "PUT").length, 0);
+    await page.getByTestId("confirm-yes").click();
+    assert.match(await text(page, "confirm"), /Emin misiniz/);
+    await page.getByTestId("confirm-yes").click({ force: true, timeout: 1000 }).catch(() => {});
+    assert.equal(calls.filter((call) => call.method === "PUT").length, 0); // ikinci pencere de hemen basılamaz
+    await page.getByTestId("confirm-yes").click();
+    await page.getByTestId("panel-notice").waitFor();
+    const put = calls.filter((call) => call.method === "PUT");
+    assert.equal(put.length, 1);
+    assert.equal(put[0].url, "/settings?confirm_live=true");
+    assert.equal(put[0].body.dry_run, false);
+  }],
+  ["panel: kayıp sınırıyla durmuş botu devam ettirmek iki onay ister", async (page) => {
+    const halted = { ...fixture("live_active", "status"), halted: true, halt_reason: "toplam kayıp sınırı (%25) aşıldı" };
+    const calls = await mock(page, "live_active", { "GET /status": { body: halted }, "POST /bot/resume": { body: { ...halted, halted: false } } });
+    await pair(page);
+    assert.match(await text(page, "bot-state"), /Durdu: toplam kayıp sınırı/);
+    await page.getByTestId("resume").click();
+    assert.match(await text(page, "confirm"), /kayıp sınırı nedeniyle durdu/);
+    await page.getByTestId("confirm-yes").click();
+    assert.match(await text(page, "confirm"), /Kayıp sınırı koruması sıfırlanacak/);
+    await page.getByTestId("confirm-no").click();
+    assert.equal(calls.filter((call) => call.url === "/bot/resume").length, 0);
+    await page.getByTestId("resume").click();
+    await page.getByTestId("confirm-yes").click();
+    await page.getByTestId("confirm-yes").click();
+    await page.getByTestId("panel-notice").waitFor();
+    assert.deepEqual(calls.find((call) => call.url === "/bot/resume").body, { confirm_halt: true });
+  }],
+  ["panel: hepsini kapat onaysız gönderilmez", async (page) => {
+    const calls = await mock(page, "live_active", { "POST /bot/close-all": { body: { requested: 2, skipped: [], stopped: true } } });
+    await pair(page);
+    await page.getByTestId("close-all").click();
+    assert.match(await text(page, "confirm"), /2 pozisyonun tamamı/);
+    await page.getByTestId("confirm-no").click();
+    assert.equal(calls.filter((call) => call.url === "/bot/close-all").length, 0);
+    await page.getByTestId("close-all").click();
+    await page.getByTestId("confirm-yes").click();
+    await page.getByTestId("panel-notice").waitFor();
+    assert.deepEqual(calls.find((call) => call.url === "/bot/close-all").body, { confirm: "CLOSE-ALL" });
+  }],
+  ["panel: bottan haber yoksa uyarı görünür ve canlıya geçiş kapanır", async (page) => {
+    const status = fixture("dry_idle", "status");
+    await mock(page, "dry_idle", { "GET /status": { body: { ...status, heartbeat_at: status.server_time - 1000 } } });
+    await pair(page);
+    assert.match(await text(page, "notice-stale"), /Bottan 5 dakikadır haber yok/);
+    assert.match(await text(page, "bot-state"), /Bot yanıt vermiyor/);
+    assert.equal(await page.getByTestId("go-live").getAttribute("aria-disabled"), "true");
+    await shot(page, "26-panel-bot-yanit-vermiyor");
+  }],
+  ["pozisyonlar: stopu uzaklaştırmak ayrı uyarıyla onaylatılır", async (page) => {
+    const [bot] = fixture("live_active", "positions").positions;
+    const calls = await mock(page, "live_active", { ["PATCH /positions/" + bot.position_id]: { body: { order: "o1", manage: true } } });
+    await pair(page);
+    await page.getByTestId("tab-positions").click();
+    await page.getByTestId("edit-" + bot.position_id).click();
+    await page.getByLabel("Yeni stop (zarar durdur)").fill("2022");
+    await page.getByTestId("save-" + bot.position_id).click();
+    assert.match(await text(page, "confirm"), /stop uzaklaşıyor/);
+    assert.match(await text(page, "confirm"), /Stop: 2023,29 → 2022/);
+    await shot(page, "27-pozisyon-stop-uzaklasiyor");
+    await page.getByTestId("confirm-no").click();
+    assert.equal(calls.filter((call) => call.method === "PATCH").length, 0);
+  }],
+  ["pozisyonlar: kademeli stopu kapatmak onay ister", async (page) => {
+    const [bot] = fixture("live_active", "positions").positions;
+    const calls = await mock(page, "live_active", { ["PATCH /positions/" + bot.position_id]: { body: { order: null, manage: false } } });
+    await pair(page);
+    await page.getByTestId("tab-positions").click();
+    await page.getByTestId("edit-" + bot.position_id).click();
+    await page.getByTestId("position-" + bot.position_id).getByRole("switch", { name: "Kademeli stop" }).click();
+    assert.match(await text(page, "confirm"), /Kademeli stop kapatılsın mı/);
+    await page.getByTestId("confirm-no").click();
+    assert.equal(calls.filter((call) => call.method === "PATCH").length, 0);
+    await page.getByTestId("position-" + bot.position_id).getByRole("switch", { name: "Kademeli stop" }).click();
+    await page.getByTestId("confirm-yes").click();
+    await page.getByText("Kademeli stop kapatıldı").waitFor();
+    assert.deepEqual(calls.find((call) => call.method === "PATCH").body, { manage: false });
+  }],
+  ["elle işlem: sonucu bilinmeyen emir formu kilitler, sonuç sorulmadan yenisi gönderilemez", async (page) => {
+    const preview = fixture("live_active", "trade_preview").body;
+    const calls = await mock(page, "live_active", { "POST /trades/preview": { body: preview }, "POST /trades": "abort" });
+    await pair(page);
+    await page.getByTestId("tab-positions").click();
+    await page.getByTestId("new-trade").click();
+    await page.getByTestId("symbol-" + preview.symbol).click();
+    await page.getByLabel("Zarar durdurma mesafesi (zorunlu)").fill("4");
+    await page.getByTestId("preview").click();
+    await page.getByTestId("send").click();
+    await page.getByTestId("confirm-yes").click();
+    await page.getByTestId("pending-card").waitFor();
+    assert.match(await text(page, "pending-card"), /Sonucu bilinmeyen bir emir var/);
+    assert.equal(await page.getByTestId("preview").getAttribute("aria-disabled"), "true"); // kilitli
+    await shot(page, "28-elle-islem-sonuc-belirsiz");
+    const sent = calls.filter((call) => call.url === "/trades");
+    assert.equal(sent.length, 1);
+    // Ekrandan çıkıp dönmek kilidi kaldırmaz.
+    await page.getByTestId("back").click();
+    await page.getByTestId("new-trade").click();
+    await page.getByTestId("pending-card").waitFor();
+  }],
+  ["elle işlem: bir dakikadan eski önizlemeyle emir gönderilmez", async (page) => {
+    const preview = fixture("live_active", "trade_preview").body;
+    await page.clock.install();
+    const calls = await mock(page, "live_active", { "POST /trades/preview": { body: preview } });
+    await pair(page);
+    await page.getByTestId("tab-positions").click();
+    await page.getByTestId("new-trade").click();
+    await page.getByTestId("symbol-" + preview.symbol).click();
+    await page.getByLabel("Zarar durdurma mesafesi (zorunlu)").fill("4");
+    await page.getByTestId("preview").click();
+    await page.getByTestId("preview-card").waitFor();
+    await page.clock.fastForward(61000);
+    await page.getByTestId("send").click();
+    assert.match(await text(page, "manual-notice"), /Önizleme eskidi/);
+    assert.equal(calls.filter((call) => call.url === "/trades").length, 0);
+  }],
+  ["ayarlar: stratejiyi canlıya almak onay ister; ret nedeni kartın içinde görünür", async (page) => {
+    const strategies = fixture("dry_idle", "strategies");
+    strategies.strategies = strategies.strategies.map((row) => (row.strategy_id === "fx_range_reversion_v6" ? { ...row, mode: "shadow" } : row));
+    const calls = await mock(page, "dry_idle", { "GET /strategies": { body: strategies }, "POST /strategies/fx_range_reversion_v6/mode": { status: 409, body: { detail: "gölge karnesi yetersiz" } } });
+    await pair(page);
+    await page.getByTestId("tab-settings").click();
+    await page.getByRole("button", { name: "Canlı fx_range_reversion_v6" }).click();
+    assert.match(await text(page, "confirm"), /canlıya alınsın mı/);
+    await page.getByTestId("confirm-no").click();
+    assert.equal(calls.filter((call) => call.method === "POST" && /mode$/.test(call.url)).length, 0);
+    await page.getByRole("button", { name: "Canlı fx_range_reversion_v6" }).click();
+    await page.getByTestId("confirm-yes").click();
+    const notice = page.getByTestId("strategy-notice");
+    await notice.waitFor();
+    assert.match(await notice.innerText(), /gölge karnesi yetersiz/);
+    assert.deepEqual(calls.find((call) => /mode$/.test(call.url)).body, { mode: "live", confirm: true });
+    const box = await notice.boundingBox();
+    assert.ok(box && box.y >= 0 && box.y < 892, "ret nedeni ekranda görünür olmalı");
+  }],
+  ["raporlar: toplam, bot ve elle işlemlerin tamamıdır; düşüş değerleri doğru alandan gelir", async (page) => {
+    const base = fixture("live_active", "reports_day");
+    const body = { ...base, totals: { bot: { pnl: 100, trades: 4, wins: 3, win_rate: 0.75 }, manual: { pnl: 20, trades: 1, wins: 1, win_rate: 1 }, all: { pnl: 120, trades: 5, wins: 4, win_rate: 0.8 } }, max_drawdown: { bot: 5, manual: 0, all: 7 } };
+    await mock(page, "live_active", { "GET /reports": { body } });
+    await pair(page);
+    await page.getByTestId("tab-reports").click();
+    assert.match(await text(page, "report-pnl"), /\+120,00 USD/);
+    assert.match(await text(page, "report-totals"), /5,00 USD \/ 7,00 USD/);
+    assert.match(await text(page, "report-totals"), /%80 \(4\/5\)/);
   }],
 ]);

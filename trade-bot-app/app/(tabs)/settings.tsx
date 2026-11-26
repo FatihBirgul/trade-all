@@ -29,7 +29,7 @@ export default function Settings() {
   const query = useResource(ready ? () => Promise.all([api.settings(), api.strategies(), api.symbols()]) : null, "settings:" + bot.config?.origin);
   const [edits, setEdits] = useState<Partial<Draft>>({});
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<{ text: string; bad: boolean } | null>(null);
+  const [notice, setNotice] = useState<{ text: string; bad: boolean; where: "settings" | "strategies" } | null>(null);
   const settings: BotSettings | null = query.data?.[0] ?? null;
   const strategies: BotStrategy[] = query.data?.[1] ?? [];
   const universe: string[] = (query.data?.[2] ?? []).map((row) => row.symbol);
@@ -39,16 +39,16 @@ export default function Settings() {
   const outdated = Boolean(query.error) || query.loading;
   const dirty = Object.keys(edits).length > 0;
 
-  async function run(action: () => Promise<unknown>, done: string, saved = false) {
+  async function run(action: () => Promise<unknown>, done: string, saved = false, where: "settings" | "strategies" = "settings") {
     if (busy) return;
     setBusy(true);
     setNotice(null);
     try {
       await action();
       if (saved) setEdits({});
-      setNotice({ text: done, bad: false });
+      setNotice({ text: done, bad: false, where });
     } catch (reason) {
-      setNotice({ text: reason instanceof Error ? reason.message : "İşlem tamamlanamadı.", bad: true });
+      setNotice({ text: reason instanceof Error ? reason.message : "İşlem tamamlanamadı.", bad: true, where });
     } finally {
       setBusy(false);
       void query.reload(); // sunucudaki gerçek değerler yeniden gösterilir
@@ -56,10 +56,10 @@ export default function Settings() {
   }
   async function save() {
     if (!settings || !draft) return;
-    if (outdated) return setNotice({ text: "Ayarlar güncel değil; önce yeniden yükleyin.", bad: true });
+    if (outdated) return setNotice({ text: "Ayarlar güncel değil; önce yeniden yükleyin.", bad: true, where: "settings" });
     const plan = planChanges(settings, draft, universe);
-    if (!plan.ok) return setNotice({ text: plan.error, bad: true });
-    if (plan.changes.length === 0) return setNotice({ text: "Değişiklik yok.", bad: false });
+    if (!plan.ok) return setNotice({ text: plan.error, bad: true, where: "settings" });
+    if (plan.changes.length === 0) return setNotice({ text: "Değişiklik yok.", bad: false, where: "settings" });
     const lines = plan.changes.map((change) => change.label + ": " + change.from + " → " + change.to + (change.riskier ? "  ⚠ risk artar" : ""));
     const ok = await confirm({
       title: plan.riskier ? "Dikkat: risk artıyor" : "Ayarlar kaydedilsin mi?",
@@ -73,7 +73,7 @@ export default function Settings() {
     const name = strategyName(strategy.strategy_id);
     if (mode !== "live") {
       if (await confirm({ title: name, message: mode === "off" ? "Strateji kapatılsın mı? Sinyalleri izlenmez." : "Strateji gölgeye alınsın mı? Sinyalleri izlenir, emir gönderilmez.", confirm: MODE_LABEL[mode] + " yap" }))
-        await run(() => api.setStrategyMode(strategy.strategy_id, mode), name + ": " + MODE_LABEL[mode]);
+        await run(() => api.setStrategyMode(strategy.strategy_id, mode), name + ": " + MODE_LABEL[mode], false, "strategies");
       return;
     }
     const shadow = strategy.shadow;
@@ -84,7 +84,7 @@ export default function Settings() {
       (shadow.avg_r != null && shadow.avg_r <= 0 ? "\n\n⚠ Gölge sonuçları ortalamada ZARARDA." : "") +
       (strategy.paused ? "\n\n⚠ Bot bu stratejiyi kötü sonuçlar nedeniyle duraklatmıştı; canlıya almak duraklatmayı kaldırır." : "");
     if (await confirm({ title: name + " canlıya alınsın mı?", message, confirm: "Canlıya al", danger: true }))
-      await run(() => api.setStrategyMode(strategy.strategy_id, "live", true), name + ": Canlı");
+      await run(() => api.setStrategyMode(strategy.strategy_id, "live", true), name + ": Canlı", false, "strategies");
   }
   function toggleSymbol(symbol: string) {
     if (!draft) return;
@@ -140,11 +140,12 @@ export default function Settings() {
                 <Button title="Hepsini kapat" kind="tonal" onPress={() => setField({ symbols: [] })} style={{ flex: 1 }} />
               </View>
             </Card>
-            {notice ? <Notice testID="settings-notice" kind={notice.bad ? "bad" : "info"} text={notice.text} /> : null}
+            {notice && notice.where === "settings" ? <Notice testID="settings-notice" kind={notice.bad ? "bad" : "info"} text={notice.text} /> : null}
             <Button testID="save-settings" title={dirty ? "Değişiklikleri kaydet" : "Kaydet"} icon="save" onPress={() => void save()} busy={busy} disabled={!dirty} />
             <Card testID="settings-strategies">
               <T weight="800" size={16}>Stratejiler</T>
               <T muted size={13}>Canlı: emir gönderir. Gölge: yalnızca izlenir. Yeni bir strateji, gölge karnesi yeterli olmadan canlıya alınamaz.</T>
+              {notice && notice.where === "strategies" ? <Notice testID="strategy-notice" kind={notice.bad ? "bad" : "info"} text={notice.text} /> : null}
               {strategies.map((strategy) => (
                 <View key={strategy.strategy_id} testID={"strategy-" + strategy.strategy_id} style={{ gap: 8, borderTopWidth: 1, borderTopColor: c.line, paddingTop: 12 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>

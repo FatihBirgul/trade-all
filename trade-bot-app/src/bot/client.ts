@@ -48,6 +48,8 @@ export class BotError extends ApiError {
     // Değişiklik yapan bir isteğin sonucu bilinmiyorsa ApiError'ın "sonuç belirsiz" metni korunur.
     if (detail) this.message = detail;
     else if (!uncertain && MESSAGES[code]) this.message = MESSAGES[code];
+    else if (!uncertain && /^HTTP_[0-9]+$/.test(code))
+      this.message = "Sunucu isteği yanıtlayamadı (hata " + code.slice(5) + "). Biraz sonra yeniden deneyin.";
   }
 }
 

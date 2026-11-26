@@ -24,16 +24,15 @@ export default function Reports() {
   const scale = Math.max(1, ...rows.map((row) => Math.abs(row.pnl)));
 
   return (
-    <Screen testID="screen-reports" title="Raporlar" subtitle="Kapanan işlemler; günler UTC saatine göre ayrılır">
+    <Screen testID="screen-reports" title="Raporlar" subtitle="Kapanan işlemler (UTC takvimi)">
       <DataGate>
-        <Segmented options={PERIODS} value={period} onChange={setPeriod} />
         {!data ? (
           report.error ? <Failure message={report.error} retry={() => void report.reload()} /> : <Loading label="Rapor yükleniyor…" />
         ) : (
           <>
             {report.error ? <Notice text={"Rapor yenilenemedi: " + report.error} /> : null}
             <Card testID="report-totals">
-              <T muted size={14}>Toplam kâr/zarar</T>
+              <T muted size={14}>Toplam kâr/zarar · tüm zamanlar</T>
               <T testID="report-pnl" weight="900" size={34} style={{ color: tone(data.totals.all.pnl) }}>{pnlText(data.totals.all.pnl, currency)}</T>
               <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
                 <Pill label={data.totals.all.trades + " işlem"} />
@@ -49,6 +48,7 @@ export default function Reports() {
               <>
                 <Card testID="report-periods">
                   <T weight="800" size={16}>Dönemlere göre</T>
+                  <Segmented options={PERIODS} value={period} onChange={setPeriod} />
                   {rows.map((row) => (
                     <View key={row.period} style={{ gap: 5 }}>
                       <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
@@ -62,7 +62,7 @@ export default function Reports() {
                   ))}
                 </Card>
                 <Card testID="report-breakdown">
-                  <T weight="800" size={16}>Stratejiye göre</T>
+                  <T weight="800" size={16}>Stratejiye göre · tüm zamanlar</T>
                   {Object.entries(data.by_strategy).map(([id, row]) => (<Row key={id} name={strategyName(id) + " · " + row.wins + "/" + row.trades} value={pnlText(row.pnl, null)} color={tone(row.pnl)} />))}
                   <View style={{ height: 1, backgroundColor: c.line }} />
                   <T weight="800" size={16}>Sembole göre</T>
@@ -90,7 +90,7 @@ export default function Reports() {
                   <View key={strategy.strategy_id} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                     <View style={{ flex: 1 }}>
                       <T weight="700">{strategyName(strategy.strategy_id)}</T>
-                      <T muted size={13}>{strategy.shadow.trades ? strategy.shadow.trades + " sanal işlem · kazanma %" + Math.round((strategy.shadow.win_rate ?? 0) * 100) + " · ortalama " + priceText(strategy.shadow.avg_r) + "R" : "henüz sanal işlem yok"}</T>
+                      <T muted size={13}>{strategy.shadow.trades ? strategy.shadow.trades + " sanal işlem · kazanma %" + Math.round((strategy.shadow.win_rate ?? 0) * 100) + (strategy.shadow.avg_r == null ? "" : " · ortalama " + priceText(Math.round(strategy.shadow.avg_r * 100) / 100) + "R") : "henüz sanal işlem yok"}</T>
                     </View>
                     <Pill label={strategy.paused ? "Duraklatıldı" : MODE_LABEL[strategy.mode]} color={strategy.mode === "live" && !strategy.paused ? c.up : c.hero} bg={strategy.mode === "live" && !strategy.paused ? c.upSoft : c.tint} />
                   </View>

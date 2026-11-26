@@ -35,7 +35,7 @@ export default function ManualTrade() {
   const sending = useRef(false);
   const previewSeq = useRef(0);
   const api = bot.api;
-  const query = useResource(() => api.symbols(), "symbols:" + (bot.config?.origin ?? ""));
+  const query = useResource(() => api.symbols(), "symbols:" + (bot.config?.origin ?? ""), 5000); // fiyatlar 5 saniyede bir yenilenir
   const symbols: BotSymbol[] | null = query.data ?? null;
   const error = query.error ?? "";
   const load = query.reload;
@@ -195,8 +195,13 @@ export default function ManualTrade() {
         "Fiyat gönderim anında yeniden okunur; seviyeler mesafeye göre kayabilir.",
         ...shown.warnings.map((warning) => "⚠ " + warning),
       ].join("\n") + (bot.status?.dry_run ? "\n\n" + REAL_ACTION_NOTE : "\n\nBu emir GERÇEK hesapta açılır.");
-    if (await confirm({ title: shown.symbol + " " + SIDE_TEXT[shown.side] + " emri gönderilsin mi?", message, confirm: "Emri gönder", danger: true }))
-      await send(order);
+    if (!(await confirm({ title: shown.symbol + " " + SIDE_TEXT[shown.side] + " emri gönderilsin mi?", message, confirm: "Emri gönder", danger: true }))) return;
+    // Onay penceresi açık beklemiş olabilir: önizleme bu arada eskidiyse emir gönderilmez.
+    if (Date.now() - preview.at > PREVIEW_MAX_AGE_MS) {
+      setPreview(null);
+      return setNotice({ text: "Önizleme eskidi (1 dakikadan eski); fiyat değişmiş olabilir. Yeniden önizleyin.", bad: true });
+    }
+    await send(order);
   }
 
   const [search, setSearch] = useState("");

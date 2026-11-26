@@ -11,7 +11,7 @@ export default function Layout() {
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <BotProvider>
         <ConfirmProvider>
-          <StatusBar style="auto" />
+          <StatusBar style="dark" />
           <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }} />
         </ConfirmProvider>
       </BotProvider>

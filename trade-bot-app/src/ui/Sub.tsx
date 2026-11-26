@@ -13,7 +13,7 @@ export function goBack() {
 export function Sub({ title, children, testID }: PropsWithChildren<{ title: string; testID?: string }>) {
   const insets = useSafeAreaInsets();
   return (
-    <ScrollView testID={testID} style={{ flex: 1, backgroundColor: c.bg }} contentContainerStyle={{ paddingBottom: 28 }} keyboardShouldPersistTaps="handled">
+    <ScrollView testID={testID} style={{ flex: 1, backgroundColor: c.bg }} contentContainerStyle={{ paddingBottom: 28 + insets.bottom }} keyboardShouldPersistTaps="handled">
       <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingTop: insets.top + 18 }}>
         <Pressable testID="back" accessibilityRole="button" accessibilityLabel="Geri" onPress={goBack} style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: c.card, alignItems: "center", justifyContent: "center" }}>
           <Ionicons name="arrow-back" size={22} color={c.text} />
