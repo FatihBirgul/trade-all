@@ -1,0 +1,23 @@
+{
+ "currency": "USD",
+ "balance": 10000.0,
+ "equity": 10000.0,
+ "margin_free": 10000.0,
+ "pnl_today": {
+  "bot": 0.0,
+  "manual": 0.0,
+  "total": 0.0
+ },
+ "open_bot": 0,
+ "open_manual": 0,
+ "halted": false,
+ "halt_reason": null,
+ "stopped": false,
+ "dry_run": true,
+ "start_capital": 10000.0,
+ "last_scan_at": 1800002700.0,
+ "heartbeat_at": 1800002700.0,
+ "stream_connected": true,
+ "started": true,
+ "server_time": 1800002700.0
+}

@@ -1,0 +1,23 @@
+{
+ "status": "ok",
+ "last_scan_at": 1800000900.0,
+ "heartbeat_at": 1800000900.0,
+ "stream_connected": true,
+ "halted": false,
+ "last_scan": {
+  "at": 1800000900.0,
+  "scanned": 4,
+  "closed": 0,
+  "errors": 0,
+  "skipped": null,
+  "quoted": 1,
+  "candle_retries": 0
+ },
+ "tick_errors": 0,
+ "tick_error": null,
+ "tick_acks": 0,
+ "quoted_now": 1,
+ "last_backup_at": null,
+ "failing_loops": {},
+ "entries_paused": false
+}

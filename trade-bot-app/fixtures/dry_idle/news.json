@@ -1,0 +1,7 @@
+{
+ "enabled": true,
+ "window_minutes": 30,
+ "fetched_at": null,
+ "stale": true,
+ "events": []
+}

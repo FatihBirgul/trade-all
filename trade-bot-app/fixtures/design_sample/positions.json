@@ -1,0 +1,13 @@
+{"positions": [
+ {"position_id": "2101", "origin": "bot", "symbol": "EURUSD", "side": "BUY", "volume": 0.12, "initial_volume": 0.24,
+  "entry": 1.0842, "sl": 1.08425, "tp1": 1.0862, "tp2": 1.0872, "strategy_id": "fx_trend_momentum_v6",
+  "opened_at": 1799993700.0, "manage": true, "user_sl_override": false, "be_done": true, "partial_done": true,
+  "realized_pnl": 24.0, "price": 1.08655, "unrealized_pnl": 28.2, "r_multiple": 2.35},
+ {"position_id": "2104", "origin": "bot", "symbol": "XAUUSD", "side": "SELL", "volume": 0.02, "initial_volume": 0.02,
+  "entry": 2031.4, "sl": 2034.1, "tp1": 2026.0, "tp2": 2023.3, "strategy_id": "fx_failed_breakout_v6",
+  "opened_at": 1799998200.0, "manage": true, "user_sl_override": false, "be_done": false, "partial_done": false,
+  "realized_pnl": 0.0, "price": 2032.25, "unrealized_pnl": -6.85, "r_multiple": -0.31},
+ {"position_id": "2107", "origin": "manual", "symbol": "GBPJPY", "side": "BUY", "volume": 0.03, "initial_volume": 0.03,
+  "entry": 191.42, "sl": 191.05, "tp1": null, "tp2": 192.3, "strategy_id": null,
+  "opened_at": 1799999100.0, "manage": true, "user_sl_override": false, "be_done": false, "partial_done": false,
+  "realized_pnl": 0.0, "price": 191.69, "unrealized_pnl": 5.2, "r_multiple": 0.73}]}

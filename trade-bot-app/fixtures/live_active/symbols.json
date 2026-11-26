@@ -1,0 +1,56 @@
+{
+ "symbols": [
+  {
+   "symbol": "BTCUSD",
+   "kind": "crypto",
+   "open": true,
+   "quoted": false,
+   "bid": null,
+   "ask": null,
+   "digits": 2,
+   "tick_size": 0.01,
+   "volume_min": 0.01,
+   "volume_step": 0.01,
+   "volume_max": 200.0
+  },
+  {
+   "symbol": "EURUSD",
+   "kind": "forex",
+   "open": true,
+   "quoted": false,
+   "bid": null,
+   "ask": null,
+   "digits": 5,
+   "tick_size": 1e-05,
+   "volume_min": 0.01,
+   "volume_step": 0.01,
+   "volume_max": 200.0
+  },
+  {
+   "symbol": "GBPUSD",
+   "kind": "forex",
+   "open": true,
+   "quoted": false,
+   "bid": null,
+   "ask": null,
+   "digits": 5,
+   "tick_size": 1e-05,
+   "volume_min": 0.01,
+   "volume_step": 0.01,
+   "volume_max": 200.0
+  },
+  {
+   "symbol": "XAUUSD",
+   "kind": "metal",
+   "open": true,
+   "quoted": true,
+   "bid": 2023.9,
+   "ask": 2024.1000000000001,
+   "digits": 2,
+   "tick_size": 0.01,
+   "volume_min": 0.01,
+   "volume_step": 0.01,
+   "volume_max": 200.0
+  }
+ ]
+}

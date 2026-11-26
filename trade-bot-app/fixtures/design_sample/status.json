@@ -1,0 +1,5 @@
+{"currency": "USC", "balance": 3012.4, "equity": 3038.95, "margin_free": 2871.3,
+ "pnl_today": {"bot": 21.35, "manual": 5.2, "total": 26.55}, "open_bot": 2, "open_manual": 1,
+ "halted": false, "halt_reason": null, "stopped": false, "dry_run": false, "start_capital": 3000.0,
+ "last_scan_at": 1800000780.0, "heartbeat_at": 1800000895.0, "stream_connected": true, "started": true,
+ "server_time": 1800000900.0}

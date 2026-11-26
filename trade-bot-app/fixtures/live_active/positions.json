@@ -1,0 +1,48 @@
+{
+ "positions": [
+  {
+   "position_id": "1012",
+   "origin": "bot",
+   "symbol": "XAUUSD",
+   "side": "BUY",
+   "volume": 0.62,
+   "initial_volume": 0.62,
+   "entry": 2024.1,
+   "sl": 2023.29,
+   "tp1": 2025.73,
+   "tp2": 2026.54,
+   "strategy_id": "fx_trend_momentum_v6",
+   "opened_at": 1800000900.0,
+   "manage": true,
+   "user_sl_override": false,
+   "be_done": false,
+   "partial_done": false,
+   "realized_pnl": 0.0,
+   "price": 2023.9,
+   "unrealized_pnl": -12.399999999988722,
+   "r_multiple": -0.24691358024670565
+  },
+  {
+   "position_id": "1017",
+   "origin": "manual",
+   "symbol": "XAUUSD",
+   "side": "BUY",
+   "volume": 0.01,
+   "initial_volume": 0.01,
+   "entry": 2024.1,
+   "sl": 2022.48,
+   "tp1": null,
+   "tp2": 2027.34,
+   "strategy_id": null,
+   "opened_at": 1800000900.0,
+   "manage": true,
+   "user_sl_override": false,
+   "be_done": false,
+   "partial_done": false,
+   "realized_pnl": 0.0,
+   "price": 2023.9,
+   "unrealized_pnl": -0.19999999999981813,
+   "r_multiple": -0.12345679012335282
+  }
+ ]
+}

@@ -1,0 +1,88 @@
+{
+ "strategies": [
+  {
+   "strategy_id": "fx_confirmed_breakout_v6",
+   "source": "v9",
+   "mode": "live",
+   "paused": false,
+   "shadow": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null
+   },
+   "can_go_live": false,
+   "live_blocker": null
+  },
+  {
+   "strategy_id": "fx_failed_breakout_v6",
+   "source": "v9",
+   "mode": "live",
+   "paused": false,
+   "shadow": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null
+   },
+   "can_go_live": false,
+   "live_blocker": null
+  },
+  {
+   "strategy_id": "fx_range_reversion_v6",
+   "source": "v9",
+   "mode": "live",
+   "paused": false,
+   "shadow": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null
+   },
+   "can_go_live": false,
+   "live_blocker": null
+  },
+  {
+   "strategy_id": "fx_trend_momentum_v6",
+   "source": "v9",
+   "mode": "live",
+   "paused": false,
+   "shadow": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null
+   },
+   "can_go_live": false,
+   "live_blocker": null
+  },
+  {
+   "strategy_id": "tb_donchian_breakout_v1",
+   "source": "custom",
+   "mode": "shadow",
+   "paused": false,
+   "shadow": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null
+   },
+   "can_go_live": false,
+   "live_blocker": "yeni strateji canlıya alınamaz: en az 20 sonuçlanmış gölge işlem gerekli (şu an 0)"
+  },
+  {
+   "strategy_id": "tb_ema_pullback_v1",
+   "source": "custom",
+   "mode": "shadow",
+   "paused": false,
+   "shadow": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null
+   },
+   "can_go_live": false,
+   "live_blocker": "yeni strateji canlıya alınamaz: en az 20 sonuçlanmış gölge işlem gerekli (şu an 0)"
+  }
+ ]
+}
