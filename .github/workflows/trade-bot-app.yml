@@ -1,0 +1,135 @@
+name: Trade Bot app
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/trade-bot-app.yml"
+      - "trade-bot-app/**"
+defaults:
+  run:
+    working-directory: trade-bot-app
+concurrency:
+  group: trade-bot-app-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  EXPO_NO_TELEMETRY: "1"
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: trade-bot-app/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck && npm run lint && npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run export:web
+      # Her ekran, gercek sunucu yanitlariyla (fixtures/) veri gosteriyor mu?
+      - run: npm run e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trade-bot-app-screenshots
+          path: trade-bot-app/screenshots/
+          retention-days: 7
+  apk:
+    needs: check
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[apk]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: trade-bot-app/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: npm ci
+      - run: npx expo prebuild --platform android --no-install
+      - name: Build APK (embedded JS)
+        working-directory: trade-bot-app/android
+        run: ./gradlew :app:assembleRelease --no-daemon --max-workers=2 -PreactNativeArchitectures=arm64-v8a -Pandroid.enableMinifyInReleaseBuilds=false
+      - name: Sign with the release key (when configured)
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          apk="$(find android/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)"
+          test -n "$apk"
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            if [ -n "$ANDROID_KEYSTORE_PASSWORD$ANDROID_KEY_ALIAS$ANDROID_KEY_PASSWORD" ]; then
+              echo "::error::Imza secret'lari eksik: ANDROID_KEYSTORE_BASE64 tanimli degil ama digerleri tanimli"
+              exit 1
+            fi
+            # Kalici anahtar yoksa APK, React Native sablonunun HERKESCE BILINEN test anahtariyla imzali kalir
+            # (eski uygulamayla ayni anahtar: ustune kurulur). Yalnizca deneme icindir.
+            echo "::warning::Kalici imza anahtari (ANDROID_KEYSTORE_BASE64) tanimli degil; APK herkesce bilinen test anahtariyla imzalandi."
+            echo "APK_SIGNING=public debug key (testing only)" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          if [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ]; then
+            echo "::error::ANDROID_KEYSTORE_PASSWORD ve ANDROID_KEY_ALIAS secret'lari da tanimli olmali"
+            exit 1
+          fi
+          keystore="$RUNNER_TEMP/release.keystore"
+          trap 'rm -f "$keystore"' EXIT
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d ' \r\n' | base64 -d > "$keystore"
+          signer="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name apksigner -type f | sort -V | tail -n 1)"
+          test -x "$signer"
+          export ANDROID_KEY_PASSWORD="${ANDROID_KEY_PASSWORD:-$ANDROID_KEYSTORE_PASSWORD}"
+          # Parolalar komut satirina degil ortam degiskeninden okunur; gunluge yazilmaz.
+          "$signer" sign --ks "$keystore" --ks-key-alias "$ANDROID_KEY_ALIAS" \
+            --ks-pass env:ANDROID_KEYSTORE_PASSWORD --key-pass env:ANDROID_KEY_PASSWORD "$apk"
+          "$signer" verify "$apk"
+          echo "APK_SIGNING=release key from repository secrets" >> "$GITHUB_ENV"
+      - name: Verify and describe APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="$(find android/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)"
+          test -n "$apk"
+          unzip -l "$apk" | grep 'index.android.bundle' > /dev/null
+          signer="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name apksigner -type f | sort -V | tail -n 1)"
+          aapt="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name aapt2 -type f | sort -V | tail -n 1)"
+          "$signer" verify "$apk"
+          badging="$("$aapt" dump badging "$apk")"
+          # Ayni paket adi ve daha buyuk versionCode: eski uygulamanin ustune kurulabilmesi icin sart.
+          echo "$badging" | grep -q "package: name='com.fatihbirgul.tradeai'"
+          code="$(echo "$badging" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -n 1)"
+          test "$code" -ge 23
+          {
+            echo "Commit: $GITHUB_SHA"
+            echo "App version: $(node -p 'require("./app.json").expo.version')"
+            echo "Android versionCode: $code"
+            echo "Android package: com.fatihbirgul.tradeai"
+            echo "Build: assembleRelease, arm64-v8a, no R8 minify, embedded Metro bundle, ${APK_SIGNING:-generated debug signing}"
+            echo "Signer certificate SHA-256: $("$signer" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
+            sha256sum "$apk"
+          } > android/app/build/outputs/apk/release/BUILD_INFO.txt
+          cat android/app/build/outputs/apk/release/BUILD_INFO.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trade-bot-apk
+          path: |
+            trade-bot-app/android/app/build/outputs/apk/release/*.apk
+            trade-bot-app/android/app/build/outputs/apk/release/BUILD_INFO.txt
+          if-no-files-found: error
+          retention-days: 7

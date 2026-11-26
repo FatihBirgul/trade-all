@@ -1,0 +1,75 @@
+{
+ "hours": 24.0,
+ "dry_run": true,
+ "scans": 4,
+ "scans_skipped": {},
+ "symbols_scanned": 16,
+ "candidates": 5,
+ "would_open": 4,
+ "opened": 0,
+ "observed": 0,
+ "shadowed": 1,
+ "news_blocked": 0,
+ "portfolio_blocked": 0,
+ "errors": 0,
+ "decisions": {
+  "PROVIDER_UNAVAILABLE": 12
+ },
+ "veto_reasons": {
+  "provider unavailable: quote": 12
+ },
+ "portfolio_reasons": {},
+ "observed_reasons": {},
+ "samples": [
+  {
+   "at": 1800000000.0,
+   "symbol": "XAUUSD",
+   "side": "BUY",
+   "strategy_id": "fx_trend_momentum_v6",
+   "score": 90.9,
+   "net_rr": 2.01,
+   "stop_pct": 0.04,
+   "risk_pct": 0.4941,
+   "dry_run": true
+  },
+  {
+   "at": 1800000900.0,
+   "symbol": "XAUUSD",
+   "side": "BUY",
+   "strategy_id": "fx_trend_momentum_v6",
+   "score": 90.9,
+   "net_rr": 2.01,
+   "stop_pct": 0.04,
+   "risk_pct": 0.4941,
+   "dry_run": true
+  },
+  {
+   "at": 1800001800.0,
+   "symbol": "XAUUSD",
+   "side": "BUY",
+   "strategy_id": "fx_trend_momentum_v6",
+   "score": 90.9,
+   "net_rr": 2.01,
+   "stop_pct": 0.04,
+   "risk_pct": 0.4941,
+   "dry_run": true
+  },
+  {
+   "at": 1800002700.0,
+   "symbol": "XAUUSD",
+   "side": "BUY",
+   "strategy_id": "fx_trend_momentum_v6",
+   "score": 90.9,
+   "net_rr": 2.01,
+   "stop_pct": 0.04,
+   "risk_pct": 0.4941,
+   "dry_run": true
+  }
+ ],
+ "last_data_rejects": {
+  "BTCUSD": "provider unavailable: quote",
+  "EURUSD": "provider unavailable: quote",
+  "GBPUSD": "provider unavailable: quote"
+ },
+ "signals": 4
+}

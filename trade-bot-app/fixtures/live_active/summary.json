@@ -1,0 +1,53 @@
+{
+ "hours": 24.0,
+ "dry_run": false,
+ "scans": 2,
+ "scans_skipped": {},
+ "symbols_scanned": 8,
+ "candidates": 3,
+ "would_open": 0,
+ "opened": 2,
+ "observed": 0,
+ "shadowed": 1,
+ "news_blocked": 0,
+ "portfolio_blocked": 0,
+ "errors": 0,
+ "decisions": {
+  "PROVIDER_UNAVAILABLE": 6
+ },
+ "veto_reasons": {
+  "provider unavailable: quote": 6
+ },
+ "portfolio_reasons": {},
+ "observed_reasons": {},
+ "samples": [
+  {
+   "at": 1800000000.0,
+   "symbol": "XAUUSD",
+   "side": "BUY",
+   "strategy_id": "fx_trend_momentum_v6",
+   "score": 90.9,
+   "net_rr": 2.01,
+   "stop_pct": 0.04,
+   "risk_pct": 0.4941,
+   "dry_run": false
+  },
+  {
+   "at": 1800000900.0,
+   "symbol": "XAUUSD",
+   "side": "BUY",
+   "strategy_id": "fx_trend_momentum_v6",
+   "score": 90.9,
+   "net_rr": 2.01,
+   "stop_pct": 0.04,
+   "risk_pct": 0.496,
+   "dry_run": false
+  }
+ ],
+ "last_data_rejects": {
+  "BTCUSD": "provider unavailable: quote",
+  "EURUSD": "provider unavailable: quote",
+  "GBPUSD": "provider unavailable: quote"
+ },
+ "signals": 2
+}

@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "jest --runInBand",
-    "shots": "node tools/screenshots.cjs"
+    "e2e": "node e2e/screens.cjs",
+    "screens": "npm run export:web && npm run e2e"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
@@ -43,6 +44,7 @@
     "jest": "~30.5.2",
     "jest-expo": "~58.0.12",
     "prettier": "^3.9.10",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "playwright": "1.63.0"
   }
 }

@@ -21,7 +21,7 @@ from tradebot.api.auth import create_pair_code, issue_token  # noqa: E402
 from tradebot.api.server import create_app  # noqa: E402
 
 M15 = 900
-GETS = {"health": "/health", "status": "/status", "positions": "/positions", "settings": "/settings",
+GETS = {"health": "/health", "summary": "/health/summary?hours=24", "status": "/status", "positions": "/positions", "settings": "/settings",
         "reports_day": "/reports?period=day", "reports_week": "/reports?period=week",
         "reports_month": "/reports?period=month", "scorecard": "/scorecard", "strategies": "/strategies",
         "news": "/news", "events": "/events?newest=true&limit=100", "symbols": "/symbols"}
@@ -85,8 +85,9 @@ async def capture(app, target: Path):
         paired = await http.post("/pair", json={"code": code})
         (target / "pair.json").write_text(json.dumps({"token": "t" * len(paired.json()["token"])}) + "\n")
         symbols = (await http.get("/symbols", headers=auth)).json()
-        first = (symbols.get("symbols") if isinstance(symbols, dict) else symbols)[0]
-        distance = round(first["bid"] * 0.002, first["digits"]) if first.get("bid") else 1.0
+        rows = symbols.get("symbols") if isinstance(symbols, dict) else symbols
+        first = next(row for row in rows if row.get("quoted") and row.get("bid"))  # fiyati olan ilk sembol
+        distance = round(first["bid"] * 0.002, first["digits"])
         preview = await http.post("/trades/preview", headers=auth,
                                   json={"symbol": first["symbol"], "side": "BUY", "sl_distance": distance,
                                         "tp_distance": distance * 2})
