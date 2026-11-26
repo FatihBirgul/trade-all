@@ -474,3 +474,26 @@ Bağımsız inceleme: kritik bulgu yok; tek kapı (`_consider`) bütün bot aç�
 çeyrek saatte olduğu için fiilî bekleme 30–45 dk; deneme modunda her yeniden başlatma o kadar "açılırdı" kaydını
 eksiltir; saat ileri sıçrarsa bekleme kısalır (duvar saati kullanılıyor). PR #16 bu kararla gereksiz.
 "İlk gerçek emirden ÖNCE" listesindeki 5. madde (spread sınırı kararı) bu kararla kapandı.
+
+## Swing ailesi ve genişletilmiş ileri test (2026-11-26, kullanıcı isteği)
+
+Kaynak: kullanıcının eski masasındaki kurallar; resmi geçmiş testi yok. **Yalnızca gölge kipinde**, canlıya alınmaz.
+
+- `tb_smc_sweep_v1`: günlük yön → H1'de likidite süpürmesi + displacement + yapı kırılımı + Order Block/FVG bölgesi →
+  kapanmış M15 tetik mumu. `tb_emapb_h1_20_21_v1`, `tb_emapb_h1_21_50_v1`: günlük yön doğrultusunda H1 EMA
+  bölgesine geri çekilme + ret mumu (iki bölge sürümü).
+- Ortak kurallar (`strategies/swing_rules.py`): D1 (EMA20/50) + H4 (EMA50) yönü; H1 RSI > 70 / < 30 iken işlem yok;
+  stop yapının ötesinde **ve en az 1,5 × günlük ATR**; en yakın karşı günlük dönüş noktasına < 1R ise geç.
+- Çıkış planı (`outcome.simulate_swing`): TP1 = 1R'de yarısı kapanır ve stop girişe; ilerleme %60 → stop hedef
+  mesafesinin %30'una, %80 → %60'ına; kalan hedefte (1,5 / 2 / 2,5R).
+- **Benim yorumumla doldurulan yerler (kullanıcıya soruldu):** TP1 = 1R; kâr kilidi seviyeleri; SMC'de yalnızca
+  kapanmış tetik mumu (POI'de limit emir yok); "yer" = karşı günlük dönüş noktası (son 60 gün); POI = Order Block +
+  ona bitişik FVG'nin alt yarısı.
+- Canlı gölge izlemede bu stratejilerin sanal sonucu düz stop/2R hedefle tutulur (çıkış planı yalnızca ileri testte);
+  gölge defteri en çok ~15 günlük mum tuttuğu için daha uzun süren sanal işlem sonuçsuz silinir.
+- Bot artık günlük (D1) mumları da önbelleğe alır ve 5 dakikalık spread medyanlarını kaydeder (`spread_stats`):
+  ileri testin "saate göre gerçek spread" profili buradan çıkar; bütün saatlerin ölçülmesi için en az 24 saat gerekir.
+- İleri test `tradebot/forward.py` (ft-2): 90 gün (ilk 60 iç, son 30 dış örneklem), bütün semboller; swing için
+  hedef ve EMA bölgesi iç örneklemde seçilir, dış örneklemde raporlanır; portföy kuralları (günde 5 giriş, art arda
+  3 kayıptan sonra o gün giriş yok) ayrıca uygulanır. V9 son 60 günde kendi stopuyla ve 1,5 × günlük ATR stopuyla
+  yan yana. V9 pahalı olduğu için süre sınırlıdır; biten semboller saklanır, iş sonraki açılışta sürer.
