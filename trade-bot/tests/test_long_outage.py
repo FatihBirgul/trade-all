@@ -3,6 +3,7 @@ import pytest
 
 from tests.app_helpers import NOW, feed_ticks, load_market, restart, started
 from tests.execution.helpers import candidate
+from tradebot.exness import schema
 
 M15 = 900
 HOUR = 3600
@@ -74,7 +75,11 @@ async def test_shadow_trade_is_resolved_from_bars_that_closed_while_down(tmp_pat
     app.advance(8 * HOUR)
     load_market(app.fake, "XAUUSD", app.clock["now"])
     rows = app.fake.candles[("XAUUSD", "M15")]
-    hit = next(i for i, r in enumerate(rows) if r["time"] >= NOW + M15)
+    # Kesinti araligindaki mumlar duz (ne stop ne hedef); yalnizca DORDUNCU mum stopa iner.
+    for i, r in enumerate(rows):
+        if r["time"] >= NOW:
+            rows[i] = {**r, "open": entry, "high": entry + 1.0, "low": entry - 1.0, "close": entry}
+    hit = next(i for i, r in enumerate(rows) if r["time"] >= NOW + 3 * M15)
     rows[hit] = {**rows[hit], "low": entry - 6.0}
     app.fake.set_candles("XAUUSD", "M15", rows)
     again = restart(app)
@@ -85,15 +90,44 @@ async def test_shadow_trade_is_resolved_from_bars_that_closed_while_down(tmp_pat
     row = again.repo.conn.execute(
         "SELECT result_r, closed_at FROM shadow_trades WHERE setup_id = 'kesinti-golge-0001'").fetchone()
     assert row["result_r"] == pytest.approx(-1.0)
-    assert NOW < row["closed_at"] <= NOW + 8 * HOUR  # kesintideki mumun kapanis ani; "simdi" degil
+    assert row["closed_at"] == rows[hit]["time"] + M15  # stopa inen mumun kapanis ani; yeniden baslatma ani degil
+    assert row["closed_at"] < NOW + 8 * HOUR
 
 
 async def test_days_long_outage_refills_the_cache_from_scratch(tmp_path):
     app = await started(tmp_path, dry_run=True)
     await app.bot.on_bar_close()
-    again = await reopen(app, 24 * 7)  # bir hafta: Cuma 08:00 -> Cuma 08:00
+    again = await reopen(app, 24 * 28)  # dort hafta: onbellekteki son mum, tek istekle cekilebilen araligin disinda
+    before = len(again.fake.calls("GET", "/candles"))
     summary = await again.bot.on_bar_close()
+    # Aralik "son mumdan bugune" degil (tek istege sigmaz, ortasi bos kalirdi): en yeni `max_candles` mum istenir.
+    asked = [c[1] for c in again.fake.calls("GET", "/candles")[before:] if "instrument=XAUUSD&timeframe=M15" in c[1]]
+    now = again.clock["now"]
+    oldest = now - now % M15 - (again.bot.candles.max_candles - 1) * M15
+    assert len(asked) == 1 and f"from={schema._iso(oldest)}" in asked[0]
     recent = m15_times(again)[-200:]
     assert recent[-1] == again.clock["now"] - M15 - (again.clock["now"] % M15)
     assert max(b - a for a, b in zip(recent, recent[1:])) == M15
     assert summary.errors == 0 and summary.scanned >= 1
+
+
+async def test_restart_in_the_same_bar_never_sends_the_same_setup_twice(tmp_path):
+    """Sembol bosalsa bile (islem stopla kapandi) ayni mumun ayni kurulumu icin ikinci emir gonderilmez."""
+    app = await started(tmp_path)
+    await app.bot.on_bar_close()
+    await app.fake.flush()
+    trade = app.repo.open_trades("bot")[0]
+    quote = app.bot.quotes.quote("XAUUSD")
+    await app.fake.set_price("XAUUSD", trade.sl - 0.5, trade.sl - 0.3)  # stop tetiklendi: sembolde acik islem kalmadi
+    await app.fake.flush()
+
+    again = restart(app)  # ayni M15 mumunun icinde yeniden baslatma
+    await again.bot.start()
+    assert again.repo.open_trades("bot") == []
+    await feed_ticks(again, "XAUUSD", quote["bid"], quote["ask"], again.clock["now"])  # fiyat geri geldi
+    summary = await again.bot.on_bar_close()
+    await again.fake.flush()
+    # Iki katman korur: `already_submitted` denetimi ve emir kaydinin tekil anahtari (`bot-<setup>`).
+    # Biri bozulsa digeri tutar; burada sonuc (borsaya giden emir sayisi) sinanir.
+    assert len(posts(again)) == 1, summary
+    assert again.repo.conn.execute("SELECT COUNT(*) FROM orders WHERE kind = 'open'").fetchone()[0] == 1
