@@ -724,3 +724,9 @@ aşaması baştan hesaplanır.
   pozisyonların birikmiş swap'ını pozisyon büyüklüğüne ve gece sayısına oranlayıp yıllık yüzde olarak saklar
   (eksi = maliyet, 0 = swap yok; tutar saklanmaz). Herkese açık özette `swap_observed` (sembol|yön → gece, oran).
   Deneme modunda bot pozisyon açmadığından ölçüm ancak elle açılıp bir gece taşınan pozisyonla dolar.
+- **Güncelleme (kullanıcı teyidi, aynı gün):** Türkiye, Exness'in resmi sitesindeki otomatik swap-free (İslam
+  ülkeleri) listesinde; bu hesapta **bütün enstrümanlarda swap 0**. WEEK ve diğer çok günlük stratejilerde ana
+  senaryo swap 0'dır; %3 / %6 duyarlılığı yalnızca dipnottur (statü geri alınırsa ne olur). Exness statüyü kötüye
+  kullanım şüphesinde geri alabildiği için ölçüm bir uyarıya bağlandı: gece taşınan bir pozisyonda swap ilk kez
+  sıfırdan farklı görülürse `swap_charged` olayı ve "Swap uygulanıyor" bildirimi bir kez gönderilir (tutar yazılmaz;
+  yalnızca okuma, hiçbir karar değişmez).

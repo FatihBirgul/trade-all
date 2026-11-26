@@ -30,9 +30,10 @@ H4, DAY = 14400, 86400
 TIMEOUT = 7 * DAY
 REPORT_VERSION = 2  # rapor bicimi degisince ileri testin A asamasi onbellegi yenilenir
 SWAP_RATES = (0.03, 0.06)  # duyarlilik: pozisyon buyuklugunun yillik orani olarak gecelik faiz (aleyhte)
-# Exness "extended swap-free": majorlerde, XAUUSD'de ve kriptoda swap yok; caprazlarda olabilir. Alti sembolden
-# yalnizca GBPAUD caprazdir. Ana senaryo swap 0'dir; duyarlilik yalnizca swap'li sembollere uygulanir. Gercek deger
-# botun olcumuyle (ozet `swap_observed`) dogrulanmalidir.
+# Hesap swap'siz (kullanici Exness'in resmi listesinden teyit etti, 2026-11-26: Turkiye otomatik swap-free
+# listesinde; butun enstrumanlarda swap 0). ANA SENARYO swap 0'dir (= ozet toplamlar). Asagidaki duyarlilik
+# yalnizca DIPNOTTUR: broker bu statuyu geri alirsa ne olacagini gosterir (`crosses`: yalnizca caprazlarda faiz,
+# `everything`: hepsinde). Gercek durum botun olcumuyle izlenir (ozet `swap_observed`, `swap_charged` bildirimi).
 SWAP_FREE = frozenset({"BTCUSD", "ETHUSD", "XAUUSD", "EURUSD", "USDCHF"})
 REFERENCE = Path(__file__).parent / "data" / "week_reference.json"
 

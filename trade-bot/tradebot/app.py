@@ -1074,7 +1074,15 @@ class Bot:
             return False
         report = await self.executor.reconcile()
         if report is not None:
-            self._observe_swaps(report.positions)
+            # Hesap swap'siz (kullanici teyidi 2026-11-26). Broker bu statuyu geri alabilir: gece tasinan bir
+            # pozisyonda swap ilk kez sifirdan farkli gorulurse bir kez bildirilir (yalnizca okuma).
+            for key in self._observe_swaps(report.positions):
+                symbol, _, side = key.partition("|")
+                await self._record(
+                    "warning", "swap_charged",
+                    f"{symbol} {side}: gece taşınan pozisyonda swap (gecelik faiz) uygulanmış görünüyor. Hesabın "
+                    "swap'sız statüsünü Exness'te kontrol edin.", {"symbol": symbol, "side": side},
+                    notify=True, title="Swap uygulanıyor")
             try:
                 # Hesap ayarlari (durum, kaldirac) calisirken degisebilir: marjin kisiti, yalnizca-kapat kipi.
                 # Yalnizca acilista okunursa bot bunu emir reddedilene kadar ogrenemezdi. Mutabakat basarili
@@ -1407,12 +1415,16 @@ class Bot:
         await self._sleep(delay)
         await action()
 
-    def _observe_swaps(self, positions: list) -> None:
+    def _observe_swaps(self, positions: list) -> list[str]:
         """Gecelik faiz (swap) OLCUMU, yalnizca okuma: en az bir gece tasinmis acik pozisyonlarda broker'in bildirdigi
         birikmis swap, pozisyon buyuklugune ve gece sayisina oranlanip yillik yuzde olarak saklanir (eksi = maliyet,
         0 = swap yok). Tutar saklanmaz; hicbir karari etkilemez. API'de enstruman bazinda swap orani olmadigi icin
-        gercek deger ancak boyle ogrenilir."""
+        gercek deger ancak boyle ogrenilir.
+
+        Donus: swap'in ILK KEZ sifirdan farkli goruldugu "SEMBOL|YON" anahtarlari (bildirim icin). Ayni anahtar
+        sifira donup yeniden sifirdan farkli olursa yeniden doner."""
         now = self._clock()
+        charged: list[str] = []
         try:
             seen = self.repo.get_setting("swap_observed", {})
             seen = dict(seen) if isinstance(seen, dict) else {}
@@ -1428,13 +1440,19 @@ class Bot:
                 if notional <= 0:
                     continue
                 rate = float(position.swap or 0.0) / notional / nights * 365.0 * 100.0
-                seen[f"{symbol}|{position.side}"] = {"at": round(now), "nights": nights,
-                                                     "rate_pct_year": round(rate, 3), "zero": not position.swap}
+                key = f"{symbol}|{position.side}"
+                before = seen.get(key) if isinstance(seen.get(key), dict) else None
+                if position.swap and (before is None or before.get("zero", True)):
+                    charged.append(key)
+                seen[key] = {"at": round(now), "nights": nights, "rate_pct_year": round(rate, 3),
+                             "zero": not position.swap}
                 changed = True
             if changed:
                 self.repo.set_setting("swap_observed", seen)
-        except (LookupError, KeyError, TypeError, ValueError, sqlite3.Error) as exc:
+        except Exception as exc:  # noqa: BLE001 - olcum, mutabakati ve stop korumasini asla etkilememeli
             log.info("swap olcumu yapilamadi: %s", type(exc).__name__)
+            return []
+        return charged
 
     def lot_guard(self, symbol: str, side: str, lots: float, entry: float | None, stop: float | None) -> None:
         """Mutlak lot tavani: bakiye ve sembole gore. Asilirsa ValueError (emir kurulmaz).
