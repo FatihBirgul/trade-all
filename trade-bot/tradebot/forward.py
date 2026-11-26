@@ -1,4 +1,4 @@
-"""Genisletilmis ileri test (surum ft-4): swing ailesi + V9, ic/dis orneklem, saate gore spread.
+"""Genisletilmis ileri test (surum ft-5): swing ailesi + V9, ic/dis orneklem, saate gore spread.
 
 Iki asama, ikisi de ag ve kimlik bilgisi kullanmayan dusuk oncelikli alt surecte:
 A) Swing stratejileri (SMC, H1 EMA geri cekilme): butun semboller, butun donem. Her sinyal uc hedefle
@@ -31,7 +31,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import backtest
+from . import backtest, week_replica
 from .backtest import History
 from .exness.schema import Account, Instrument
 from .signals import outcome
@@ -39,7 +39,7 @@ from .signals.modules import Context, modules
 from .signals.modules.indicators import atr
 from .signals.modules.strategies import v13
 
-VERSION = "ft-4"
+VERSION = "ft-5"
 TARGETS = (1.5, 2.0, 2.5)
 SWING_IDS = ("tb_smc_sweep_v1", "tb_emapb_h1_20_21_v1", "tb_emapb_h1_21_50_v1")
 EMA_IDS = SWING_IDS[1:]
@@ -134,8 +134,9 @@ def _simulate_planned(signal, entry: float, now: float, after: list[dict], state
         return outcome.simulate_plan(signal.side, entry, signal.stop, signal.plan["tp1"], signal.plan["tp2"], now,
                                      after, spread_at=spread_at)
     if kind == "WEEKTRADE":  # +1R'de girise, +2R'de +1R kilit, sonra en iyi - 2 x 4H ATR; 7 gunde +1R yoksa cik
-        return outcome.simulate_trail(signal.side, entry, signal.stop, now, after, state, spread_at=spread_at,
-                                      lock=(2.0, 1.0), trail_atr=2.0, timeout=WEEK_TIMEOUT)
+        fixed = {"atr": signal.plan["atr4"]}  # kaynak kod: ATR giriste sabitlenir (giristen once kapanmis mum)
+        return outcome.simulate_trail(signal.side, entry, signal.stop, now, after, lambda moment: fixed,
+                                      spread_at=spread_at, lock=(2.0, 1.0), trail_atr=2.0, timeout=WEEK_TIMEOUT)
     return outcome.simulate_trail(signal.side, entry, signal.stop, now, after, state, spread_at=spread_at,
                                   structure=True)  # v13 WEEK: +1R'de girise, sonra 4H yapisinin arkasindan
 
@@ -454,16 +455,40 @@ def run_job(job_path: Path, pool_factory=None) -> dict:
     symbols = [row["symbol"] for row in job["instruments"] if spreads.has(row["symbol"])]
     kinds = {row["symbol"]: row["kind"] for row in job["instruments"]}
     began = time.time()
-    swing: list[dict] = []
-    for symbol in symbols:
-        history = read_history(Path(job["history"]), symbol)
-        swing += swing_trades(symbol, kinds[symbol], history, spreads, job["start"], job["end"])
+    signature = f"{VERSION}:{job['v9_start']}:{job['end']}"
+    # A asamasi (swing + WEEK TRADE yeniden uretimi) ayni pencere icin bir kez hesaplanir; V9 turlari yeniden kullanir.
+    cached = folder / "swing.json"
+    first = None
+    if cached.exists():
+        try:
+            first = json.loads(cached.read_text())
+        except ValueError:
+            first = None
+        if not isinstance(first, dict) or first.get("signature") != signature:
+            first = None
+    if first is None:
+        swing: list[dict] = []
+        for symbol in symbols:
+            history = read_history(Path(job["history"]), symbol)
+            swing += swing_trades(symbol, kinds[symbol], history, spreads, job["start"], job["end"])
+        long_bars = {}
+        for symbol in week_replica.SYMBOLS:
+            if spreads.has(symbol):
+                history = read_history(Path(job["history"]), symbol)
+                long_bars[symbol] = {"H4": [b for b in history.all(symbol, "H4") if b["time"] + 14400 <= job["end"]],
+                                     "D1": history.all(symbol, "D1")}
+        try:
+            replica = week_replica.report(long_bars, spreads.at, job["end"])
+        except Exception as exc:  # noqa: BLE001 - yeniden uretim hatasi ana olcumu dusurmez
+            replica = {"error": type(exc).__name__}
+        first = {"signature": signature, "swing": summarize_swing(swing, job["split"]), "week_replica": replica,
+                 "swing_seconds": round(time.time() - began, 1)}
+        cached.write_text(json.dumps(first))
     summary = {"version": VERSION, "from": job["start"], "to": job["end"], "split": job["split"],
                "v9_from": job["v9_start"], "spread_profile": spreads.coverage(),
-               "swing": summarize_swing(swing, job["split"]),
-               "swing_seconds": round(time.time() - began, 1), "symbols": len(symbols)}
-    # V9: biten semboller dosyada durur; yalnizca eksikler calisir.
-    signature = f"{VERSION}:{job['v9_start']}:{job['end']}"
+               "swing": first["swing"], "week_replica": first["week_replica"],
+               "swing_seconds": first["swing_seconds"], "symbols": len(symbols)}
+    # V9: biten semboller dosyada durur; yalnizca eksikler calisir. `skip_v9`: yalnizca A asamasi (erken sonuc).
     done: dict[str, dict] = {}
     for symbol in symbols:
         cached = folder / f"v9-{symbol}.json"
@@ -477,7 +502,7 @@ def run_job(job_path: Path, pool_factory=None) -> dict:
     for stale in folder.glob("v9-*.json"):  # baska pencereye/surume ait eski dosyalar
         if stale.name[3:-5] not in done:
             stale.unlink(missing_ok=True)
-    todo = [symbol for symbol in symbols if symbol not in done]
+    todo = [] if job.get("skip_v9") else [symbol for symbol in symbols if symbol not in done]
     workers = max(1, min(int(job.get("workers") or 1), len(todo) or 1))
     if todo:
         make_pool = pool_factory or (lambda count: multiprocessing.get_context("spawn").Pool(count))

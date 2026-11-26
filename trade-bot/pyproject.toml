@@ -23,7 +23,7 @@ dev = ["pytest>=8", "pytest-asyncio>=0.24"]
 include = ["tradebot*"]
 
 [tool.setuptools.package-data]
-tradebot = ["store/*.sql"]
+tradebot = ["store/*.sql", "data/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

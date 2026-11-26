@@ -26,7 +26,7 @@ from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 from .config import BotSettings, Settings, strategy_mode
 from .execution.executor import Executor
 from .execution.reconcile import fetch_all_deals, reconcile
-from . import backtest, forward
+from . import backtest, forward, week_replica
 from .store import backup
 from .store.repo import Trade
 from .exness import schema
@@ -1184,6 +1184,14 @@ class Bot:
                     text = PUBLIC_NUMBER.sub("#", str(key))[:VETO_REASON_CHARS]
                     target[text] = target.get(text, 0) + count
 
+        # Guvenlik tanilamasi: kapanan islemlerde broker tarafinda stop/hedef GORULDU mu (tutar, lot, fiyat yok).
+        # `stop_seen`: broker'in onayladigi bir stop seviyesi kaydedildi; `sltp_order`: stop/hedef emri eslestirildi.
+        out["positions"] = {
+            "sl_missing_events": len(self.repo.events_since(since, ("sl_missing",))),
+            "closed": [{"origin": t.origin, "symbol": t.symbol, "side": t.side, "held_s": round(t.closed_at - t.opened_at),
+                        "stop_seen": t.last_sl is not None or t.sl is not None, "sltp_order": bool(t.sltp_order_id),
+                        "target_seen": t.tp2 is not None or t.planned_tp is not None}
+                       for t in reversed(self.repo.closed_trades(since=since, limit=10))]}
         # Kimlik retleri (tanilama): an, tur, kod, kaynak, ardisik ret sayisi / duzelme suresi. Tutar ya da kimlik yok.
         out["auth"] = [
             {"at": round(event["at"]), "kind": event["kind"],
@@ -1234,7 +1242,11 @@ class Bot:
             rows: list[tuple] = []
             for tf, duration in forward.DURATIONS.items():
                 step = (self.candles.max_candles - 1) * duration
-                cursor = int((start - forward.WARMUP_DAYS[tf] * 86400) // duration) * duration
+                begin = start - forward.WARMUP_DAYS[tf] * 86400
+                if instrument.symbol in week_replica.SYMBOLS and tf in ("H4", "D1"):
+                    # WEEK TRADE'in 2 yillik yeniden uretimi icin bu alti sembolde uzun gecmis (isinma payiyla).
+                    begin = min(begin, week_replica.START - forward.WARMUP_DAYS[tf] * 86400)
+                cursor = int(begin // duration) * duration
                 while cursor < now:
                     request = schema.candles_path(self.client.account_id, instrument.broker_symbol, tf, cursor,
                                                   min(now, cursor + step))
@@ -1332,8 +1344,9 @@ class Bot:
                 "workers": BACKTEST_WORKERS or (os.cpu_count() or 1),
                 "history": str(history), "result": str(result)}
             summary = None
-            for _ in range(max(1, BACKTEST_ROUNDS)):
-                job.write_text(json.dumps({**spec, "deadline": time.time() + BACKTEST_BUDGET}))
+            # Ilk tur yalnizca A asamasidir (swing + WEEK TRADE): sonuc dakikalar icinde yayinlanir; V9 sonra gelir.
+            for index in range(max(1, BACKTEST_ROUNDS) + 1):
+                job.write_text(json.dumps({**spec, "deadline": time.time() + BACKTEST_BUDGET, "skip_v9": index == 0}))
                 result.unlink(missing_ok=True)
                 code = await self._backtest_spawn(job)
                 if code != 0 or not result.exists():

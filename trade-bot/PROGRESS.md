@@ -573,3 +573,54 @@ yazılmıştı; onlar karşılaştırma için duruyor, yanlarına gerçek kodun 
 - Testler: 10 lot elle emir 422 ve broker'a istek yok; bot adayı tavanı aşarsa gönderilmez; tavan bakiyeyle
   küçülür; SAT yönü; dar stopta büyüklük tavanı.
 - Eski masa %5 bileşik risk kullanıyordu; bizim risk ayarlarımıza (en çok %1) dokunulmadı.
+
+### Ek 2 (2026-11-26): `bt.py` + işlem listeleri, gölge izleyici kanıtı, kimlik reddi tanılaması
+
+**WEEK TRADE artık `bt.py` ile birebir** (önceki sürüm belge özetinden yazılmıştı; farklar: ATR basit ortalama,
+4H'te EMA20 eğimi aranmaz, günlük veri "bir önceki takvim günü", iz süren stopun ATR'si girişte sabit).
+- Kanıt: özgün `bt.py` ile taşınan kod aynı sentetik veride (altı sembol, portföy kuralları dahil) çalıştırıldı;
+  işlem listesi satır satır aynı (yumuşak 85/85, sıkı 59/59: giriş zamanı, sembol, yön, R, çıkış, neden).
+  Referans `tests/week_golden.json`; özgün dosya depoya konmadı.
+- Özgün çıktılar doğrulandı: yumuşak 182 işlem +21,79R PF 1,44; **altın hariç 149 işlem +5,36R PF 1,13**; açık
+  kalan 3 işlem +3,01R (anlık fiyatla sayılmış). Sıkı 184 işlem +17,25R PF 1,35; altın hariç PF 1,07.
+- `tradebot/week_replica.py`: `bt.py`nin portföy döngüsü Exness mumlarıyla 2024-12-15'ten bugüne çalışır
+  (ileri test işinin içinde; altı sembol için H4/D1 geçmişi uzun çekilir). İki kip:
+  - **bt**: kaynak varsayımlar → kaynak işlem listesiyle karşılaştırma (aynı sembol+yön; giriş aynı / 1 gün içinde).
+    Liste `tradebot/data/week_reference.json` (yalnızca zaman, sembol, yön, R, çıkış).
+  - **fixed**: düzeltilmiş ölçüm: (a) gerçek Exness spread'i, SAT ask'tan kapanır; (b) ATR girişten önce kapanmış
+    mumdan (kaynak giriş mumunu da kullanıyordu); mum stopun ötesinde açılırsa açılıştan çıkılır; (d) açık kalanlar
+    toplam dışında. Altın dahil / hariç, 1. yıl / 2. yıl ve sembol bazında ayrı satır.
+  - **(c) gecelik faiz:** bu Exness API'sinde enstrüman bazında swap oranı YOK (yalnızca açık pozisyonun birikmiş
+    swap'ı var). Taşınan gece sayısı raporlanır ve yıllık %3 / %6 aleyhte faiz varsayımıyla duyarlılık verilir.
+    Kaba hesap: stop ≈ fiyatın %1–2'si iken %5/yıl faiz ≈ gece başına 0,01R.
+  - Veri kaynağı farkı: kaynak yfinance/Binance (altın: GC=F vadeli), biz Exness spot. Listelerin birebir aynı
+    çıkması beklenmez; sapma sayıları raporlanır.
+- İleri test ft-5: ilk alt süreç yalnızca A aşamasıdır (swing + WEEK yeniden üretimi) ve sonucu dakikalar içinde
+  yayınlar; V9 turları sonra gelir ve A aşamasını yeniden hesaplamaz.
+
+**Gölge izleyicinin doğruluğu** (karnede `tb_ema_pullback_v1` 31 sanal işlem, %3 kazanma görüldü):
+- `tests/signals/test_shadow_accuracy.py`: (1) 400 rastgele işlemde izleyici, testteki kitabî hesap ve bağımsız
+  `outcome.simulate_fixed` ile aynı sonucu verir; (2) eğilimsiz piyasada AL ve SAT için beklenen ≈ 0R ve 2R hedefte
+  kazanma ≈ 1/3; (3) spread stopun %20'si iken beklenen ≈ −0,2R (spread bir kez ödenir; iki kez düşülseydi −0,4R).
+  İzleyici hatalı değil.
+- Canlı çapraz denetim: `/health/outcomes` her gölge işlemi bağımsız hesapla ve gerçek mumlarla yeniden sonuçlandırır
+  (`check_r`, MFE/MAE, mum sayısı; `shadow_check` sayaçları: uyuşan/ayrışan, ilk mumda stop, ≥1R gören).
+- `tb_ema_pullback_v1` ve `tb_donchian_breakout_v1` aynı kuralla 90 günlük ileri teste alındı.
+- Yorum: stoplar M15 ATR'sine göre çok dar (spread/stop 0,13–0,33); o günkü işlemlerin çoğu aynı yöne (CAD/CHF
+  karşısında SAT) açılmış, birbirine bağlı işlemlerdi. %3'ün ne kadarının strateji, ne kadarının o gün olduğunu
+  90 günlük ölçüm gösterecek.
+
+**Kimlik reddi (AUTH_INVALID_API_KEY, kod 1000) bildirimleri:**
+- Bilinen davranış: canlı sunucu bazı isteklerin İLKİNİ 1000 ile reddediyor, aynı istek sonra geçiyor (keşif
+  2026-11-25). Mum istekleri bu kodda bir kez yinelenir; diğer okuma istekleri yinelenmez ve bildirim üretir.
+- Rette ne olur: yönetim istekleri 30 sn durur (art arda retlerde 5 dakikaya kadar katlanır), ilk başarılı istekte
+  açılır. Broker tarafındaki stop yerinde kalır. **Canlıda emir sırasında olursa:** emir ACK'ten önce reddedilmiş
+  sayılır, gönderilmez ve YİNELENMEZ (o giriş kaçar; çift emir ya da belirsiz emir oluşmaz).
+- Saat kayması / imza hatası olsaydı ret sürekli olurdu ve kod 1001 (imza) beklenirdi; tek seferlik 1000 buna uymuyor.
+- Eklenen tanılama: her ret kaynağıyla (okuma / emir) ve ardışık sayısıyla `auth_reject` olarak kaydedilir;
+  `auth_restored` düzelme süresini taşır; herkese açık özette `auth` bloğu (an, kod, kaynak, süre).
+
+**Elle test için tanılama:** herkese açık özette `positions`: kapanan son işlemlerde broker tarafında stop/hedefin
+görülüp görülmediği ve `sl_missing` olay sayısı (tutar/fiyat yok).
+
+**Uygulama:** Raporlar'da "Stratejiye göre" ve "Sembole göre" veri yokken açıklama metni gösterir (sonraki APK'da).

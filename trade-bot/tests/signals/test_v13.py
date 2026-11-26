@@ -136,12 +136,16 @@ def test_every_signal_keeps_the_source_rules(run):
             frame = Frame(context.bars["H1" if "day" in name else "H4"])
             assert v13.rejection(frame, "L" if signal.side == "BUY" else "S")  # son kapanmis mumda ret mumu sart
         if name == "tb_week_trade_v1":
-            daily, upper = Frame(context.bars["D1"]), Frame(context.bars["H4"])
-            assert risk == pytest.approx(2.0 * daily.atr[-1])  # stop 2 x gunluk ATR
-            assert week_trade.bias(daily) == signal.side == week_trade.bias(upper)
+            upper = Frame(context.bars["H4"])
+            # Gunluk veri "bir onceki takvim gunu"dur: yon sinyal mumunun, stop giris mumunun gunune gore.
+            before_signal = week_trade.daily_state(week_trade.days_before(context.bars["D1"], now - 14400))
+            before_entry = week_trade.daily_state(week_trade.days_before(context.bars["D1"], now))
+            assert risk == pytest.approx(2.0 * before_entry["atr"])  # stop 2 x gunluk ATR (basit ortalama)
+            assert before_signal["bias"] == (1 if signal.side == "BUY" else -1)
+            assert (upper.C[-1] > upper.e20[-1] > upper.e50[-1]) == (signal.side == "BUY")
             body, span = abs(upper.C[-1] - upper.O[-1]), upper.H[-1] - upper.L[-1]
-            assert body > 0.5 * span and span <= 2.0 * upper.atr[-1]
-            assert (upper.rsi[-1] > 50) == (signal.side == "BUY")
+            assert body > 0.5 * span and span <= 2.0 * week_trade.simple_atr(upper)[-1]
+            assert (upper.rsi[-1] > 50) == (signal.side == "BUY") and plan["atr4"] == week_trade.simple_atr(upper)[-1]
 
 
 def test_buy_and_sell_are_exact_mirror_images(run):

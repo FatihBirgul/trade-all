@@ -478,3 +478,22 @@ async def test_outcomes_cross_check_every_shadow_trade_with_an_independent_calcu
     # Kayit bozulursa (sonuc yanlissa) capraz denetim bunu gosterir.
     app.repo.conn.execute("UPDATE shadow_trades SET result_r = 2.0")
     assert app.bot.dryrun_outcomes()["shadow_check"]["differ"] == 1
+
+
+async def test_public_summary_says_whether_closed_positions_had_a_broker_side_stop(tmp_path):
+    from tradebot.store.repo import Trade
+    app = await started(tmp_path)
+    now = app.clock["now"]
+    app.repo.upsert_trade(Trade(position_id="p-1", origin="manual", symbol="XAUUSD", side="SELL", volume=0.0, entry=2000.0,
+                                sl=2005.0, tp2=1990.0, last_sl=2005.0, sltp_order_id="o-1", opened_at=now - 300,
+                                closed_at=now - 60, close_price=2000.2, pnl=-0.18))
+    app.repo.upsert_trade(Trade(position_id="p-2", origin="manual", symbol="XAUUSD", side="BUY", volume=0.0, entry=2000.0,
+                                opened_at=now - 200, closed_at=now - 100, close_price=2000.0, pnl=0.0))
+    positions = app.bot.scan_summary()["positions"]
+    assert positions["sl_missing_events"] == 0
+    assert positions["closed"] == [
+        {"origin": "manual", "symbol": "XAUUSD", "side": "BUY", "held_s": 100, "stop_seen": False, "sltp_order": False,
+         "target_seen": False},
+        {"origin": "manual", "symbol": "XAUUSD", "side": "SELL", "held_s": 240, "stop_seen": True, "sltp_order": True,
+         "target_seen": True}]  # kapanis sirasiyla
+    assert "0.18" not in str(positions) and "2005" not in str(positions)  # tutar ve fiyat yok

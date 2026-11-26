@@ -2,6 +2,8 @@
 import asyncio
 import json
 
+import pytest
+
 from tests.app_helpers import started
 from tests.test_scan_summary import public_get
 from tradebot import app as app_module
@@ -346,14 +348,15 @@ async def test_unfinished_job_keeps_its_window_across_days(tmp_path, monkeypatch
     monkeypatch.setattr(app_module, "BACKTEST_BUDGET", -1.0)
     monkeypatch.setattr(app_module, "BACKTEST_ROUNDS", 2)
     assert (await app.bot.backtest_once())["v9_coverage"]["complete"] is False
-    assert len(jobs) == 2  # bitmeyen is ayni gecmisle bir tur daha denenir
+    # Ilk alt surec yalnizca A asamasidir (erken sonuc); bitmeyen V9 ayni gecmisle iki tur denenir.
+    assert [job["skip_v9"] for job in jobs] == [True, False, False]
     app.clock["now"] += 86400.0  # ertesi gun yeniden baslayan surec ayni pencereyle surer
     monkeypatch.setattr(app_module, "BACKTEST_BUDGET", 3600.0)
     done = await app.bot.backtest_once()
-    assert done["v9_coverage"]["complete"] is True and len(jobs) == 3 and jobs[2]["end"] == jobs[0]["end"]
+    assert done["v9_coverage"]["complete"] is True and len(jobs) == 5 and jobs[4]["end"] == jobs[0]["end"]
     app.clock["now"] += 86400.0  # tamamlanan isten sonra (sonuc eskiyince) yeni pencere acilir
     await app.bot.backtest_once()
-    assert jobs[3]["end"] == jobs[0]["end"] + 2 * 86400.0
+    assert jobs[5]["end"] == jobs[0]["end"] + 2 * 86400.0
 
 
 async def test_history_never_stores_a_bar_that_is_still_forming(tmp_path, monkeypatch):
@@ -444,3 +447,89 @@ def test_planned_summary_reports_profit_factor_drawdown_cost_and_the_requested_s
     day = 50 * 86400.0
     streak = [planned(day + i * 7200, -1.0) for i in range(3)] + [planned(day + 30_000, 5.0)]
     assert forward.summarize_planned(streak, split)["rules"]["all"]["sum_r"] == -3.0
+
+
+# ---------------------------------------------------------------- WEEK TRADE: kaynak kodla (bt.py) birebirlik
+def week_bars(golden):
+    from tests.signals.market_gen import market
+    from tradebot import week_replica
+    bars = {}
+    for index, symbol in enumerate(week_replica.SYMBOLS):
+        frames, k = market(golden["seed"] + index, golden["days"]), golden["scale"][symbol]
+        scale = lambda rows: [dict(b, open=b["open"] * k, high=b["high"] * k, low=b["low"] * k, close=b["close"] * k)  # noqa: E731
+                              for b in rows]
+        bars[symbol] = {"H4": scale(frames["H4"]), "D1": scale(frames["D1"])}
+    return bars
+
+
+def test_week_trade_port_reproduces_the_trade_list_of_the_original_code():
+    """Referans, kullanicinin ozgun `bt.py`si ayni sentetik veriyle calistirilarak uretildi (alti sembol, portfoy
+    kurallari dahil). Tasinan kod ayni islem listesini vermeli: giris zamani, sembol, yon, R, cikis, neden, uzama."""
+    from pathlib import Path
+    from tradebot import week_replica
+    golden = json.loads((Path(__file__).parent / "week_golden.json").read_text())
+    bars = week_bars(golden)
+    found = week_replica.all_signals(bars)
+    for name, soft in (("soft", True), ("strict", False)):
+        mine = week_replica.run(bars, soft=soft, mode="bt", found=found)
+        want = golden[name]
+        assert len(mine) == len(want) >= 50
+        for got, row in zip(mine, want):
+            assert [got["at"], got["symbol"], got["side"]] == row[:3]
+            assert abs(got["r"] - row[3]) < 1e-4 and [int(got["exit"]), got["why"], got["stretch"]] == row[4:]
+        assert {row[1] for row in want} == set(week_replica.SYMBOLS) and {row[5] for row in want} >= {"stop", "time"}
+    # Karsilastirma araci: ayni liste tam eslesir; kaydirilmis bir giris "1 gun icinde" sayilir.
+    soft = week_replica.run(bars, soft=True, mode="bt", found=found)
+    same = week_replica.compare(soft, golden["soft"], 1e12)
+    assert same["exact"] == same["reference"] == same["ours"] and same["only_ours"] == same["only_reference"] == 0
+    assert same["matched_same_result_sign"] == same["exact"]
+    shifted = [dict(soft[0], at=soft[0]["at"] + 14400)] + soft[2:]
+    moved = week_replica.compare(shifted, golden["soft"], 1e12)
+    assert moved["within_1d"] == 1 and moved["only_reference"] == 1 and moved["exact"] == same["exact"] - 2
+
+
+def test_week_trade_corrected_measurement_differs_only_where_the_source_was_optimistic():
+    from tradebot import week_replica as W
+    at = 1_800_000_000 // 14400 * 14400
+    bar = lambda i, o, h, low, c: {"time": at + i * 14400, "open": o, "high": h, "low": low, "close": c}  # noqa: E731
+    flat = lambda moment: 0.2  # noqa: E731
+    # Bosluk: mum stopun otesinde aciliyor. Kaynak stop fiyatindan (-1R) sayar; duzeltilmis olcum acilistan (-1,5R).
+    gap = [bar(0, 100, 100.5, 99.5, 100), bar(1, 98.5, 98.6, 98.0, 98.2)]
+    assert W.simulate(1, 100.0, 1.0, 0.5, at, gap, "bt", flat)["r"] == -1.0
+    assert W.simulate(1, 100.0, 1.0, 0.5, at, gap, "fixed", flat)["r"] == pytest.approx(-1.5)
+    # SAT ask'tan kapanir: duzeltilmis olcumde spread stopu yaklastirir; kaynakta cikis maliyeti yoktur.
+    near = [bar(0, 100, 100.9, 99.5, 100), bar(1, 100, 100.2, 99.9, 100)]
+    assert W.simulate(-1, 100.0, 1.0, 0.5, at, near, "bt", flat)["why"] == "open"
+    assert W.simulate(-1, 100.0, 1.0, 0.5, at, near, "fixed", flat) == {"r": -1.0, "exit": at, "why": "stop"}
+    # +1R -> girise, +2R -> +1R kilit, 2R asilinca en iyi - 2 x ATR; 7 gunde +1R yoksa cikis.
+    run_up = [bar(0, 100, 103.0, 99.9, 102.9), bar(1, 102.9, 102.9, 101.0, 101.5)]
+    assert W.simulate(1, 100.0, 1.0, 0.5, at, run_up, "bt", flat)["r"] == pytest.approx(2.0)  # 3R - 2 x 0,5
+    slow = [bar(i, 100, 100.3, 99.8, 100.2) for i in range(60)]
+    timed = W.simulate(1, 100.0, 1.0, 0.5, at, slow, "bt", flat)
+    assert timed["why"] == "time" and timed["exit"] - at == 7 * 86400 and timed["r"] == pytest.approx(0.2)
+    # Ozet: acik kalanlar duzeltilmis toplamda yok; altin haric satir; gecelik faiz duyarliligi sonucu dusurur.
+    rows = [{"at": W.START + i * 86400, "symbol": symbol, "side": "BUY", "stretch": False, "r": r, "exit": 0, "why": why,
+             "nights": 5, "cost_r": 0.01, "night_r": 0.02}
+            for i, (symbol, r, why) in enumerate([("XAUUSD", 3.0, "stop"), ("EURUSD", -1.0, "stop"),
+                                                  ("BTCUSD", 1.0, "time"), ("XAUUSD", 2.5, "open")])]
+    replica, fixed = W.summarize(rows, exclude_open=False), W.summarize(rows, exclude_open=True)
+    assert replica["all"]["net_r"] == 5.5 and fixed["all"]["net_r"] == 3.0 and fixed["open"] == {"trades": 1, "r": 2.5}
+    assert fixed["ex_xau"]["net_r"] == 0.0 and fixed["ex_xau"]["trades"] == 2 and fixed["all"]["pf"] == 4.0
+    assert fixed["all"]["nights"] == 15 and fixed["swap"]["0.06"]["all"] == pytest.approx(3.0 - 15 * 0.02 * 0.06, abs=0.01)
+    assert fixed["all"]["max_dd"] == -1.0 and fixed["by_symbol"]["XAUUSD"]["trades"] == 1
+
+
+async def test_first_result_is_published_before_the_long_v9_phase_and_includes_the_week_reproduction(tmp_path, monkeypatch):
+    app = await started(tmp_path, dry_run=True)
+    jobs = short_job(monkeypatch, app)
+    published = []
+    real = app.bot.repo.set_setting
+    monkeypatch.setattr(app.bot.repo, "set_setting", lambda key, value: (published.append((key, value)), real(key, value))[1])
+    summary = await app.bot.backtest_once()
+    results = [value for key, value in published if key == "backtest_result"]
+    assert len(results) == 2 and results[0]["v9_coverage"]["complete"] is False and jobs[0]["skip_v9"] is True
+    assert results[0]["swing"] == summary["swing"] and summary["v9_coverage"]["complete"] is True
+    replica = summary["week_replica"]
+    assert "error" not in replica and set(replica["missing"]) | set(replica["coverage"]) == set(forward.week_replica.SYMBOLS)
+    assert replica["soft"]["match"]["reference"] == 182 and replica["strict"]["match"]["reference"] == 184
+    assert (tmp_path / "backtest" / "swing.json").exists()  # A asamasi V9 turlarinda yeniden hesaplanmaz
