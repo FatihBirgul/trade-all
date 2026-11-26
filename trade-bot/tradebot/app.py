@@ -10,6 +10,7 @@ import asyncio
 import dataclasses
 from importlib import metadata
 import logging
+import math
 import json
 import os
 import re
@@ -25,7 +26,7 @@ from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 from .config import BotSettings, Settings, strategy_mode
 from .execution.executor import Executor
 from .execution.reconcile import fetch_all_deals, reconcile
-from . import backtest, forward
+from . import backtest, forward, week_replica
 from .store import backup
 from .store.repo import Trade
 from .exness import schema
@@ -85,6 +86,10 @@ DATA_REJECTS_MAX = 40
 HEAL_PER_SCAN = 4  # tarama basina en cok bu kadar bosluk onarim istegi
 HEAL_RETRY = 6 * 3600.0  # borsanin da vermedigi bosluk icin yeniden deneme araligi
 # Ileri test (yalnizca deneme modunda, ayri dusuk oncelikli surecte): bkz. backtest.py
+SHADOW_CHECK_HOURS = 48.0  # /health/outcomes capraz denetimi: en cok bu kadar eski golge islemler
+SHADOW_CHECK_MAX = 120  # ...ve cagri basina en cok bu kadar islem
+HARD_MAX_RISK_PCT = 5.0  # tek emirde stopta olusacak zararin varliga orani icin MUTLAK tavan (ayar degil)
+HARD_MAX_NOTIONAL_X = 50.0  # tek pozisyonun buyuklugu / varlik icin MUTLAK tavan (ayar degil)
 BACKTEST_DELAY = 180.0  # acilistan sonra bekleme (sn)
 BACKTEST_DAYS = 90  # swing stratejileri: ilk 60 gun ic orneklem, son 30 gun dis orneklem
 BACKTEST_V9_DAYS = 60  # V9 pahalidir: son 60 gun (30 gun ic + 30 gun dis orneklem)
@@ -158,7 +163,7 @@ class Bot:
         self.account: Account | None = None
         self.provider = ExnessV9Provider(self.catalog, self.candles, self.quotes, lambda: self.account)
         self.executor = Executor(client, repo, notifier, self.catalog, clock=clock,
-                                 on_auth_error=self._auth_error)
+                                 on_auth_error=self._auth_error, lot_guard=self.lot_guard)
         self.shadow = ShadowBook(repo)
         self.streams: list = []
         self.started = False
@@ -188,6 +193,7 @@ class Bot:
         self._auth_alerted_at = 0.0
         self._auth_error_at = 0.0
         self._auth_backoff = AUTH_BACKOFF_START
+        self._auth_streak = 0  # basarili istek gorulmeden art arda gelen kimlik retleri
         self._auth_blocked_until = 0.0
         self._stop_checked: dict[str, float] = {}
         self._stop_alerted: set[str] = set()
@@ -613,11 +619,20 @@ class Bot:
 
         Bekleme 30 sn'den baslar ve art arda retlerde 5 dakikaya kadar katlanir: tek seferlik bir 401
         stop yonetimini dakikalarca durdurmaz. Basarili herhangi bir istek kilidi hemen acar.
+        Her ret, kaynagiyla (hangi tur istek) ve o ana kadarki ardisik ret sayisiyla `auth_reject` olarak
+        kaydedilir (bildirimsiz): tek seferlik mi, surekli mi sonradan gorulebilsin.
         """
         now = self._clock()
+        self._auth_streak += 1
         self._auth_error_at = now
         self._auth_blocked_until = now + self._auth_backoff
         self._auth_backoff = min(self._auth_backoff * 2, AUTH_BACKOFF_MAX)
+        try:  # tanilama kaydi; yazilamasa da bekleme kilidi yukarida kuruldu
+            self.repo.add_event("warning", "auth_reject", "Exness bir isteği kimlik hatasıyla reddetti",
+                                {"code": exc.code, "status": exc.status,
+                                 "source": getattr(exc, "source", None) or "okuma", "streak": self._auth_streak})
+        except sqlite3.Error:
+            log.warning("kimlik reddi kaydedilemedi")
         if self._auth_alerted and now - self._auth_alerted_at < AUTH_ALERT_TTL:
             log.error("kimlik dogrulamasi hala reddediliyor: %s", exc)
             return
@@ -635,10 +650,12 @@ class Bot:
             return
         was_alerted = self._auth_alerted
         self._auth_alerted = False
+        self._auth_streak = 0
         self._auth_blocked_until = 0.0
         self._auth_backoff = AUTH_BACKOFF_START
         if was_alerted:
-            await self._record("info", "auth_restored", "Exness kimlik doğrulaması yeniden çalışıyor.")
+            await self._record("info", "auth_restored", "Exness kimlik doğrulaması yeniden çalışıyor.",
+                               {"after_seconds": round(self._clock() - self._auth_error_at, 1)})
 
     def _auth_blocked(self) -> bool:
         return self._clock() < self._auth_blocked_until
@@ -1172,6 +1189,21 @@ class Bot:
                     text = PUBLIC_NUMBER.sub("#", str(key))[:VETO_REASON_CHARS]
                     target[text] = target.get(text, 0) + count
 
+        # Guvenlik tanilamasi: kapanan islemlerde broker tarafinda stop/hedef GORULDU mu (tutar, lot, fiyat yok).
+        # `stop_seen`: broker'in onayladigi bir stop seviyesi kaydedildi; `sltp_order`: stop/hedef emri eslestirildi.
+        out["positions"] = {
+            "sl_missing_events": len(self.repo.events_since(since, ("sl_missing",))),
+            "closed": [{"origin": t.origin, "symbol": t.symbol, "side": t.side, "held_s": round(t.closed_at - t.opened_at),
+                        "stop_seen": t.last_sl is not None or t.sl is not None, "sltp_order": bool(t.sltp_order_id),
+                        "target_seen": t.tp2 is not None or t.planned_tp is not None}
+                       for t in reversed(self.repo.closed_trades(since=since, limit=10))]}
+        # Kimlik retleri (tanilama): an, tur, kod, kaynak, ardisik ret sayisi / duzelme suresi. Tutar ya da kimlik yok.
+        out["auth"] = [
+            {"at": round(event["at"]), "kind": event["kind"],
+             **{key: (event["data"] or {}).get(key) for key in ("code", "status", "source", "streak", "after_seconds")
+                if isinstance(event["data"], dict) and event["data"].get(key) is not None}}
+            for event in self.repo.events_since(since, ("auth_error", "auth_reject", "auth_restored",
+                                                        "market_data_rejected"))][-40:]
         for event in self.repo.events_since(since, ("scan", "scan_skipped", "signal", "signal_observed")):
             data = event["data"] if isinstance(event["data"], dict) else {}
             if event["kind"] == "scan":
@@ -1215,7 +1247,11 @@ class Bot:
             rows: list[tuple] = []
             for tf, duration in forward.DURATIONS.items():
                 step = (self.candles.max_candles - 1) * duration
-                cursor = int((start - forward.WARMUP_DAYS[tf] * 86400) // duration) * duration
+                begin = start - forward.WARMUP_DAYS[tf] * 86400
+                if instrument.symbol in week_replica.SYMBOLS and tf in ("H4", "D1"):
+                    # WEEK TRADE'in 2 yillik yeniden uretimi icin bu alti sembolde uzun gecmis (isinma payiyla).
+                    begin = min(begin, week_replica.START - forward.WARMUP_DAYS[tf] * 86400)
+                cursor = int(begin // duration) * duration
                 while cursor < now:
                     request = schema.candles_path(self.client.account_id, instrument.broker_symbol, tf, cursor,
                                                   min(now, cursor + step))
@@ -1227,7 +1263,7 @@ class Bot:
                     for r in schema.parse_candles(payload):
                         if r["time"] + duration <= now:
                             rows.append((instrument.symbol, tf, r["time"], r["open"], r["high"], r["low"],
-                                         r["close"]))
+                                         r["close"], float(r.get("volume") or r.get("tick_volume") or 0.0)))
                     cursor += step
                     await self._sleep(BACKTEST_FETCH_PAUSE)
             await asyncio.to_thread(backtest.write_history, path, rows)
@@ -1313,8 +1349,9 @@ class Bot:
                 "workers": BACKTEST_WORKERS or (os.cpu_count() or 1),
                 "history": str(history), "result": str(result)}
             summary = None
-            for _ in range(max(1, BACKTEST_ROUNDS)):
-                job.write_text(json.dumps({**spec, "deadline": time.time() + BACKTEST_BUDGET}))
+            # Ilk tur yalnizca A asamasidir (swing + WEEK TRADE): sonuc dakikalar icinde yayinlanir; V9 sonra gelir.
+            for index in range(max(1, BACKTEST_ROUNDS) + 1):
+                job.write_text(json.dumps({**spec, "deadline": time.time() + BACKTEST_BUDGET, "skip_v9": index == 0}))
                 result.unlink(missing_ok=True)
                 code = await self._backtest_spawn(job)
                 if code != 0 or not result.exists():
@@ -1347,6 +1384,34 @@ class Bot:
     async def _once_after(self, delay: float, action) -> None:
         await self._sleep(delay)
         await action()
+
+    def lot_guard(self, symbol: str, side: str, lots: float, entry: float | None, stop: float | None) -> None:
+        """Mutlak lot tavani: bakiye ve sembole gore. Asilirsa ValueError (emir kurulmaz).
+
+        Ayarlardan BAGIMSIZ, degistirilemeyen son kontrol; bot emirleri ve elle acilan emirler icin aynidir:
+        - stopta olusacak zarar varligin %`HARD_MAX_RISK_PCT`'inden buyuk olamaz,
+        - pozisyonun toplam buyuklugu (hesap para biriminde) varligin `HARD_MAX_NOTIONAL_X` katini asamaz.
+        Varlik ya da kur bilinmiyorsa emir gonderilmez. Normal boyutlandirma (risk %0,25-1) bu tavanin cok
+        altindadir; tavan yalnizca yanlis girilmis/hesaplanmis bir lotu (or. 10 lot) durdurur."""
+        equity = float(self.account.equity) if self.account is not None else 0.0
+        if equity <= 0 or not math.isfinite(equity):
+            raise ValueError("hesap varlığı bilinmiyor; emir gönderilmez")
+        if entry is None:  # fiyat verilmediyse (piyasa emri) anlik fiyat kullanilir
+            quote = self.quotes.quote(symbol)
+            entry = None if quote is None else float(quote["ask" if side == "BUY" else "bid"])
+        if entry is None or stop is None or lots is None or not lots > 0:
+            raise ValueError("lot tavanı denetlenemedi (giriş, stop ya da lot eksik)")
+        try:
+            loss = -self.provider.loss_for(symbol, side, lots, entry, stop)
+            notional = abs(self.provider.loss_for(symbol, "BUY", lots, entry, 0.0))
+        except (LookupError, KeyError):
+            raise ValueError("lot tavanı denetlenemedi (kur yok)") from None
+        if not math.isfinite(loss) or loss <= 0:
+            raise ValueError("lot tavanı denetlenemedi (stop girişin yanlış tarafında)")
+        if loss > equity * HARD_MAX_RISK_PCT / 100.0:
+            raise ValueError(f"lot mutlak üst sınırı aşıyor: stopta zarar varlığın %{HARD_MAX_RISK_PCT:g}'inden fazla")
+        if notional > equity * HARD_MAX_NOTIONAL_X:
+            raise ValueError(f"lot mutlak üst sınırı aşıyor: pozisyon varlığın {HARD_MAX_NOTIONAL_X:g} katından büyük")
 
     def entry_paused(self) -> bool:
         """Surec yeni basladi mi (RESTART_ENTRY_PAUSE dolmadi mi)? Doluncaya kadar yeni islem acilmaz."""
@@ -1432,16 +1497,43 @@ class Bot:
             except (KeyError, TypeError, ValueError):
                 pass
             signals.append(item)
-        shadows = [{"symbol": r[0], "side": r[1], "strategy_id": r[2], "reason": r[3],
+        shadows, check, checked = [], {"agree": 0, "differ": 0, "unknown": 0, "sl_first_bar": 0, "mfe_ge_1r": 0}, 0
+        for r in self.repo.conn.execute(
+                "SELECT symbol, side, strategy_id, reason, score, opened_at, closed_at, result_r, "
+                "entry, sl, tp, spread FROM shadow_trades WHERE opened_at >= ? ORDER BY opened_at DESC", (since,)):
+            item = {"symbol": r[0], "side": r[1], "strategy_id": r[2], "reason": r[3],
                     "score": round(r[4], 1) if r[4] is not None else None, "opened_at": r[5], "closed_at": r[6],
                     "result_r": round(r[7], 3) if r[7] is not None else None,
                     "stop_pct": round(abs(r[8] - r[9]) / r[8] * 100.0, 4) if r[8] else None,
                     "target_r": round(abs(r[10] - r[8]) / abs(r[8] - r[9]), 2) if r[8] != r[9] else None,
                     "spread_r": round(r[11] / abs(r[8] - r[9]), 3) if r[11] is not None and r[8] != r[9] else None}
-                   for r in self.repo.conn.execute(
-                       "SELECT symbol, side, strategy_id, reason, score, opened_at, closed_at, result_r, "
-                       "entry, sl, tp, spread FROM shadow_trades WHERE opened_at >= ? ORDER BY opened_at", (since,))]
+            # Capraz denetim: ayni islem, golge izleyiciden BAGIMSIZ ikinci hesapla ve onbellekteki gercek mumlarla
+            # yeniden sonuclandirilir. Iki sonuc ayni olmali; MFE/MAE islemin nasil gittigini gosterir.
+            try:
+                # Herkese acik uc olay dongusunde calisir: yalnizca son `SHADOW_CHECK_HOURS` saatte acilan en cok
+                # `SHADOW_CHECK_MAX` islem yeniden hesaplanir (islem basi ~1 ms).
+                if now - r[5] > SHADOW_CHECK_HOURS * 3600.0 or checked >= SHADOW_CHECK_MAX:
+                    raise ValueError("capraz denetim kapsami disinda")
+                checked += 1
+                count = min(1500, int((now - r[5]) // 900) + 40)
+                bars = self.candles.cached(str(r[0]), "M15", count)
+                if not bars or bars[0]["time"] > r[5] + 900:
+                    raise ValueError("mum gecmisi yetersiz")
+                again = outcome.simulate_fixed(str(r[1]), float(r[8]), float(r[9]), float(r[10]), float(r[5]), bars,
+                                               spread_at=lambda moment, fixed=float(r[11] or 0.0): fixed)
+                item.update({"check_r": again["r"], "mfe_r": again["mfe_r"], "mae_r": again["mae_r"],
+                             "bars": again["bars"]})
+                if r[7] is not None:
+                    same = again["r"] is not None and abs(again["r"] - r[7]) < 0.01
+                    check["agree" if same else "differ"] += 1
+                    check["sl_first_bar"] += int(again["first"] == "SL" and again["bars"] == 1)
+                    check["mfe_ge_1r"] += int(again["mfe_r"] >= 1.0)
+            except (TypeError, ValueError):
+                check["unknown"] += int(r[7] is not None)
+            shadows.append(item)
+        shadows.reverse()  # eskiden yeniye (denetim en yenilerden baslar)
         return {"hours": round((now - since) / 3600.0, 2), "rules": rules, "signals": signals, "shadows": shadows,
+                "shadow_check": check,
                 "hourly": [[hour, *row.values()] for hour, row in sorted(hourly.items())]}
 
     def quoted_now(self) -> int:

@@ -369,3 +369,145 @@ async def test_daily_candle_rate_limit_and_auth_errors_are_not_swallowed(tmp_pat
         await app.bot._daily_candles("XAUUSD")
     app.bot.candles.get = down
     await app.bot._daily_candles("XAUUSD")  # gecici hata: sessizce gecilir, tarama surer
+
+
+# ---------------------------------------------------------------- mutlak lot tavani
+async def test_absolute_lot_ceiling_stops_an_oversized_manual_order(tmp_path):
+    """Yanlislikla girilen buyuk lot (or. 10 lot) hicbir yoldan broker'a gitmez: tavan bakiyeye ve sembole baglidir."""
+    import httpx
+    from tests.api.test_manual_preview import client
+    from tradebot import app as app_module
+    app = await started(tmp_path)  # varlik 10.000; XAUUSD'de 5 birim stop = lot basina 500 zarar
+    base = {"symbol": "XAUUSD", "side": "BUY", "sl_distance": 5.0, "tp_distance": 10.0}
+    before = len(app.fake.requests)
+    async with client(app) as http:
+        preview = (await http.post("/trades/preview", json={**base, "lots": 10.0})).json()
+        assert any("GÖNDERİLEMEZ" in text and "mutlak üst sınır" in text for text in preview["warnings"])
+        refused = await http.post("/trades", json={**base, "lots": 10.0, "client_id": "buyuk-lot-0001"})
+        assert refused.status_code == 422 and "mutlak üst sınır" in refused.json()["detail"]
+        # Stopta zarar varligin %5'ini asan her lot reddedilir (1,5 lot = %7,5); sinirin altindaki kabul edilir.
+        assert (await http.post("/trades", json={**base, "lots": 1.5, "client_id": "buyuk-lot-0002"})).status_code == 422
+        assert len(app.fake.requests) == before and app.repo.orders_in(("PENDING", "ACKED", "UNKNOWN")) == []
+        accepted = await http.post("/trades", json={**base, "lots": 0.5, "client_id": "normal-lot-0001"})
+        assert accepted.status_code == 200 and accepted.json()["lots"] == 0.5
+    assert isinstance(httpx.__version__, str) and app_module.HARD_MAX_RISK_PCT == 5.0
+
+
+async def test_lot_ceiling_also_guards_bot_orders_and_scales_with_the_balance(tmp_path):
+    import dataclasses
+    from tradebot import app as app_module
+    app = await started(tmp_path)
+    quote = app.bot.quotes.quote("XAUUSD")
+    entry = quote["ask"]
+    guard = app.bot.lot_guard
+    guard("XAUUSD", "BUY", 0.5, entry, entry - 5.0)  # %2,5: gecer
+    with pytest.raises(ValueError, match="stopta zarar"):
+        guard("XAUUSD", "BUY", 1.01, entry, entry - 5.0)  # %5'in hemen ustu
+    with pytest.raises(ValueError, match="stopta zarar"):
+        guard("XAUUSD", "SELL", 1.01, entry, entry + 5.0)
+    # Cok dar stopla zarar kucuk gorunse de pozisyon buyuklugu varligin 50 katini asamaz.
+    lots = app.bot.account.equity * app_module.HARD_MAX_NOTIONAL_X / (entry * 100.0)
+    guard("XAUUSD", "BUY", lots * 0.99, entry, entry - 0.01)
+    with pytest.raises(ValueError, match="katından büyük"):
+        guard("XAUUSD", "BUY", lots * 1.01, entry, entry - 0.01)
+    with pytest.raises(ValueError, match="yanlış tarafında"):
+        guard("XAUUSD", "BUY", 0.1, entry, entry + 5.0)
+    # Tavan bakiyeyle kuculur: kucuk hesapta ayni lot reddedilir.
+    app.bot.account = dataclasses.replace(app.bot.account, equity=30.0)
+    with pytest.raises(ValueError, match="mutlak üst sınır"):
+        guard("XAUUSD", "BUY", 0.5, entry, entry - 5.0)
+    guard("XAUUSD", "BUY", 0.002, entry, entry - 5.0)
+    app.bot.account = None
+    with pytest.raises(ValueError, match="varlığı bilinmiyor"):
+        guard("XAUUSD", "BUY", 0.01, entry, entry - 5.0)
+
+
+async def test_bot_order_above_the_ceiling_is_not_sent(tmp_path):
+    from tradebot.signals.adapter import Candidate
+    app = await started(tmp_path)
+    entry = app.bot.quotes.quote("XAUUSD")["ask"]
+    huge = Candidate(symbol="XAUUSD", side="BUY", entry=entry, stop_loss=entry - 5.0, take_profit_1=entry + 5.0,
+                     take_profit_2=entry + 10.0, lots=10.0, strategy_id="fx_trend_momentum_v6", setup_id="tavan-testi",
+                     net_rr=2.0, analysis_id="a" * 64, risk_amount=5000.0)
+    before = len(app.fake.requests)
+    with pytest.raises(ValueError, match="mutlak üst sınır"):
+        await app.bot.executor.open(huge, "bot")
+    assert len(app.fake.requests) == before and app.repo.get_order("bot-tavan-testi") is None
+
+
+async def test_auth_rejections_are_recorded_with_their_source_for_diagnosis(tmp_path):
+    """Her kimlik reddi kaynagiyla ve ardisik sayisiyla kaydedilir; ozet yalnizca kod/kaynak/sure verir."""
+    from tradebot.exness.errors import ExnessAuthError
+    app = await started(tmp_path)
+    first = ExnessAuthError("AUTH_INVALID_API_KEY", code=1000, status=401)
+    await app.bot._auth_error(first)
+    order = ExnessAuthError("AUTH_INVALID_API_KEY", code=1000, status=401)
+    order.source = "emir"
+    await app.bot._auth_error(order)
+    auth = app.bot.scan_summary()["auth"]
+    rejects = [row for row in auth if row["kind"] == "auth_reject"]
+    assert [(row["code"], row["source"], row["streak"]) for row in rejects] == [(1000, "okuma", 1), (1000, "emir", 2)]
+    assert sum(1 for row in auth if row["kind"] == "auth_error") == 1  # bildirim bir kez
+    app.clock["now"] += 45.0
+    app.bot.client.last_ok_at = app.clock["now"]
+    await app.bot._auth_ok()
+    restored = [row for row in app.bot.scan_summary()["auth"] if row["kind"] == "auth_restored"]
+    assert restored and restored[0]["after_seconds"] == 45.0 and app.bot._auth_streak == 0
+    assert "message" not in str(app.bot.scan_summary()["auth"])
+
+
+async def test_outcomes_cross_check_every_shadow_trade_with_an_independent_calculation(tmp_path):
+    from tradebot.signals.adapter import Candidate
+    app = await started(tmp_path)
+    now = app.clock["now"]
+    opened = int(now // 900) * 900 - 20 * 900 + 10.0
+    bars = [{"time": int(opened // 900) * 900 + i * 900, "open": 2000.0, "high": 2000.5, "low": 1999.5, "close": 2000.0,
+             "volume": 10} for i in range(-5, 19)]
+    bars[8] = dict(bars[8], low=1994.0)  # stop goruldu
+    app.fake.set_candles("XAUUSD", "M15", bars)
+    await app.bot.candles.get("XAUUSD", "M15", 64)
+    trade = Candidate(symbol="XAUUSD", side="BUY", entry=2000.0, stop_loss=1995.0, take_profit_1=2010.0,
+                      take_profit_2=2010.0, lots=0.01, strategy_id="tb_ema_pullback_v1", setup_id="capraz-1", net_rr=2.0,
+                      analysis_id="a" * 64, risk_amount=1.0)
+    assert app.bot.shadow.open(trade, "shadow", 60.0, opened, 0.2)
+    app.bot.shadow.resolve("XAUUSD", app.bot.candles.cached("XAUUSD", "M15", 64), now)
+    report = app.bot.dryrun_outcomes()
+    row = report["shadows"][-1]
+    assert row["result_r"] == -1.0 == row["check_r"] and row["mae_r"] <= -1.0 and row["bars"] == 4
+    assert report["shadow_check"]["agree"] == 1 and report["shadow_check"]["differ"] == 0
+    # Kayit bozulursa (sonuc yanlissa) capraz denetim bunu gosterir.
+    app.repo.conn.execute("UPDATE shadow_trades SET result_r = 2.0")
+    assert app.bot.dryrun_outcomes()["shadow_check"]["differ"] == 1
+
+
+async def test_public_summary_says_whether_closed_positions_had_a_broker_side_stop(tmp_path):
+    from tradebot.store.repo import Trade
+    app = await started(tmp_path)
+    now = app.clock["now"]
+    app.repo.upsert_trade(Trade(position_id="p-1", origin="manual", symbol="XAUUSD", side="SELL", volume=0.0, entry=2000.0,
+                                sl=2005.0, tp2=1990.0, last_sl=2005.0, sltp_order_id="o-1", opened_at=now - 300,
+                                closed_at=now - 60, close_price=2000.2, pnl=-0.18))
+    app.repo.upsert_trade(Trade(position_id="p-2", origin="manual", symbol="XAUUSD", side="BUY", volume=0.0, entry=2000.0,
+                                opened_at=now - 200, closed_at=now - 100, close_price=2000.0, pnl=0.0))
+    positions = app.bot.scan_summary()["positions"]
+    assert positions["sl_missing_events"] == 0
+    assert positions["closed"] == [
+        {"origin": "manual", "symbol": "XAUUSD", "side": "BUY", "held_s": 100, "stop_seen": False, "sltp_order": False,
+         "target_seen": False},
+        {"origin": "manual", "symbol": "XAUUSD", "side": "SELL", "held_s": 240, "stop_seen": True, "sltp_order": True,
+         "target_seen": True}]  # kapanis sirasiyla
+    assert "0.18" not in str(positions) and "2005" not in str(positions)  # tutar ve fiyat yok
+
+
+async def test_lot_ceiling_fails_closed_when_it_cannot_be_checked(tmp_path):
+    """Giris, stop ya da lot bilinmiyorsa tavan denetlenemez: emir GONDERILMEZ (sessizce gecmez)."""
+    app = await started(tmp_path)
+    entry = app.bot.quotes.quote("XAUUSD")["ask"]
+    guard = app.bot.lot_guard
+    for lots, price, stop in ((0.1, entry, None), (0.0, entry, entry - 5.0), (float("nan"), entry, entry - 5.0)):
+        with pytest.raises(ValueError, match="denetlenemedi"):
+            guard("XAUUSD", "BUY", lots, price, stop)
+    guard("XAUUSD", "BUY", 0.1, None, entry - 5.0)  # fiyat verilmediyse anlik fiyat kullanilir
+    app.bot.quotes._last.clear()
+    with pytest.raises(ValueError, match="denetlenemedi"):
+        guard("XAUUSD", "BUY", 0.1, None, entry - 5.0)  # fiyat da yoksa emir yok

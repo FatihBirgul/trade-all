@@ -521,3 +521,116 @@ Bilinen sınırlar (düzeltilmedi, sonuç okunurken dikkate alınmalı):
 - Stoplar tam stop fiyatından dolmuş sayılır (boşluk/kayma yok). İlk çalışmalarda spread profili "bugünkü"
   spreadlerdir; saatlik ölçüm biriktikçe iyileşir.
 - Geçmiş çekimi ~840 istek; bu sırada canlı taramanın mum istekleri aynı sınırlayıcıda sıraya girer.
+
+## Eski masanın gerçek kodu: v13 hizalaması, WEEK TRADE ve mutlak lot tavanı (2026-11-26, kullanıcı onayıyla)
+
+Kullanıcı eski masanın gerçek dosyalarını gönderdi: `smc.py` (v13 SMC/EMA aday motoru), `ta_engine.py` ve tüm
+backtest dökümü. Önceki swing stratejileri (`tb_smc_sweep_v1`, `tb_emapb_h1_*`) bir .docx özetinden YORUMLA
+yazılmıştı; onlar karşılaştırma için duruyor, yanlarına gerçek kodun birebir taşınmış hâli eklendi.
+**Hepsi yalnızca gölge kipinde; canlıya alınmadı, risk ayarları değişmedi.**
+
+### Yeni gölge stratejiler
+| Kimlik | Kaynak | Mum | Çıkış (ileri testte) |
+|---|---|---|---|
+| `tb_smc_day_v13` | `smc.py` Model 1/3/4 | H1 | Hedef 1'de yarı + stop girişe, kalan Hedef 2; ilerleme kilitleri; en çok 5 gün |
+| `tb_emapb_day_v13` | `smc.py` Model 2 | H1 | aynı |
+| `tb_smc_week_v13` | `smc.py` Model 1/3/4 | H4 | hedef yok; +1R'de girişe, sonra 4H dönüş noktalarının 0,3 ATR ötesi |
+| `tb_emapb_week_v13` | `smc.py` Model 2 | H4 | aynı |
+| `tb_week_trade_v1` | belge §2.10 ("yumuşak") | H4 | +1R'de girişe, +2R'de +1R kilit, sonra en iyi − 2 × 4H ATR; 7 günde +1R yoksa çık |
+
+- **Birebirlik kanıtı:** özgün `smc.py` (pandas) ile taşınan kod aynı sentetik veride yan yana çalıştırıldı:
+  1408 karar anında geçen adaylar (yön, model, puan, stop, hedefler) aynı. Özgün kodun çıktısı
+  `tests/signals/v13_golden.json` olarak saklandı; test her çalışmada karşılaştırır (özgün dosya depoya konmadı).
+- **Kaynaktan bilinçli farklar:** veri Exness mumları (256 H1 / 120 H4 / 120 D1); seans saatleri UTC+3 sabit
+  kaydırmayla; sabit kodlu "US PMI −5" yok (canlıda botun haber kapısı; geçmiş oynatmada haber takvimi yok);
+  "önceki gün" = karar anında KAPANMIŞ son günlük mum (özgün kod İstanbul 00–03 arasında oluşmakta olan günü
+  kullanabiliyordu: bakış-öne); Hedef 1 tam 1,5R iken kayan nokta yuvarlamasının işlemi rastgele elemesi
+  engellendi (1e-9 pay).
+- **Çıkış planlarında yorum olan yerler:** `smc.py` DAY için yalnızca Hedef 1/Hedef 2 verir; yönetim v10 gün içi
+  kurallarından alındı (yarı + girişe; %40/%60/%80 ilerlemede girişe / %25 / %50 kilit; 5 gün). v13 WEEK için
+  kaynak "4H yapısının arkasından veya 4H kapanışı EMA20 ötesi" der; yapı sürümü uygulandı (EMA sürümü, EMA'ya
+  geri çekilmede girilen işlemi hemen kapatırdı).
+- **Canlı gölge kaydı** bu stratejileri de botun ortak 2R planıyla izler (kaba ölçüm); kesin ölçüm ileri testtir.
+
+### İleri test ft-4
+- Aynı oynatma: eski yorum stratejileri + 5 yeni strateji + V9 (iki stopla). Yeni stratejilerde seçilecek
+  parametre yok: iç/dış örneklem yalnızca yan yana raporlanır.
+- Strateji başına: işlem, kazanan/kaybeden, net R, **PF**, **en büyük düşüş (R)**, **maliyet/stop** (spread ÷ stop
+  mesafesi, medyan), çıkış türleri. Kırılımlar: model, enstrüman türü, kripto hafta sonu / hafta içi, DAY'de tetik
+  mumu hacmi (≥ 0,7 × 20 mum ortalaması / altı), WEEK TRADE'de aşırı uzama.
+- Geçmiş dosyası artık mum hacmini de saklar. Pencereler canlıyla aynı (256 H1 / 120 H4 / 120 D1).
+- Belgedeki ölçütler (karşılaştırma için): WEEK TRADE 2 yıl 182 işlem +21,8R PF 1,44 (XAU +16,4R, EUR −5,7R);
+  scalp net −145R (maliyet); BTC gün içi +23R PF 1,34; hafta sonu kripto gün içi pozitif; hacim filtresi gün
+  içinde +7R. Bizim test 90 gündür: aynı işaret beklenir, aynı büyüklük beklenmez; 90 günde WEEK işlem sayısı azdır.
+
+### Mutlak lot tavanı (eski masadaki 10 lot kazası için)
+- **Bulgu:** bot emirleri risk bütçesiyle boyutlanıyordu, ama ELLE girilen lot yalnızca enstrümanın en büyük
+  lotuyla sınırlıydı; bakiyeye bağlı mutlak bir tavan YOKTU.
+- **Eklenen:** `Bot.lot_guard` (ayar değil, sabit): tek emirde stopta oluşacak zarar varlığın **%5**'ini,
+  pozisyon büyüklüğü varlığın **50 katını** aşamaz; varlık ya da kur bilinmiyorsa emir gönderilmez. Bot emirleri
+  ve elle emirler aynı iki yürütücü yolundan geçer, ikisi de tavanı denetler. Önizleme "Bu emir GÖNDERİLEMEZ"
+  uyarısı verir. Normal boyutlandırma (risk %0,25–1) bu tavanın çok altındadır.
+- Testler: 10 lot elle emir 422 ve broker'a istek yok; bot adayı tavanı aşarsa gönderilmez; tavan bakiyeyle
+  küçülür; SAT yönü; dar stopta büyüklük tavanı.
+- Eski masa %5 bileşik risk kullanıyordu; bizim risk ayarlarımıza (en çok %1) dokunulmadı.
+
+### Ek 2 (2026-11-26): `bt.py` + işlem listeleri, gölge izleyici kanıtı, kimlik reddi tanılaması
+
+**WEEK TRADE artık `bt.py` ile birebir** (önceki sürüm belge özetinden yazılmıştı; farklar: ATR basit ortalama,
+4H'te EMA20 eğimi aranmaz, günlük veri "bir önceki takvim günü", iz süren stopun ATR'si girişte sabit).
+- Kanıt: özgün `bt.py` ile taşınan kod aynı sentetik veride (altı sembol, portföy kuralları dahil) çalıştırıldı;
+  işlem listesi satır satır aynı (yumuşak 85/85, sıkı 59/59: giriş zamanı, sembol, yön, R, çıkış, neden).
+  Referans `tests/week_golden.json`; özgün dosya depoya konmadı.
+- Özgün çıktılar doğrulandı: yumuşak 182 işlem +21,79R PF 1,44; **altın hariç 149 işlem +5,36R PF 1,13**; açık
+  kalan 3 işlem +3,01R (anlık fiyatla sayılmış). Sıkı 184 işlem +17,25R PF 1,35; altın hariç PF 1,07.
+- `tradebot/week_replica.py`: `bt.py`nin portföy döngüsü Exness mumlarıyla 2024-12-15'ten bugüne çalışır
+  (ileri test işinin içinde; altı sembol için H4/D1 geçmişi uzun çekilir). İki kip:
+  - **bt**: kaynak varsayımlar → kaynak işlem listesiyle karşılaştırma (aynı sembol+yön; giriş aynı / 1 gün içinde).
+    Liste `tradebot/data/week_reference.json` (yalnızca zaman, sembol, yön, R, çıkış).
+  - **fixed**: düzeltilmiş ölçüm: (a) gerçek Exness spread'i, SAT ask'tan kapanır; (b) ATR girişten önce kapanmış
+    mumdan (kaynak giriş mumunu da kullanıyordu); mum stopun ötesinde açılırsa açılıştan çıkılır; (d) açık kalanlar
+    toplam dışında. Altın dahil / hariç, 1. yıl / 2. yıl ve sembol bazında ayrı satır.
+  - **(c) gecelik faiz:** bu Exness API'sinde enstrüman bazında swap oranı YOK (yalnızca açık pozisyonun birikmiş
+    swap'ı var). Taşınan gece sayısı raporlanır ve yıllık %3 / %6 aleyhte faiz varsayımıyla duyarlılık verilir.
+    Kaba hesap: stop ≈ fiyatın %1–2'si iken %5/yıl faiz ≈ gece başına 0,01R.
+  - Veri kaynağı farkı: kaynak yfinance/Binance (altın: GC=F vadeli), biz Exness spot. Listelerin birebir aynı
+    çıkması beklenmez; sapma sayıları raporlanır.
+- İleri test ft-5: ilk alt süreç yalnızca A aşamasıdır (swing + WEEK yeniden üretimi) ve sonucu dakikalar içinde
+  yayınlar; V9 turları sonra gelir ve A aşamasını yeniden hesaplamaz.
+
+**Gölge izleyicinin doğruluğu** (karnede `tb_ema_pullback_v1` 31 sanal işlem, %3 kazanma görüldü):
+- `tests/signals/test_shadow_accuracy.py`: (1) 400 rastgele işlemde izleyici, testteki kitabî hesap ve bağımsız
+  `outcome.simulate_fixed` ile aynı sonucu verir; (2) eğilimsiz piyasada AL ve SAT için beklenen ≈ 0R ve 2R hedefte
+  kazanma ≈ 1/3; (3) spread stopun %20'si iken beklenen ≈ −0,2R (spread bir kez ödenir; iki kez düşülseydi −0,4R).
+  İzleyici hatalı değil.
+- Canlı çapraz denetim: `/health/outcomes` her gölge işlemi bağımsız hesapla ve gerçek mumlarla yeniden sonuçlandırır
+  (`check_r`, MFE/MAE, mum sayısı; `shadow_check` sayaçları: uyuşan/ayrışan, ilk mumda stop, ≥1R gören).
+- `tb_ema_pullback_v1` ve `tb_donchian_breakout_v1` aynı kuralla 90 günlük ileri teste alındı.
+- Yorum: stoplar M15 ATR'sine göre çok dar (spread/stop 0,13–0,33); o günkü işlemlerin çoğu aynı yöne (CAD/CHF
+  karşısında SAT) açılmış, birbirine bağlı işlemlerdi. %3'ün ne kadarının strateji, ne kadarının o gün olduğunu
+  90 günlük ölçüm gösterecek.
+
+**Kimlik reddi (AUTH_INVALID_API_KEY, kod 1000) bildirimleri:**
+- Bilinen davranış: canlı sunucu bazı isteklerin İLKİNİ 1000 ile reddediyor, aynı istek sonra geçiyor (keşif
+  2026-11-25). Mum istekleri bu kodda bir kez yinelenir; diğer okuma istekleri yinelenmez ve bildirim üretir.
+- Rette ne olur: yönetim istekleri 30 sn durur (art arda retlerde 5 dakikaya kadar katlanır), ilk başarılı istekte
+  açılır. Broker tarafındaki stop yerinde kalır. **Canlıda emir sırasında olursa:** emir ACK'ten önce reddedilmiş
+  sayılır, gönderilmez ve YİNELENMEZ (o giriş kaçar; çift emir ya da belirsiz emir oluşmaz).
+- Saat kayması / imza hatası olsaydı ret sürekli olurdu ve kod 1001 (imza) beklenirdi; tek seferlik 1000 buna uymuyor.
+- Eklenen tanılama: her ret kaynağıyla (okuma / emir) ve ardışık sayısıyla `auth_reject` olarak kaydedilir;
+  `auth_restored` düzelme süresini taşır; herkese açık özette `auth` bloğu (an, kod, kaynak, süre).
+
+**Elle test için tanılama:** herkese açık özette `positions`: kapanan son işlemlerde broker tarafında stop/hedefin
+görülüp görülmediği ve `sl_missing` olay sayısı (tutar/fiyat yok).
+
+**Uygulama:** Raporlar'da "Stratejiye göre" ve "Sembole göre" veri yokken açıklama metni gösterir (sonraki APK'da).
+
+**Bağımsız inceleme (PR #26):** kritik bulgu yok; lot tavanını atlayan açma yolu yok, kapatma/değiştirme
+engellenmiyor, yeni stratejiler emir gönderemiyor, herkese açık bloklarda hesap verisi yok. Düzeltilenler:
+`/health/outcomes` çapraz denetimi son 48 saat ve en çok 120 işlemle sınırlandı (olay döngüsünü yavaşlatmasın);
+ileri testin A aşaması önbelleği girdileri (semboller, spread profili) de kapsıyor ve hatalı sonucu saklamıyor;
+lot tavanı aynı kurulumun yinelenen çağrısında tekrar çalışmıyor; kimlik reddi kaydı bekleme kilidini
+geciktiremiyor; üç test boşluğu kapatıldı. Bilinen sınırlar: canlı gölge kaydı WEEK stratejilerini de sabit 2R
+planıyla izler (iz süren stoplu ileri test / yeniden üretim sonuçlarıyla KARŞILAŞTIRILMAZ); yeniden üretim 300
+mumluk, canlı 120 mumluk pencere kullanır (sentetik veride 245 sinyalin 4'ü farklı); düzeltilmiş ölçümdeki
+"gerçek spread" bugünkü saatlik profilin 2 yıla uygulanmasıdır.

@@ -64,9 +64,11 @@ export default function Reports() {
                 </Card>
                 <Card testID="report-breakdown">
                   <T weight="800" size={16}>Stratejiye göre · tüm zamanlar</T>
+                  {Object.keys(data.by_strategy).length === 0 ? (<T muted size={14} testID="report-no-strategy">Henüz bot işlemi yok. Bot bir işlem kapattığında burada görünür.</T>) : null}
                   {Object.entries(data.by_strategy).map(([id, row]) => (<Row key={id} name={strategyName(id) + " · " + row.wins + "/" + row.trades} value={pnlText(row.pnl, null)} color={tone(row.pnl)} />))}
                   <View style={{ height: 1, backgroundColor: c.line }} />
                   <T weight="800" size={16}>Sembole göre</T>
+                  {Object.keys(data.by_symbol).length === 0 ? (<T muted size={14} testID="report-no-symbol">Henüz kapanan işlem yok.</T>) : null}
                   {Object.entries(data.by_symbol).map(([symbol, row]) => (<Row key={symbol} name={symbol + " · " + row.wins + "/" + row.trades} value={pnlText(row.pnl, null)} color={tone(row.pnl)} />))}
                 </Card>
                 <Card testID="report-history">

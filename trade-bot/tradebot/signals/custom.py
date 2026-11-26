@@ -116,7 +116,7 @@ def evaluate(provider, instrument, *, equity: float, risk_pct: float, modes: dic
         return []
     bars = {frame: provider.candles(symbol, frame, 256) for frame in ("M15", "H1")}
     # Swing stratejileri ust zaman dilimlerini de okur; onbellekte yoksa bos gelir ve o stratejiler sinyal uretmez.
-    for frame, count, seconds in (("H4", 120, 14400), ("D1", 90, 86400)):
+    for frame, count, seconds in (("H4", 120, 14400), ("D1", 120, 86400)):
         try:
             found = provider.candles(symbol, frame, count)
         except (LookupError, KeyError):

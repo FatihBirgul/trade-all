@@ -1,4 +1,4 @@
-"""Genisletilmis ileri test (surum ft-3): swing ailesi + V9, ic/dis orneklem, saate gore spread.
+"""Genisletilmis ileri test (surum ft-5): swing ailesi + V9, ic/dis orneklem, saate gore spread.
 
 Iki asama, ikisi de ag ve kimlik bilgisi kullanmayan dusuk oncelikli alt surecte:
 A) Swing stratejileri (SMC, H1 EMA geri cekilme): butun semboller, butun donem. Her sinyal uc hedefle
@@ -9,6 +9,10 @@ A) Swing stratejileri (SMC, H1 EMA geri cekilme): butun semboller, butun donem. 
    Ic orneklem yalnizca ayrim anindan ONCE kapanmis islemlerden olusur; ayrimi asan islemler iki doneme de
    sayilmaz (`straddle`). Veri sonunda acik kalan islemler ortalamaya girmez; anlik R toplamlari `open_r` olarak
    ayrica verilir.
+   Eski masanin gercek kodundan tasinan stratejiler (v13 SMC / EMA geri cekilme, WEEK TRADE) AYNI oynatmada
+   kendi cikis planlariyla benzetilir (DAY: iki hedef + ilerleme kilitleri, en cok 5 gun; WEEK: hedefsiz, iz suren
+   stop). Bunlarda secilecek parametre yoktur: ic ve dis orneklem yalnizca yan yana raporlanir. Ek kirilimlar:
+   model, enstruman turu, kripto icin hafta sonu/hafta ici, DAY icin tetik mumu hacmi, WEEK TRADE icin asiri uzama.
 B) V9 stratejileri: canlidaki degerlendirme her M15 kapanisinda calisir (pahalidir; sure siniri dolunca kalan
    semboller sonraki calismaya kalir, biten semboller yeniden hesaplanmaz). Her aday iki stopla benzetilir:
    kendi stopu ve "en az 1,5 x gunluk ATR" stopu.
@@ -18,6 +22,7 @@ Hicbir esik sonuca gore degistirilmez. Sonuc yalnizca sayilar ve R'dir.
 from __future__ import annotations
 
 import bisect
+import hashlib
 import json
 import multiprocessing
 import os
@@ -27,23 +32,31 @@ import sys
 import time
 from pathlib import Path
 
-from . import backtest
+from . import backtest, week_replica
 from .backtest import History
 from .exness.schema import Account, Instrument
 from .signals import outcome
 from .signals.modules import Context, modules
 from .signals.modules.indicators import atr
+from .signals.modules.strategies import v13
 
-VERSION = "ft-3"
+VERSION = "ft-5"
 TARGETS = (1.5, 2.0, 2.5)
 SWING_IDS = ("tb_smc_sweep_v1", "tb_emapb_h1_20_21_v1", "tb_emapb_h1_21_50_v1")
 EMA_IDS = SWING_IDS[1:]
+PLAN_IDS = ("tb_smc_day_v13", "tb_emapb_day_v13", "tb_smc_week_v13", "tb_emapb_week_v13", "tb_week_trade_v1")
+PLAN_KEY = "plan"
+# Canlida golgede izlenen M15 stratejileri: ayni kuralla (sabit stop, 2R hedef, en cok 96 mum) 90 gunde olculur.
+FIXED_IDS = ("tb_ema_pullback_v1", "tb_donchian_breakout_v1")
+FIXED_TARGET_R = 2.0
+VOLUME_OK = 0.7  # eski masanin hacim kurali: tetik mumu / 20 mum ortalamasi bunun altindaysa zayif
+WEEK_TIMEOUT = 7 * 86400.0
 MAX_PER_DAY = 5
 LOSS_STREAK = 3
 MIN_TRADES_TO_SELECT = 15  # ic orneklemde bundan az islemi olan secenek secilmez
 DAILY_ATR_MULT = 1.5
 DAY = 86400.0
-WARMUP_DAYS = {"M15": 6, "H1": 16, "H4": 60, "D1": 130}
+WARMUP_DAYS = {"M15": 6, "H1": 20, "H4": 60, "D1": 185}
 DURATIONS = {"M15": 900, "H1": 3600, "H4": 14400, "D1": 86400}
 
 
@@ -71,10 +84,11 @@ def read_history(path: Path, symbol: str) -> History:
     history, grouped = History(), {}
     db = sqlite3.connect(path)
     try:
-        for tf, at, o, h, low, c in db.execute(
-                "SELECT tf, time, open, high, low, close FROM bars WHERE symbol = ? ORDER BY tf, time", (symbol,)):
+        for tf, at, o, h, low, c, volume in db.execute(
+                "SELECT tf, time, open, high, low, close, volume FROM bars WHERE symbol = ? ORDER BY tf, time",
+                (symbol,)):
             grouped.setdefault(tf, []).append({"time": at, "open": o, "high": h, "low": low, "close": c,
-                                               "tick_volume": 0})
+                                               "tick_volume": volume or 0})
     finally:
         db.close()
     for tf, bars in grouped.items():
@@ -92,9 +106,46 @@ def _closed(history: History, symbol: str, tf: str, now: float, count: int) -> l
 
 
 # ---------------------------------------------------------------- A) swing ailesi
+def h4_state(history: History, symbol: str):
+    """`an` -> o anda kapanmis 4H mumlarindan ATR ve son ONAYLI donus noktalari (iz suren stop icin)."""
+    bars = history.all(symbol, "H4")
+    if not bars:
+        return lambda moment: None
+    frame = v13.Frame(bars)
+    highs, lows = v13.swings(frame, 3)
+    closes = [bar["time"] + DURATIONS["H4"] for bar in bars]
+
+    def state(moment: float) -> dict | None:
+        last = bisect.bisect_right(closes, moment) - 1  # son kapanmis mumun indeksi
+        if last < 14:
+            return None
+        # Donus noktasi ancak sagindaki 3 mum kapaninca bilinir.
+        high = bisect.bisect_right(highs, last - 3) - 1
+        low = bisect.bisect_right(lows, last - 3) - 1
+        return {"atr": frame.atr[last],
+                "high": (closes[highs[high] + 3], frame.H[highs[high]]) if high >= 0 else None,
+                "low": (closes[lows[low] + 3], frame.L[lows[low]]) if low >= 0 else None}
+
+    return state
+
+
+def _simulate_planned(signal, entry: float, now: float, after: list[dict], state, spread_at) -> dict | None:
+    kind = signal.plan["type"]
+    if kind == "DAY":
+        return outcome.simulate_plan(signal.side, entry, signal.stop, signal.plan["tp1"], signal.plan["tp2"], now,
+                                     after, spread_at=spread_at)
+    if kind == "WEEKTRADE":  # +1R'de girise, +2R'de +1R kilit, sonra en iyi - 2 x 4H ATR; 7 gunde +1R yoksa cik
+        fixed = {"atr": signal.plan["atr4"]}  # kaynak kod: ATR giriste sabitlenir (giristen once kapanmis mum)
+        return outcome.simulate_trail(signal.side, entry, signal.stop, now, after, lambda moment: fixed,
+                                      spread_at=spread_at, lock=(2.0, 1.0), trail_atr=2.0, timeout=WEEK_TIMEOUT)
+    return outcome.simulate_trail(signal.side, entry, signal.stop, now, after, state, spread_at=spread_at,
+                                  structure=True)  # v13 WEEK: +1R'de girise, sonra 4H yapisinin arkasindan
+
+
 def swing_trades(symbol: str, kind: str, history: History, spreads: Spreads, start: float, end: float) -> list[dict]:
-    """Bir sembolde swing stratejilerinin butun sinyalleri; her biri uc hedefle benzetilmis."""
-    active = [m for m in modules("strategy") if m.id in SWING_IDS]
+    """Bir sembolde swing stratejilerinin butun sinyalleri; her biri kendi cikis planiyla benzetilmis."""
+    active = [m for m in modules("strategy") if m.id in SWING_IDS + PLAN_IDS + FIXED_IDS]
+    state = h4_state(history, symbol)
     m15_all = history.all(symbol, "M15")
     trades: list[dict] = []
     open_until = {m.id: 0.0 for m in active}
@@ -105,13 +156,21 @@ def swing_trades(symbol: str, kind: str, history: History, spreads: Spreads, sta
             continue
         now = closed_at + 5.0
         if closed_at % 3600 == 0 or not upper:  # ust zaman dilimleri yalnizca saat basinda degisir
-            upper = {"H1": _closed(history, symbol, "H1", now, 160), "H4": _closed(history, symbol, "H4", now, 90),
-                     "D1": _closed(history, symbol, "D1", now, 90)}
-        context = Context(symbol=symbol, now=now, kind=kind, bars={"M15": m15_all[index - 3:index + 1], **upper})
+            upper = {"H1": _closed(history, symbol, "H1", now, 256), "H4": _closed(history, symbol, "H4", now, 120),
+                     "D1": _closed(history, symbol, "D1", now, 120)}
+        context = Context(symbol=symbol, now=now, kind=kind,
+                          bars={"M15": m15_all[index - 3:index + 1], **upper})
+        wide = None  # M15 stratejileri icin genis pencere (yalnizca gerektiginde kurulur)
         for module in active:
             if now < open_until[module.id]:
                 continue  # ayni stratejinin bu semboldeki islemi hala acik
-            signal = module.evaluate(context)
+            if module.id in FIXED_IDS:
+                if wide is None:
+                    wide = Context(symbol=symbol, now=now, kind=kind,
+                                   bars={**upper, "M15": m15_all[max(0, index - 255):index + 1]})
+                signal = module.evaluate(wide)
+            else:
+                signal = module.evaluate(context)
             if signal is None:
                 continue
             sign = 1.0 if signal.side == "BUY" else -1.0
@@ -121,16 +180,35 @@ def swing_trades(symbol: str, kind: str, history: History, spreads: Spreads, sta
             if risk <= 0:
                 continue
             after = m15_all[index + 1:index + 1 + outcome.SWING_MAX_BARS]
-            results = {}
-            for target in TARGETS:
-                result = outcome.simulate_swing(signal.side, entry, signal.stop, target, now, after,
-                                                spread_at=lambda moment: spreads.at(symbol, moment))
-                results[str(target)] = [result["r"], result["closed_at"], result.get("open_r")]
+            spread_at = lambda moment: spreads.at(symbol, moment)  # noqa: E731
+            results, extra = {}, {}
+            if module.id in FIXED_IDS:
+                target = entry + sign * FIXED_TARGET_R * risk
+                result = outcome.simulate_fixed(signal.side, entry, signal.stop, target, now, after,
+                                                spread_at=spread_at)
+                results[PLAN_KEY] = [result["r"], result["closed_at"], None]
+                reference = result["closed_at"]
+                extra = {"kind": kind, "model": "sabit 2R", "exit": result["first"], "mfe_r": result["mfe_r"],
+                         "weekend": (int(now // DAY) + 3) % 7 >= 5}
+            elif signal.plan is None:
+                for target in TARGETS:
+                    result = outcome.simulate_swing(signal.side, entry, signal.stop, target, now, after,
+                                                    spread_at=spread_at)
+                    results[str(target)] = [result["r"], result["closed_at"], result.get("open_r")]
+                reference = results["2.0"][1]
+            else:
+                result = _simulate_planned(signal, entry, now, after, state, spread_at)
+                if result is None:
+                    continue
+                results[PLAN_KEY] = [result["r"], result["closed_at"], result.get("open_r")]
+                reference = result["closed_at"]
+                extra = {"kind": kind, "model": signal.plan.get("model"), "score": signal.plan.get("score"),
+                         "volume_ratio": signal.plan.get("volume_ratio"), "stretch": signal.plan.get("stretch"),
+                         "weekend": (int(now // DAY) + 3) % 7 >= 5, "exit": result["first"]}  # 1970-01-01 persembe
             daily = atr(upper["D1"])
             trades.append({"strategy_id": module.id, "symbol": symbol, "side": signal.side, "at": now,
                            "results": results, "spread_r": round(spread / risk, 4),
-                           "stop_daily_atr": round(risk / daily, 2) if daily else None})
-            reference = results["2.0"][1]
+                           "stop_daily_atr": round(risk / daily, 2) if daily else None, **extra})
             open_until[module.id] = reference if reference is not None else float("inf")
     return trades
 
@@ -167,20 +245,29 @@ def apply_rules(trades: list[dict], target) -> list[dict]:
 def stats(values: list[float | None], open_values: list[float | None] = ()) -> dict:
     closed = [v for v in values if v is not None]
     marks = [v for v in open_values if v is not None]
+    gains, losses = sum(v for v in closed if v > 0), -sum(v for v in closed if v < 0)
+    peak = total = drawdown = 0.0
+    for value in closed:  # degerler giris sirasiyla gelir
+        total += value
+        peak = max(peak, total)
+        drawdown = min(drawdown, total - peak)
     return {"trades": len(values), "open": len(values) - len(closed), "wins": sum(1 for v in closed if v > 0),
             "flat": sum(1 for v in closed if v == 0), "losses": sum(1 for v in closed if v < 0),
             "sum_r": round(sum(closed), 2), "avg_r": round(statistics.fmean(closed), 3) if closed else None,
-            "open_r": round(sum(marks), 2)}
+            "open_r": round(sum(marks), 2), "pf": round(gains / losses, 2) if losses > 0 else None,
+            "max_dd": round(drawdown, 2)}
 
 
 def _periods(trades: list[dict], split: float, value, closed_at, open_r=lambda t: None) -> dict:
     """Ic orneklem: ayrimdan once ACILIP ayrima kadar KAPANMIS islemler (sonucu ikinci donemin fiyatina
     dayanan islem secime karismaz). Dis orneklem: ayrimdan sonra acilanlar. Ikisine de girmeyenler: straddle."""
+    trades = sorted(trades, key=lambda t: t["at"])
     early = [t for t in trades if t["at"] < split]
     inside = [t for t in early if closed_at(t) is not None and closed_at(t) <= split]
     late = [t for t in trades if t["at"] >= split]
     return {"is": stats([value(t) for t in inside]),
             "oos": stats([value(t) for t in late], [open_r(t) for t in late if value(t) is None]),
+            "all": stats([value(t) for t in trades], [open_r(t) for t in trades if value(t) is None]),
             "straddle": len(early) - len(inside)}
 
 
@@ -216,10 +303,45 @@ def summarize_swing(trades: list[dict], split: float) -> dict:
         return {"strategy_id": chosen, "target_r": float(target), **out["strategies"][chosen]["targets"][target]["rules"]}
 
     out["selected"] = {"smc": best(SWING_IDS[:1]), "ema_pullback": best(EMA_IDS)}
+    out["planned"] = {strategy_id: summarize_planned([t for t in trades if t["strategy_id"] == strategy_id], split)
+                      for strategy_id in PLAN_IDS + FIXED_IDS}
     # Hesap geneli: secilen stratejiler tek portfoy; gunluk sinir ve kayip serisi hepsine birlikte uygulanir.
     chosen = {pick["strategy_id"]: str(pick["target_r"]) for pick in out["selected"].values() if pick}
     together = [t for t in trades if t["strategy_id"] in chosen]
     out["portfolio"] = _swing_periods(apply_rules(together, chosen), split, chosen) if chosen else None
+    return out
+
+
+def _split(rows: list[dict], split: float, label) -> dict:
+    groups: dict[str, list[dict]] = {}
+    for row in rows:
+        name = label(row)
+        if name is not None:
+            groups.setdefault(str(name), []).append(row)
+    return {name: _swing_periods(group, split, PLAN_KEY) for name, group in sorted(groups.items())}
+
+
+def summarize_planned(rows: list[dict], split: float) -> dict:
+    """Parametresi secilmeyen (kaynak koddan tasinan) stratejinin ozeti: ham, portfoy kurallariyla ve kirilimlar."""
+    spreads = [t["spread_r"] for t in rows]
+    stops = [t["stop_daily_atr"] for t in rows if t["stop_daily_atr"] is not None]
+    exits: dict[str, int] = {}
+    for row in rows:
+        exits[str(row.get("exit"))] = exits.get(str(row.get("exit")), 0) + 1
+    out = {"raw": _swing_periods(rows, split, PLAN_KEY),
+           "rules": _swing_periods(apply_rules(rows, PLAN_KEY), split, PLAN_KEY),
+           "spread_r_median": round(statistics.median(spreads), 4) if spreads else None,
+           "stop_daily_atr_median": round(statistics.median(stops), 2) if stops else None,
+           "buy": sum(1 for t in rows if t["side"] == "BUY"), "sell": sum(1 for t in rows if t["side"] == "SELL"),
+           "exits": exits,
+           "by_model": _split(rows, split, lambda t: t.get("model")),
+           "by_kind": _split(rows, split, lambda t: t.get("kind")),
+           "crypto_week": _split([t for t in rows if t.get("kind") == "crypto"], split,
+                                 lambda t: "weekend" if t.get("weekend") else "weekday"),
+           "volume": _split(rows, split, lambda t: None if t.get("volume_ratio") is None
+                            else ("ok" if t["volume_ratio"] >= VOLUME_OK else "low")),
+           "stretch": _split(rows, split, lambda t: None if t.get("stretch") is None
+                             else ("stretched" if t["stretch"] else "normal"))}
     return out
 
 
@@ -334,16 +456,43 @@ def run_job(job_path: Path, pool_factory=None) -> dict:
     symbols = [row["symbol"] for row in job["instruments"] if spreads.has(row["symbol"])]
     kinds = {row["symbol"]: row["kind"] for row in job["instruments"]}
     began = time.time()
-    swing: list[dict] = []
-    for symbol in symbols:
-        history = read_history(Path(job["history"]), symbol)
-        swing += swing_trades(symbol, kinds[symbol], history, spreads, job["start"], job["end"])
+    signature = f"{VERSION}:{job['v9_start']}:{job['end']}"
+    # A asamasinin imzasi girdileri de kapsar: semboller ya da spread profili degisirse yeniden hesaplanir.
+    inputs = hashlib.sha1(json.dumps([symbols, job["spreads"], job["start"]], sort_keys=True).encode()).hexdigest()[:12]
+    # A asamasi (swing + WEEK TRADE yeniden uretimi) ayni pencere icin bir kez hesaplanir; V9 turlari yeniden kullanir.
+    cached = folder / "swing.json"
+    first = None
+    if cached.exists():
+        try:
+            first = json.loads(cached.read_text())
+        except ValueError:
+            first = None
+        if not isinstance(first, dict) or first.get("signature") != f"{signature}:{inputs}":
+            first = None
+    if first is None:
+        swing: list[dict] = []
+        for symbol in symbols:
+            history = read_history(Path(job["history"]), symbol)
+            swing += swing_trades(symbol, kinds[symbol], history, spreads, job["start"], job["end"])
+        long_bars = {}
+        for symbol in week_replica.SYMBOLS:
+            if spreads.has(symbol):
+                history = read_history(Path(job["history"]), symbol)
+                long_bars[symbol] = {"H4": [b for b in history.all(symbol, "H4") if b["time"] + 14400 <= job["end"]],
+                                     "D1": history.all(symbol, "D1")}
+        try:
+            replica = week_replica.report(long_bars, spreads.at, job["end"])
+        except Exception as exc:  # noqa: BLE001 - yeniden uretim hatasi ana olcumu dusurmez
+            replica = {"error": type(exc).__name__}
+        first = {"signature": f"{signature}:{inputs}", "swing": summarize_swing(swing, job["split"]),
+                 "week_replica": replica, "swing_seconds": round(time.time() - began, 1)}
+        if "error" not in replica:  # hatali sonuc saklanmaz: sonraki turda yeniden denenir
+            cached.write_text(json.dumps(first))
     summary = {"version": VERSION, "from": job["start"], "to": job["end"], "split": job["split"],
                "v9_from": job["v9_start"], "spread_profile": spreads.coverage(),
-               "swing": summarize_swing(swing, job["split"]),
-               "swing_seconds": round(time.time() - began, 1), "symbols": len(symbols)}
-    # V9: biten semboller dosyada durur; yalnizca eksikler calisir.
-    signature = f"{VERSION}:{job['v9_start']}:{job['end']}"
+               "swing": first["swing"], "week_replica": first["week_replica"],
+               "swing_seconds": first["swing_seconds"], "symbols": len(symbols)}
+    # V9: biten semboller dosyada durur; yalnizca eksikler calisir. `skip_v9`: yalnizca A asamasi (erken sonuc).
     done: dict[str, dict] = {}
     for symbol in symbols:
         cached = folder / f"v9-{symbol}.json"
@@ -357,7 +506,7 @@ def run_job(job_path: Path, pool_factory=None) -> dict:
     for stale in folder.glob("v9-*.json"):  # baska pencereye/surume ait eski dosyalar
         if stale.name[3:-5] not in done:
             stale.unlink(missing_ok=True)
-    todo = [symbol for symbol in symbols if symbol not in done]
+    todo = [] if job.get("skip_v9") else [symbol for symbol in symbols if symbol not in done]
     workers = max(1, min(int(job.get("workers") or 1), len(todo) or 1))
     if todo:
         make_pool = pool_factory or (lambda count: multiprocessing.get_context("spawn").Pool(count))

@@ -40,13 +40,17 @@ COOLDOWN = 60.0  # reddedilen degisiklik/kapama sonrasi ayni pozisyon icin bekle
 
 class Executor:
     def __init__(self, client, repo: Repo, notifier, catalog, *, clock: Callable[[], float] = time.time,
-                 on_auth_error: Callable[[ExnessError], Awaitable[None]] | None = None):
+                 on_auth_error: Callable[[ExnessError], Awaitable[None]] | None = None,
+                 lot_guard: Callable[[str, str, float, float | None, float | None], None] | None = None):
         self.client = client
         self.repo = repo
         self.notifier = notifier
         self.catalog = catalog
         self._clock = clock
         self._on_auth_error = on_auth_error
+        # Mutlak lot tavani (bkz. Bot.lot_guard): asilirsa ValueError verir ve emir KURULMAZ. Bot ve elle acilan
+        # butun emirler bu iki yoldan gecer; tavani atlayan baska bir acma yolu yoktur.
+        self._lot_guard = lot_guard
         self._cooldown: dict[str, float] = {}
 
     # ------------------------------------------------------------------ yardimcilar
@@ -94,6 +98,8 @@ class Executor:
             sl=candidate.stop_loss, tp=candidate.take_profit_2, price=candidate.entry)
         if self.already_submitted(candidate):
             return key
+        if self._lot_guard is not None:  # kayit ve gonderimden ONCE: tavani asan emir hic kaydedilmez
+            self._lot_guard(candidate.symbol, candidate.side, candidate.lots, candidate.entry, candidate.stop_loss)
         payload = {"path": path, "body": body, "symbol": candidate.symbol, "side": candidate.side,
                    "entry": candidate.entry, "sl": candidate.stop_loss, "tp1": candidate.take_profit_1,
                    "tp2": candidate.take_profit_2, "strategy_id": candidate.strategy_id,
@@ -112,6 +118,8 @@ class Executor:
         denerse) ikinci bir emir gonderilmez.
         """
         instrument = self.catalog.get(symbol)
+        if self._lot_guard is not None:
+            self._lot_guard(symbol, side, lots, price, sl)
         path, body = schema.open_position_request(self.client.account_id, instrument, side, lots,
                                                   sl=sl, tp=tp, price=price)
         key = f"man-{client_id}" if client_id else f"man-{uuid.uuid4().hex}"
@@ -184,6 +192,7 @@ class Executor:
             return
         except ExnessAuthError as exc:
             # ACK'ten once reddedildi: islenmedi. Kimlik sorunu tek yerden (servis dongusu) bildirilir.
+            exc.source = "emir"  # tanilama: ret bir emir isteginde geldi (okuma isteginde degil)
             await self._order_failed(self.repo.get_order(key), exc.code, exc.message, notify=self._on_auth_error is None)
             if self._on_auth_error is not None:
                 await self._on_auth_error(exc)

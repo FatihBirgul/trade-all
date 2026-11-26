@@ -228,6 +228,10 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
         # Uyari her zaman AYARLARDAKI risk sinirina goredir; istekteki risk_pct uyariyi susturamaz.
         if loss > plan["settings_budget"] * 1.0001:
             warnings.append(f"Bu lotla zarar, risk sınırınızın (%{plan['settings_risk_pct']:g}) üstünde")
+        try:  # mutlak lot tavani: asilirsa emir reddedilir; onizleme bunu onceden soyler
+            bot.lot_guard(body.symbol, body.side, plan["lots"], plan["entry"], plan["sl"])
+        except ValueError as exc:
+            warnings.append(f"Bu emir GÖNDERİLEMEZ: {exc}")
         if body.sl_distance < 3 * plan["spread"]:
             warnings.append("SL mesafesi alış-satış farkına çok yakın; hemen tetiklenebilir")
         if body.tp_distance is not None and body.tp_distance < body.sl_distance:

@@ -228,7 +228,7 @@ def summarize(result: dict, *, start: float, end: float) -> dict:
 
 # ---------------------------------------------------------------- dosya bicimi (bot <-> alt surec)
 _SCHEMA = ("CREATE TABLE IF NOT EXISTS bars (symbol TEXT, tf TEXT, time INTEGER, open REAL, high REAL, low REAL, "
-           "close REAL, PRIMARY KEY (symbol, tf, time)) WITHOUT ROWID")
+           "close REAL, volume REAL DEFAULT 0, PRIMARY KEY (symbol, tf, time)) WITHOUT ROWID")
 
 
 def write_history(path: Path, rows: list[tuple]) -> None:
@@ -236,7 +236,8 @@ def write_history(path: Path, rows: list[tuple]) -> None:
     try:
         db.execute(_SCHEMA)
         with db:
-            db.executemany("INSERT OR REPLACE INTO bars VALUES (?,?,?,?,?,?,?)", rows)
+            db.executemany("INSERT OR REPLACE INTO bars VALUES (?,?,?,?,?,?,?,?)",
+                           [tuple(row) + (0.0,) * (8 - len(row)) for row in rows])
     finally:
         db.close()
 
@@ -245,9 +246,9 @@ def read_history(path: Path) -> History:
     history, grouped = History(), {}
     db = sqlite3.connect(path)
     try:
-        for symbol, tf, at, o, h, low, c in db.execute("SELECT * FROM bars ORDER BY symbol, tf, time"):
+        for symbol, tf, at, o, h, low, c, volume in db.execute("SELECT * FROM bars ORDER BY symbol, tf, time"):
             grouped.setdefault((symbol, tf), []).append({"time": at, "open": o, "high": h, "low": low, "close": c,
-                                                         "tick_volume": 0})
+                                                         "tick_volume": volume or 0})
     finally:
         db.close()
     for (symbol, tf), bars in grouped.items():
