@@ -11,6 +11,7 @@ import dataclasses
 from importlib import metadata
 import logging
 import json
+import os
 import re
 import sqlite3
 import sys
@@ -24,7 +25,7 @@ from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 from .config import BotSettings, Settings, strategy_mode
 from .execution.executor import Executor
 from .execution.reconcile import fetch_all_deals, reconcile
-from . import backtest
+from . import backtest, forward
 from .store import backup
 from .store.repo import Trade
 from .exness import schema
@@ -85,16 +86,23 @@ HEAL_PER_SCAN = 4  # tarama basina en cok bu kadar bosluk onarim istegi
 HEAL_RETRY = 6 * 3600.0  # borsanin da vermedigi bosluk icin yeniden deneme araligi
 # Ileri test (yalnizca deneme modunda, ayri dusuk oncelikli surecte): bkz. backtest.py
 BACKTEST_DELAY = 180.0  # acilistan sonra bekleme (sn)
-BACKTEST_DAYS = 30
-BACKTEST_BUDGET = 7200.0  # oynatma icin en uzun sure (sn)
+BACKTEST_DAYS = 90  # swing stratejileri: ilk 60 gun ic orneklem, son 30 gun dis orneklem
+BACKTEST_V9_DAYS = 60  # V9 pahalidir: son 60 gun (30 gun ic + 30 gun dis orneklem)
+BACKTEST_BUDGET = 6 * 3600.0  # V9 asamasinin bir turu icin en uzun sure (sn); tur sonunda ara sonuc yayinlanir
+BACKTEST_ROUNDS = 6  # V9 bitmediyse ayni gecmisle art arda en cok bu kadar tur (biten semboller yeniden calismaz)
+BACKTEST_WINDOW_KEEP = 3 * 86400.0  # yarim kalan is bu kadar eski pencereyle surdurulur (yeniden baslatma sonrasi)
+BACKTEST_WORKERS = 0  # 0: islemci sayisi kadar alt surec (hepsi dusuk oncelikli)
 BACKTEST_MAX_AGE = 20 * 3600.0  # bundan yeni bir sonuc varsa yeniden calismaz
 BACKTEST_FETCH_PAUSE = 0.3  # gecmis mum istekleri arasinda bekleme (sn)
+BACKTEST_RATE_PAUSE = 15.0  # istek siniri asilirsa bir kez yinelemeden once bekleme (sn)
 BACKTEST_MAJORS = ("EURUSD", "GBPUSD", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD")
 # Surec her basladiginda (dagitim, cokme, sunucu yeniden acilisi) bu sure boyunca bot YENI islem acmaz; analiz,
 # golge kayitlari ve acik pozisyonlarin yonetimi surer. Neden: spread siniri (son 30 dk'nin ornekleri) ve diger
 # kisa pencereli olcumler yeniden baslatmadan sonra eksiktir. Kullanici karari (2026-11-26, PR #16 B secenegi).
 RESTART_ENTRY_PAUSE = 1800.0
 RESTART_PAUSE_REASON = "yeniden başlatmadan sonra 30 dk yeni giriş yok"
+SPREAD_STATS_INTERVAL = 300.0  # spread medyani bu aralikla kaydedilir (ileri testin saatlik spread profili)
+SPREAD_STATS_KEEP = 30 * 86400.0
 PUBLIC_NUMBER = re.compile(r"\d+[.,]\d+|\d{3,}")  # ondalikli ya da 3+ haneli sayilar
 SUMMARY_SAMPLES = 5
 RATE_PAUSE_LIMIT = 2  # bir taramada 429 sonrasi en cok bu kadar kisa bekleme; sonra tarama birakilir
@@ -675,6 +683,7 @@ class Bot:
             try:
                 for frame in FRAMES:
                     await self.candles.get(symbol, frame, 256)
+                await self._daily_candles(symbol)
             except ExnessAuthError as exc:
                 if exc.code == schema.AUTH_INVALID_API_KEY:
                     # Mum servisi iki kez ust uste reddetti. Bu kod canlida piyasa verisi icin gecici olarak
@@ -1199,63 +1208,98 @@ class Bot:
         out["samples"] = out["samples"][-SUMMARY_SAMPLES:]
         return out
 
-    async def _backtest_history(self, instruments: list[Instrument], start: float, now: float) -> list[tuple]:
-        rows: list[tuple] = []
+    async def _backtest_history(self, instruments: list[Instrument], start: float, now: float, path: Path) -> int:
+        """Gecmis mumlari ceker ve sembol sembol dosyaya yazar (bellekte biriktirmez) -> mum sayisi."""
+        total = 0
         for instrument in instruments:
-            for tf, duration in backtest.DURATIONS.items():
+            rows: list[tuple] = []
+            for tf, duration in forward.DURATIONS.items():
                 step = (self.candles.max_candles - 1) * duration
-                cursor = int((start - backtest.WARMUP_DAYS[tf] * 86400) // duration) * duration
+                cursor = int((start - forward.WARMUP_DAYS[tf] * 86400) // duration) * duration
                 while cursor < now:
-                    path = schema.candles_path(self.client.account_id, instrument.broker_symbol, tf, cursor,
-                                               min(now, cursor + step))
-                    for r in schema.parse_candles(await self.candles._fetch(path)):
+                    request = schema.candles_path(self.client.account_id, instrument.broker_symbol, tf, cursor,
+                                                  min(now, cursor + step))
+                    try:
+                        payload = await self.candles._fetch(request)
+                    except ExnessRateLimited:
+                        await self._sleep(BACKTEST_RATE_PAUSE)  # salt-okuma istegi: bir kez yinelenir
+                        payload = await self.candles._fetch(request)
+                    for r in schema.parse_candles(payload):
                         if r["time"] + duration <= now:
                             rows.append((instrument.symbol, tf, r["time"], r["open"], r["high"], r["low"],
                                          r["close"]))
                     cursor += step
                     await self._sleep(BACKTEST_FETCH_PAUSE)
-        return rows
+            await asyncio.to_thread(backtest.write_history, path, rows)
+            total += len(rows)
+        return total
 
     async def _backtest_spawn(self, job: Path) -> int:
         process = await asyncio.create_subprocess_exec(
-            sys.executable, "-m", "tradebot.backtest", str(job),
+            sys.executable, "-m", "tradebot.forward", str(job),
             stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
         return await process.wait()
 
     async def backtest_once(self) -> dict | None:
-        """V9 stratejilerini son `BACKTEST_DAYS` gunun gercek mumlariyla olcer (bkz. backtest.py).
+        """Ileri test (bkz. forward.py): swing stratejileri ve V9, son `BACKTEST_DAYS` gunun gercek mumlariyla.
 
-        Yalnizca deneme modunda ve en cok gunde bir kez. Gecmisi bu surec ceker (ayni istemci, yavas);
-        oynatma ayri, dusuk oncelikli bir surectedir. Hicbir hata botu etkilemez: kimlik hatasi dahil her
-        hata yalnizca bu isi bitirir.
+        Yalnizca deneme modunda. Gecmisi bu surec ceker (ayni istemci, yavas); oynatma ayri, dusuk oncelikli
+        sureclerdedir. V9 asamasi uzun surer: sure siniri dolarsa biten semboller saklanir ve is bir sonraki
+        acilista kaldigi yerden surer. Hicbir hata botu etkilemez.
         """
         now = self._clock()
         previous = self.repo.get_setting("backtest_result")
-        fresh = (isinstance(previous, dict) and previous.get("version") == backtest.VERSION
+        fresh = (isinstance(previous, dict) and previous.get("version") == forward.VERSION
+                 and bool((previous.get("v9_coverage") or {}).get("complete"))
                  and now - float(previous.get("finished_at") or 0) < BACKTEST_MAX_AGE)
         if (fresh or not self.repo.get_bot_settings().dry_run or self.account is None
                 or str(self.repo.db_path) == ":memory:" or self.backtest_state == "running"):
             return None
         self.backtest_state = "running"
         folder = Path(self.repo.db_path).parent / "backtest"
+        history = folder / "history.db"
         try:
-            spreads = {}
+            # Spread: olculmus saatlik medyanlar; olcumu olmayan sembolde su anki 30 dk medyani (yoksa anlik spread).
+            profile = {symbol: {"hours": {str(hour): value for hour, value in entry["hours"].items()},
+                                "all": entry["all"]} for symbol, entry in self.repo.spread_profile().items()}
+            bounds: dict[str, list[float]] = {}
             for instrument in self.catalog.universe():
-                limit, quote = self.quotes.max_spread(instrument.symbol), self.quotes.quote(instrument.symbol)
-                if limit is not None or quote is not None:  # tipik spread: 30 dk medyani, yoksa su anki
-                    spreads[instrument.symbol] = limit / 3.0 if limit is not None else float(quote["spread"])
-            instruments = sorted((i for i in self.catalog.universe() if i.symbol in spreads),
+                symbol = instrument.symbol
+                if symbol not in profile:
+                    limit, quote = self.quotes.max_spread(symbol), self.quotes.quote(symbol)
+                    if limit is None and quote is None:
+                        continue
+                    profile[symbol] = {"hours": {}, "all": limit / 3.0 if limit is not None else float(quote["spread"])}
+                rate = self.provider._bounds(instrument, self.account)
+                if rate is None:
+                    profile.pop(symbol, None)  # hesap para birimine cevrilemeyen sembol olculmez
+                    continue
+                bounds[symbol] = [rate[0], rate[1]]
+            instruments = sorted((i for i in self.catalog.universe() if i.symbol in profile),
                                  key=lambda i: (i.symbol not in BACKTEST_MAJORS, i.kind != "forex", i.symbol))
-            start = now - BACKTEST_DAYS * 86400.0
-            rows = await self._backtest_history(instruments, start, now)
+            end = float(int(now // 86400) * 86400)  # gun basi
             folder.mkdir(parents=True, exist_ok=True)
-            history, job, result = folder / "history.db", folder / "job.json", folder / "result.json"
+            # Yarim kalan isin penceresi saklanir: sonraki gunlerde yeniden baslayan surec ayni pencereyle surer
+            # (biten semboller yeniden hesaplanmaz). Tamamlanmis isten sonra yeni pencere acilir.
+            pin = folder / "window.json"
+            try:
+                pinned = json.loads(pin.read_text())
+            except (OSError, ValueError):
+                pinned = {}
+            finished = (isinstance(previous, dict) and bool((previous.get("v9_coverage") or {}).get("complete"))
+                        and previous.get("to") == pinned.get("end"))
+            if (pinned.get("version") == forward.VERSION and isinstance(pinned.get("end"), float)
+                    and 0 <= end - pinned["end"] <= BACKTEST_WINDOW_KEEP and not finished):
+                end = pinned["end"]
+            pin.write_text(json.dumps({"version": forward.VERSION, "end": end}))
+            start = end - BACKTEST_DAYS * 86400.0
+            job, result = folder / "job.json", folder / "result.json"
             for stale in (history, result):
                 stale.unlink(missing_ok=True)
-            await asyncio.to_thread(backtest.write_history, history, rows)
+            bars = await self._backtest_history(instruments, start, end, history)
             manage = self.repo.get_bot_settings().manage
-            job.write_text(json.dumps({
-                "instruments": backtest.job_instruments(instruments), "spreads": spreads,
+            spec = {
+                "instruments": backtest.job_instruments(instruments), "spreads": profile, "bounds": bounds,
                 # Sozlesme hesabi icin yalnizca para birimi gerekir; bakiye/varlik sabit bir sayidir (yazilmaz).
                 "account": {"currency": self.account.currency, "balance": 10_000.0, "equity": 10_000.0,
                             "margin": 0.0, "margin_free": 10_000.0, "leverage": self.account.leverage,
@@ -1264,17 +1308,26 @@ class Bot:
                           "partial_at_r": manage.partial_at_r if manage.partial_enabled else None,
                           "partial_fraction": manage.partial_fraction,
                           "trail_atr_mult": manage.trail_atr_mult if manage.trail_enabled else None},
-                "start": start, "end": now, "budget": BACKTEST_BUDGET,
-                "history": str(history), "result": str(result)}))
-            code = await self._backtest_spawn(job)
-            if code != 0 or not result.exists():
-                raise RuntimeError(f"alt surec {code}")
-            summary = json.loads(result.read_text())
-            summary["bars"] = len(rows)
-            summary["finished_at"] = self._clock()  # botun saati (tazelik denetimi bununla yapilir)
-            self.repo.set_setting("backtest_result", summary)
-            self.backtest_state = "done"
-            log.info("ileri test bitti: %d islem", summary["total"]["trades"])
+                "start": start, "end": end, "split": start + (end - start) * 2.0 / 3.0,
+                "v9_start": end - BACKTEST_V9_DAYS * 86400.0,
+                "workers": BACKTEST_WORKERS or (os.cpu_count() or 1),
+                "history": str(history), "result": str(result)}
+            summary = None
+            for _ in range(max(1, BACKTEST_ROUNDS)):
+                job.write_text(json.dumps({**spec, "deadline": time.time() + BACKTEST_BUDGET}))
+                result.unlink(missing_ok=True)
+                code = await self._backtest_spawn(job)
+                if code != 0 or not result.exists():
+                    raise RuntimeError(f"alt surec {code}")
+                summary = json.loads(result.read_text())
+                summary["bars"] = bars
+                summary["finished_at"] = self._clock()  # botun saati (tazelik denetimi bununla yapilir)
+                self.repo.set_setting("backtest_result", summary)  # ara sonuc da yayinlanir
+                log.info("ileri test turu bitti: V9 %d/%d sembol", summary["v9_coverage"]["symbols_done"],
+                         summary["v9_coverage"]["symbols_total"])
+                if summary["v9_coverage"]["complete"]:
+                    break
+            self.backtest_state = "done" if summary["v9_coverage"]["complete"] else "partial"
             return summary
         except asyncio.CancelledError:
             raise
@@ -1283,7 +1336,8 @@ class Bot:
             log.warning("ileri test tamamlanamadi: %s", type(exc).__name__)
             return None
         finally:
-            (folder / "history.db").unlink(missing_ok=True)
+            history.unlink(missing_ok=True)
+            (folder / "job.json").unlink(missing_ok=True)
 
     def backtest_report(self) -> dict:
         """Herkese acik: son ileri testin ozeti (yalnizca sayilar ve R)."""
@@ -1299,6 +1353,34 @@ class Bot:
         if self._restart_pause <= 0:
             return False
         return self.entries_from is None or self._clock() < self.entries_from
+
+    async def _daily_candles(self, symbol: str) -> None:
+        """Gunluk mumlar (swing stratejilerinin yonu ve gunluk ATR'si icin). Yeni bir gunluk mum kapanmadikca ag
+        istegi yapilmaz. Bu ikincil bir veridir: gecici bir hatada V9 taramasi etkilenmez; onbellekteki gunluk veri
+        bayatladiysa swing stratejileri o sembolde sinyal uretmez (bkz. custom.evaluate)."""
+        try:
+            await self.candles.get(symbol, "D1", 120)
+        except (ExnessRateLimited, ExnessAuthError):
+            raise  # istek siniri ve kimlik hatasi taramanin kendi kurallarina gore ele alinir (yutulmaz)
+        except ExnessError as exc:
+            log.info("gunluk mumlar alinamadi %s: %s", symbol, type(exc).__name__)
+
+    async def record_spreads(self) -> int:
+        """Her sembolun son 5 dakikalik spread medyanini kaydeder -> yazilan satir sayisi. Yalnizca olcumdur:
+        hicbir kapiyi etkilemez; yazilamazsa sessizce gecer."""
+        now = self._clock()
+        slot = int(now // SPREAD_STATS_INTERVAL) * SPREAD_STATS_INTERVAL
+        rows = []
+        for instrument in self.catalog.universe():
+            found = self.quotes.recent_median(instrument.symbol, SPREAD_STATS_INTERVAL)
+            if found is not None:
+                rows.append((instrument.symbol, slot, found[0], found[1]))
+        try:
+            self.repo.add_spread_stats(rows, now - SPREAD_STATS_KEEP)
+        except sqlite3.Error as exc:
+            log.warning("spread olcumu yazilamadi: %s", type(exc).__name__)
+            return 0
+        return len(rows)
 
     def _spread_r(self, candidate: Candidate) -> float | None:
         spread, risk = self._spread(candidate.symbol), abs(candidate.entry - candidate.stop_loss)
@@ -1518,6 +1600,7 @@ class Bot:
             self._every(RESOLVE_INTERVAL, self.resolve_orders, "emir cozumleme"),
             self._every(RECONCILE_INTERVAL, self.reconcile_now, "mutabakat"),
             self._every(MAINTENANCE_INTERVAL, self.maintenance, "bakim"),
+            self._every(SPREAD_STATS_INTERVAL, self.record_spreads, "spread olcumu"),
             self._once_after(BACKTEST_DELAY, self.backtest_once),
         )
 

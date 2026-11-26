@@ -5,7 +5,7 @@ import json
 from tests.app_helpers import started
 from tests.test_scan_summary import public_get
 from tradebot import app as app_module
-from tradebot import backtest
+from tradebot import backtest, forward
 from tradebot.exness.schema import Account, Instrument
 from tradebot.signals.adapter import Candidate
 
@@ -95,37 +95,102 @@ def test_history_file_round_trip(tmp_path):
     assert history.closed("EURUSD", "M15", 1799, 10)[-1]["time"] == 0  # kapanmamis mum verilmez
 
 
-async def test_bot_runs_the_backtest_once_in_dry_run_and_publishes_only_numbers(tmp_path, monkeypatch):
-    app = await started(tmp_path, dry_run=True)
-    monkeypatch.setattr(app_module, "BACKTEST_DAYS", 0.05)  # ~5 mum: gercek V9 motoru, kisa sure
+class InlinePool:
+    """Alt surec havuzu yerine ayni surecte calisan sahte havuz (testlerde surec baslatilmaz)."""
+
+    def __init__(self, count):
+        self.count = count
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def imap_unordered(self, function, items):
+        return (function(item) for item in items)
+
+
+def short_job(monkeypatch, app):
+    """~1 gunluk pencere: gercek V9 motoru ve swing stratejileri, kisa sure."""
+    monkeypatch.setattr(app_module, "BACKTEST_DAYS", 1)
+    monkeypatch.setattr(app_module, "BACKTEST_V9_DAYS", 0.05)
     monkeypatch.setattr(app_module, "BACKTEST_FETCH_PAUSE", 0.0)
     jobs = []
 
     async def in_process(job):
         jobs.append(json.loads(job.read_text()))
-        await asyncio.to_thread(backtest.run_job, job)
+        import sqlite3
+        db = sqlite3.connect(jobs[-1]["history"])
+        try:  # gecmis dosyasinda olusmakta olan mum bulunmaz
+            for tf, at in db.execute("SELECT tf, time FROM bars"):
+                assert at + forward.DURATIONS[tf] <= jobs[-1]["end"], (tf, at)
+        finally:
+            db.close()
+        await asyncio.to_thread(forward.run_job, job, InlinePool)
         return 0
 
     monkeypatch.setattr(app.bot, "_backtest_spawn", in_process)
+    return jobs
+
+
+async def test_bot_runs_the_forward_test_once_in_dry_run_and_publishes_only_numbers(tmp_path, monkeypatch):
+    app = await started(tmp_path, dry_run=True)
+    await app.bot.record_spreads()  # olculmus saatlik spread profili
+    jobs = short_job(monkeypatch, app)
     assert (await public_get(app, "/health/backtest")).json() == {"state": "idle", "result": None}
     summary = await app.bot.backtest_once()
-    assert summary["version"] == backtest.VERSION and summary["coverage"]["evaluations"] >= 4
-    assert summary["coverage"]["errors"] == 0 and "XAUUSD" in summary["coverage"]["symbols"]
-    assert jobs[0]["account"]["equity"] == 10_000.0  # gercek varlik dosyaya yazilmaz (sahte hesap da 10000)
-    assert not (tmp_path / "backtest" / "history.db").exists()  # gecmis dosyasi isten sonra silinir
+    assert summary["version"] == forward.VERSION and summary["symbols"] == 1
+    assert summary["v9_coverage"] == {"symbols_done": 1, "symbols_total": 1, "workers": 1,
+                                      "evaluations": summary["v9_coverage"]["evaluations"], "errors": 0,
+                                      "complete": True}
+    assert summary["v9_coverage"]["evaluations"] >= 4
+    assert set(summary["swing"]["strategies"]) == set(forward.SWING_IDS)
+    assert summary["spread_profile"] == {"symbols": 1, "hours_measured_median": 1}
+    job = jobs[0]
+    assert job["account"]["equity"] == 10_000.0  # gercek varlik dosyaya yazilmaz (sahte hesap da 10000)
+    assert job["end"] % 86400 == 0 and job["split"] == job["start"] + (job["end"] - job["start"]) * 2 / 3
+    assert list(job["bounds"]) == ["XAUUSD"] and {row[0] for row in [("D1",)]} <= set(forward.DURATIONS)
+    folder = tmp_path / "backtest"
+    assert not (folder / "history.db").exists() and not (folder / "job.json").exists()  # is bitince silinir
+    assert (folder / "v9-XAUUSD.json").exists()  # biten sembol saklanir: yarim kalan is kaldigi yerden surer
     response = await public_get(app, "/health/backtest")
-    assert response.json()["state"] == "done" and response.json()["result"]["total"] == summary["total"]
+    assert response.json()["state"] == "done" and response.json()["result"]["v9"] == summary["v9"]
     for secret in ("123456", "balance", "equity", "lots", "risk_amount"):
         assert secret not in response.text
-    assert await app.bot.backtest_once() is None  # taze sonuc varken yeniden calismaz
+    assert await app.bot.backtest_once() is None  # tam ve taze sonuc varken yeniden calismaz
+
+
+async def test_unfinished_v9_phase_is_resumed_without_redoing_finished_symbols(tmp_path, monkeypatch):
+    app = await started(tmp_path, dry_run=True)
+    short_job(monkeypatch, app)
+    monkeypatch.setattr(app_module, "BACKTEST_BUDGET", -1.0)  # sure hemen doluyor: V9 hic bitmez
+    first = await app.bot.backtest_once()
+    assert first["v9_coverage"]["complete"] is False and app.bot.backtest_state == "partial"
+    assert not (tmp_path / "backtest" / "v9-XAUUSD.json").exists()
+    monkeypatch.setattr(app_module, "BACKTEST_BUDGET", 3600.0)
+    second = await app.bot.backtest_once()  # tamamlanmamis sonuc "taze" sayilmaz: is yeniden calisir
+    assert second["v9_coverage"]["complete"] is True and app.bot.backtest_state == "done"
+    # Biten sembolun dosyasi durdukca V9 o sembolde yeniden calistirilmaz.
+    job = tmp_path / "backtest" / "job.json"
+    saved = json.loads((tmp_path / "backtest" / "v9-XAUUSD.json").read_text())
+    signature = saved["signature"].split(":")
+    history = tmp_path / "backtest" / "h.db"
+    backtest.write_history(history, [("XAUUSD", "M15", 0, 1.0, 1.0, 1.0, 1.0)])
+    job.write_text(json.dumps({"instruments": [{"symbol": "XAUUSD", "kind": "metal"}], "spreads": {"XAUUSD": {"hours": {}, "all": 0.2}},
+                               "start": float(signature[1]), "end": float(signature[2]), "split": float(signature[1]),
+                               "v9_start": float(signature[1]), "history": str(history),
+                               "result": str(tmp_path / "backtest" / "again.json"), "workers": 1}))
+    monkeypatch.setattr(forward, "v9_symbol", lambda args: (_ for _ in ()).throw(AssertionError("yeniden calisti")))
+    again = forward.run_job(job, InlinePool)
+    assert again["v9_coverage"]["complete"] is True and again["v9"] == second["v9"]
 
 
 async def test_backtest_never_runs_live_and_a_failure_is_harmless(tmp_path, monkeypatch):
     live = await started(tmp_path / "live")
     assert await live.bot.backtest_once() is None and live.bot.backtest_state == "idle"
     app = await started(tmp_path / "dry", dry_run=True)
-    monkeypatch.setattr(app_module, "BACKTEST_DAYS", 0.05)
-    monkeypatch.setattr(app_module, "BACKTEST_FETCH_PAUSE", 0.0)
+    short_job(monkeypatch, app)
 
     async def crash(job):
         return 1
@@ -134,3 +199,168 @@ async def test_backtest_never_runs_live_and_a_failure_is_harmless(tmp_path, monk
     assert await app.bot.backtest_once() is None
     assert app.bot.backtest_state == "failed: RuntimeError"
     assert (await app.bot.on_bar_close()).would_open == 1  # bot etkilenmez
+
+
+# ---------------------------------------------------------------- forward.py birimleri
+def trade(at, r, closed_after=3600.0, strategy="tb_smc_sweep_v1", side="BUY"):
+    results = {str(t): [r, None if r is None else at + closed_after, None] for t in forward.TARGETS}
+    return {"strategy_id": strategy, "symbol": "EURUSD", "side": side, "at": at, "results": results,
+            "spread_r": 0.01, "stop_daily_atr": 1.5}
+
+
+def test_hourly_spread_falls_back_to_the_symbol_median():
+    spreads = forward.Spreads({"EURUSD": {"hours": {"3": 0.0004}, "all": 0.0001}})
+    assert spreads.at("EURUSD", 3 * 3600 + 5) == 0.0004 and spreads.at("EURUSD", 14 * 3600) == 0.0001
+    assert spreads.has("EURUSD") and not spreads.has("GBPUSD")
+    assert spreads.coverage() == {"symbols": 1, "hours_measured_median": 1}
+
+
+def test_portfolio_rules_cap_five_entries_a_day_and_stop_after_three_straight_losses():
+    day = 10 * 86400.0
+    six = [trade(day + i * 600, 1.0, closed_after=100_000.0) for i in range(6)]
+    assert len(forward.apply_rules(six, "2.0")) == 5  # gunde en cok 5 giris
+    losses = [trade(day + i * 7200, -1.0) for i in range(3)] + [trade(day + 30_000, 1.0), trade(day + 86400 + 60, 1.0)]
+    kept = forward.apply_rules(losses, "2.0")
+    assert [t["at"] for t in kept] == [day, day + 7200, day + 14400, day + 86400 + 60]  # ayni gun 4. giris yok
+    # Kayiplar henuz KAPANMADIYSA (sonuc bilinmiyorsa) giris engellenmez: gelecegi goren kural olmaz.
+    pending = [trade(day + i * 600, -1.0, closed_after=50_000.0) for i in range(4)]
+    assert len(forward.apply_rules(pending, "2.0")) == 4
+
+
+def test_selection_uses_only_the_first_period_and_reports_the_second():
+    split = 100 * 86400.0
+    rows = []
+    for i in range(20):  # ic orneklem: dar bant iyi, genis bant kotu
+        rows.append(trade(i * 86400.0, 1.0, strategy="tb_emapb_h1_20_21_v1"))
+        rows.append(trade(i * 86400.0 + 5, -1.0, strategy="tb_emapb_h1_21_50_v1"))
+    for i in range(10):  # dis orneklem: tam tersi
+        rows.append(trade(split + i * 86400.0, -1.0, strategy="tb_emapb_h1_20_21_v1"))
+        rows.append(trade(split + i * 86400.0 + 5, 1.0, strategy="tb_emapb_h1_21_50_v1"))
+    summary = forward.summarize_swing(rows, split)
+    chosen = summary["selected"]["ema_pullback"]
+    assert chosen["strategy_id"] == "tb_emapb_h1_20_21_v1"  # secim ic orneklemle yapilir
+    assert chosen["is"]["avg_r"] == 1.0 and chosen["oos"]["avg_r"] == -1.0  # dis orneklem oldugu gibi raporlanir
+    assert summary["selected"]["smc"] is None  # yeterli islem yoksa secim yapilmaz
+    assert summary["strategies"]["tb_emapb_h1_21_50_v1"]["targets"]["2.0"]["raw"]["oos"]["sum_r"] == 10.0
+
+
+def test_swing_replay_finds_the_smc_trade_and_never_looks_ahead(tmp_path):
+    from tests.signals.test_swing_strategies import D1, END, H4, bar, rising, smc_h1, smc_m15
+    history = backtest.History()
+    m15 = [bar(END - (400 - i) * 900, 100.4, 100.45, 100.35, 100.4) for i in range(397)] + smc_m15()
+    future = [bar(END + i * 900, 100.5, 100.6 + i * 0.2, 100.45, 100.55 + i * 0.2) for i in range(40)]  # yukselis
+    history.add("EURUSD", "M15", m15 + future)
+    history.add("EURUSD", "H1", smc_h1() + [bar(END + i * 3600, 101, 101.5, 100.9, 101.2) for i in range(10)])
+    history.add("EURUSD", "H4", rising(80, 0.05, 100.5, H4, END))
+    history.add("EURUSD", "D1", rising(80, 0.26, 100.5, D1, END, spread=1.0))
+    spreads = forward.Spreads({"EURUSD": {"hours": {}, "all": 0.02}})
+    trades = forward.swing_trades("EURUSD", "forex", history, spreads, END - 3600, END + 3600)
+    smc = [t for t in trades if t["strategy_id"] == "tb_smc_sweep_v1"]
+    assert len(smc) == 1 and smc[0]["side"] == "BUY" and smc[0]["at"] == END + 5
+    assert smc[0]["stop_daily_atr"] >= 1.5 and 0 < smc[0]["spread_r"] < 0.05
+    assert smc[0]["results"]["1.5"][0] is not None or smc[0]["results"]["1.5"][2] is not None
+    # Ayni veri, gelecek mumlar OLMADAN: sinyal ayni anda ve ayni yonde (gelecege bakilmiyor).
+    past = backtest.History()
+    past.add("EURUSD", "M15", m15)
+    for tf in ("H1", "H4", "D1"):
+        past.add("EURUSD", tf, [b for b in history.all("EURUSD", tf) if b["time"] + forward.DURATIONS[tf] <= END])
+    alone = [t for t in forward.swing_trades("EURUSD", "forex", past, spreads, END - 3600, END + 3600)
+             if t["strategy_id"] == "tb_smc_sweep_v1"]
+    assert len(alone) == 1 and (alone[0]["at"], alone[0]["side"]) == (smc[0]["at"], smc[0]["side"])
+
+
+def test_stop_day_stays_closed_and_selected_strategies_share_one_portfolio():
+    day = 10 * 86400.0
+    # Uc kayip kapandi, ardindan eski bir islem kazancla kapandi: gun yine kapali kalir.
+    rows = [trade(day, 1.0, closed_after=40_000.0)] + [trade(day + 600 + i * 7200, -1.0) for i in range(3)]
+    rows += [trade(day + 50_000, 1.0), trade(day + 86400 + 60, 1.0)]
+    assert [t["at"] for t in forward.apply_rules(rows, "2.0")][-2:] == [day + 600 + 2 * 7200, day + 86400 + 60]
+    # Hesap geneli: iki stratejinin islemleri AYNI gunluk siniri paylasir.
+    mixed = [trade(day + i * 600, 1.0, closed_after=100_000.0,
+                   strategy=("tb_smc_sweep_v1", "tb_emapb_h1_20_21_v1")[i % 2]) for i in range(8)]
+    targets = {"tb_smc_sweep_v1": "2.0", "tb_emapb_h1_20_21_v1": "1.5"}
+    assert len(forward.apply_rules(mixed, targets)) == 5
+
+
+def test_in_sample_ends_at_the_split_and_open_trades_are_reported_apart():
+    split = 100 * 86400.0
+    rows = [trade(split - 86400.0, 1.0), trade(split - 600.0, 3.0, closed_after=7200.0),  # ikincisi ayrimi asiyor
+            trade(split + 600.0, -1.0), trade(split + 900.0, None)]
+    rows[-1]["results"] = {key: [None, None, 0.4] for key in rows[-1]["results"]}
+    periods = forward._swing_periods(rows, split, "2.0")
+    assert periods["is"]["trades"] == 1 and periods["is"]["sum_r"] == 1.0 and periods["straddle"] == 1
+    assert periods["oos"] == {"trades": 2, "open": 1, "wins": 0, "flat": 0, "losses": 1, "sum_r": -1.0,
+                              "avg_r": -1.0, "open_r": 0.4}  # acik islem ortalamaya 0 diye girmez
+    summary = forward.summarize_swing(rows, split)
+    assert summary["portfolio"] is None  # secim yoksa portfoy satiri da yok
+    spreads = forward.Spreads({"EURUSD": {"hours": {3: 0.0004}, "all": 0.0001}})
+    assert spreads.at("EURUSD", 3 * 3600.0) == 0.0004  # saat anahtari sayi da olsa bulunur
+
+
+def test_wide_stop_never_comes_closer_than_one_and_a_half_daily_atr():
+    assert forward.wide_distance(0.2, 1.0) == 1.5 and forward.wide_distance(2.0, 1.0) == 2.0
+
+
+def test_replay_shows_strategies_only_closed_and_current_bars_and_simulates_from_the_next_bar(monkeypatch):
+    from tests.signals.test_swing_strategies import D1, END, H4, bar, rising, smc_h1, smc_m15
+    history = backtest.History()
+    m15 = [bar(END - (400 - i) * 900, 100.4, 100.45, 100.35, 100.4) for i in range(397)] + smc_m15()
+    future = [bar(END + i * 900, 100.5, 100.6 + i * 0.2, 100.45, 100.55 + i * 0.2) for i in range(40)]
+    history.add("EURUSD", "M15", m15 + future)
+    history.add("EURUSD", "H1", smc_h1() + [bar(END + i * 3600, 101, 101.5, 100.9, 101.2) for i in range(10)])
+    history.add("EURUSD", "H4", rising(80, 0.05, 100.5, H4, END) + [bar(END, 101, 109, 100.9, 108)])
+    history.add("EURUSD", "D1", rising(80, 0.26, 100.5, D1, END, spread=1.0) + [bar(END, 101, 109, 100.9, 108)])
+    seen, simulated = [], []
+    real_modules, real_simulate = forward.modules, forward.outcome.simulate_swing
+
+    class Spy:
+        def __init__(self, inner):
+            self.inner, self.id = inner, inner.id
+
+        def evaluate(self, context):
+            seen.append(context)
+            return self.inner.evaluate(context)
+
+    def simulate(side, entry, stop, target, at, bars, **kwargs):
+        simulated.append((side, entry, at, bars[0]["time"] if bars else None))
+        return real_simulate(side, entry, stop, target, at, bars, **kwargs)
+
+    monkeypatch.setattr(forward, "modules", lambda kind: [Spy(m) for m in real_modules(kind)])
+    monkeypatch.setattr(forward.outcome, "simulate_swing", simulate)
+    spreads = forward.Spreads({"EURUSD": {"hours": {}, "all": 0.02}})
+    trades = forward.swing_trades("EURUSD", "forex", history, spreads, END - 6 * 3600, END + 3 * 3600)
+    assert trades and len(seen) > 30
+    for context in seen:
+        for tf, duration in forward.DURATIONS.items():
+            bars = context.bars[tf]
+            assert bars and bars[-1]["time"] + duration <= context.now  # olusmakta olan mum yok
+        assert context.bars["H1"][-1]["time"] + 2 * 3600 > context.now  # ve en yeni kapanmis H1 mumu (bayat degil)
+    assert all(first == at - 5 for _, _, at, first in simulated)  # benzetim giris mumundan SONRAKI mumla baslar
+    side, entry = next((side, entry) for side, entry, at, _ in simulated if at == END + 5)
+    assert side == "BUY" and entry == 100.5 + 0.02  # AL: kapanis + spread (ask)
+
+
+async def test_unfinished_job_keeps_its_window_across_days(tmp_path, monkeypatch):
+    app = await started(tmp_path, dry_run=True)
+    jobs = short_job(monkeypatch, app)
+    monkeypatch.setattr(app_module, "BACKTEST_BUDGET", -1.0)
+    monkeypatch.setattr(app_module, "BACKTEST_ROUNDS", 2)
+    assert (await app.bot.backtest_once())["v9_coverage"]["complete"] is False
+    assert len(jobs) == 2  # bitmeyen is ayni gecmisle bir tur daha denenir
+    app.clock["now"] += 86400.0  # ertesi gun yeniden baslayan surec ayni pencereyle surer
+    monkeypatch.setattr(app_module, "BACKTEST_BUDGET", 3600.0)
+    done = await app.bot.backtest_once()
+    assert done["v9_coverage"]["complete"] is True and len(jobs) == 3 and jobs[2]["end"] == jobs[0]["end"]
+    app.clock["now"] += 86400.0  # tamamlanan isten sonra (sonuc eskiyince) yeni pencere acilir
+    await app.bot.backtest_once()
+    assert jobs[3]["end"] == jobs[0]["end"] + 2 * 86400.0
+
+
+async def test_history_never_stores_a_bar_that_is_still_forming(tmp_path, monkeypatch):
+    app = await started(tmp_path, dry_run=True)
+    short_job(monkeypatch, app)  # gecmis dosyasindaki her mumun pencere sonunda kapanmis oldugunu denetler
+    real = app_module.schema.parse_candles
+    forming = {"time": int(app.clock["now"] // 900) * 900, "open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0,
+               "tick_volume": 1}
+    monkeypatch.setattr(app_module.schema, "parse_candles", lambda payload: real(payload) + [dict(forming)])
+    assert await app.bot.backtest_once() is not None and app.bot.backtest_state == "done"

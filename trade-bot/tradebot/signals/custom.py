@@ -16,6 +16,7 @@ from .adapter import Candidate, Evaluation
 from .modules import Context, Signal, modules
 
 log = logging.getLogger(__name__)
+UPPER_MAX_AGE = 4 * 86400.0  # son kapanmis H4/D1 mumu bundan eskiyse swing stratejileri calismaz
 
 MIN_NET_RR = 1.5  # spec §6.2 sert veto
 MIN_STOP_SPREADS = 3.0  # stop mesafesi en az bu kadar spread olmali (gurultu stopu olmasin)
@@ -114,6 +115,16 @@ def evaluate(provider, instrument, *, equity: float, risk_pct: float, modes: dic
     if not (-QUOTE_FUTURE_TOLERANCE <= now - quote["time"] <= QUOTE_MAX_AGE):
         return []
     bars = {frame: provider.candles(symbol, frame, 256) for frame in ("M15", "H1")}
+    # Swing stratejileri ust zaman dilimlerini de okur; onbellekte yoksa bos gelir ve o stratejiler sinyal uretmez.
+    for frame, count, seconds in (("H4", 120, 14400), ("D1", 90, 86400)):
+        try:
+            found = provider.candles(symbol, frame, count)
+        except (LookupError, KeyError):
+            found = []
+        # Bayat ust zaman dilimi (yenilenememis onbellek) kullanilmaz: hafta sonu + tatil payi kadar eski olabilir.
+        if found and now - (found[-1]["time"] + seconds) > UPPER_MAX_AGE:
+            found = []
+        bars[frame] = found
     m15 = bars["M15"]
     # Yalnizca kapanmis ve GUNCEL mum: son kapanmis M15 mumu az once kapanmis olmali (bakis-ileri ve bayat veri yok).
     if not m15 or not (0 <= now - (m15[-1]["time"] + BAR_SECONDS) < BAR_SECONDS):

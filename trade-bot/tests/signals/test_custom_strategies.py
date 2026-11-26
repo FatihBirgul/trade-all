@@ -110,7 +110,9 @@ def test_indicators():
 
 
 def test_registry_has_the_new_strategies_and_they_default_to_shadow():
-    assert {m.id for m in modules("strategy")} == {PULLBACK, BREAKOUT} == custom.strategy_ids()
+    swing = {"tb_smc_sweep_v1", "tb_emapb_h1_20_21_v1", "tb_emapb_h1_21_50_v1"}
+    assert {m.id for m in modules("strategy")} == {PULLBACK, BREAKOUT} | swing == custom.strategy_ids()
+    assert all(strategy_mode(BotSettings(), strategy_id) == "shadow" for strategy_id in swing)
     settings = BotSettings()
     assert strategy_mode(settings, PULLBACK) == "shadow" and strategy_mode(settings, BREAKOUT) == "shadow"
     assert strategy_mode(settings, "fx_trend_momentum_v6") == "live"  # V9 stratejileri etkilenmez
@@ -200,7 +202,7 @@ def test_opposing_v9_confirmation_is_a_hard_veto():
 def test_off_strategy_is_not_evaluated_and_a_broken_one_does_not_stop_the_others(monkeypatch):
     assert only(run(pullback_m15(), h1_up(), modes={PULLBACK: "off"}), PULLBACK) == []
     provider = Provider(pullback_m15(), h1_up())
-    assert custom.evaluate(provider, eurusd(), equity=1e4, risk_pct=0.5, modes={PULLBACK: "off", BREAKOUT: "off"},
+    assert custom.evaluate(provider, eurusd(), equity=1e4, risk_pct=0.5, modes={strategy_id: "off" for strategy_id in custom.strategy_ids()},
                            now=NOW) == [] and provider.calls == []  # hepsi kapaliysa veri bile okunmaz
     breakout = next(m for m in modules("strategy") if m.id == BREAKOUT)
     monkeypatch.setattr(type(breakout), "evaluate", lambda self, context: 1 / 0)
@@ -442,3 +444,23 @@ async def test_restart_pause_blocks_a_live_new_strategy_too_but_shadow_bookkeepi
     await shadow.bot.on_bar_close()
     rows = shadow.repo.conn.execute("SELECT symbol, strategy_id FROM shadow_trades").fetchall()
     assert ("EURUSD", PULLBACK) in [tuple(r) for r in rows]  # golge kaydi bekleme sirasinda da tutulur
+
+
+def test_stale_upper_timeframes_are_not_shown_to_strategies(monkeypatch):
+    """Yenilenememis (bayat) H4/D1 onbellegi swing stratejilerine verilmez; taze olan verilir."""
+    seen = {}
+
+    class Probe:
+        id, kind = "tb_probe", "strategy"
+
+        def evaluate(self, context):
+            seen.update({frame: len(context.bars.get(frame) or []) for frame in ("H4", "D1")})
+
+    monkeypatch.setattr(custom, "modules", lambda kind: [Probe()])
+    m15, provider = pullback_m15(), None
+    provider = Provider(m15, h1_up())
+    day = 86400
+    provider.bars["H4"] = [bar(NOW - 4 * H1, 1.0, 1.0, 1.0, 1.0)]
+    provider.bars["D1"] = [bar(NOW - 6 * day, 1.0, 1.0, 1.0, 1.0)]  # 5 gun once kapanmis: bayat
+    custom.evaluate(provider, eurusd(), equity=10_000.0, risk_pct=0.5, modes={}, now=NOW, report={})
+    assert seen == {"H4": 1, "D1": 0}

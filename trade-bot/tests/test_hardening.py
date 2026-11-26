@@ -336,3 +336,36 @@ async def test_a_persistently_broken_trade_does_not_flood_the_log(tmp_path, monk
         with pytest.raises(RuntimeError):
             await app.bot.manage_tick()
     assert sum("stop yonetimi hatasi" in r.message for r in caplog.records) == 1
+
+
+async def test_spread_medians_are_recorded_and_give_an_hourly_profile(tmp_path):
+    """Ileri testin seansa gore spread'i: bot 5 dakikalik spread medyanlarini biriktirir (kapilari etkilemez)."""
+    app = await started(tmp_path, dry_run=True)
+    assert await app.bot.record_spreads() == 1  # yalnizca fiyati olan sembol (XAUUSD)
+    hour = int(app.clock["now"] // 3600) % 24
+    profile = app.repo.spread_profile()
+    assert set(profile) == {"XAUUSD"} and profile["XAUUSD"]["hours"][hour] == pytest.approx(0.2)
+    app.repo.add_spread_stats([("XAUUSD", app.clock["now"] + 3600, 0.6, 50), ("XAUUSD", app.clock["now"] + 3900, 0.8, 50),
+                               ("XAUUSD", app.clock["now"] + 7200, 9.0, 2)], 0)  # son satir: ornek az, sayilmaz
+    profile = app.repo.spread_profile()["XAUUSD"]
+    assert profile["hours"][(hour + 1) % 24] == pytest.approx(0.7) and (hour + 2) % 24 not in profile["hours"]
+    app.repo.add_spread_stats([], app.clock["now"] + 10_000)  # eskiler silinir
+    assert app.repo.spread_profile() == {}
+
+
+async def test_daily_candle_rate_limit_and_auth_errors_are_not_swallowed(tmp_path):
+    """Gunluk mum ikincil veridir ama istek siniri ve kimlik hatasi taramanin kendi kurallarina birakilir."""
+    from tradebot.exness.errors import ExnessRateLimited, ExnessUnavailable
+    app = await started(tmp_path)
+
+    async def limited(symbol, tf, count=256):
+        raise ExnessRateLimited("limit")
+
+    async def down(symbol, tf, count=256):
+        raise ExnessUnavailable("yok")
+
+    app.bot.candles.get = limited
+    with pytest.raises(ExnessRateLimited):
+        await app.bot._daily_candles("XAUUSD")
+    app.bot.candles.get = down
+    await app.bot._daily_candles("XAUUSD")  # gecici hata: sessizce gecilir, tarama surer

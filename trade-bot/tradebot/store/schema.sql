@@ -136,3 +136,12 @@ CREATE TABLE IF NOT EXISTS devices (
     expo_token TEXT PRIMARY KEY,
     created_at REAL NOT NULL
 );
+
+-- Spread olcumleri (5 dakikalik medyanlar): ileri testin "seansa gore gercek spread" profili buradan cikar.
+CREATE TABLE IF NOT EXISTS spread_stats (
+    symbol TEXT NOT NULL,
+    at REAL NOT NULL,
+    median REAL NOT NULL,
+    samples INTEGER NOT NULL,
+    PRIMARY KEY (symbol, at)
+) WITHOUT ROWID;

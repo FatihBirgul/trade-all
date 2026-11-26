@@ -40,3 +40,37 @@ def trend(bars: list[dict], fast: int = 50, slow: int = 200) -> str | None:
     if fast_value < slow_value and close < fast_value:
         return "bearish"
     return None
+
+
+def rsi(closes: list[float], period: int = 14) -> float | None:
+    """Wilder RSI (son deger). Yeterli veri yoksa None."""
+    if len(closes) < period + 1:
+        return None
+    gains = losses = 0.0
+    for previous, current in zip(closes[:period], closes[1:period + 1]):
+        change = current - previous
+        gains += max(change, 0.0)
+        losses += max(-change, 0.0)
+    gain, loss = gains / period, losses / period
+    for previous, current in zip(closes[period:-1], closes[period + 1:]):
+        change = current - previous
+        gain = (gain * (period - 1) + max(change, 0.0)) / period
+        loss = (loss * (period - 1) + max(-change, 0.0)) / period
+    if loss == 0:
+        return 100.0 if gain > 0 else 50.0
+    return 100.0 - 100.0 / (1.0 + gain / loss)
+
+
+def pivots(bars: list[dict], wing: int = 2) -> tuple[list[int], list[int]]:
+    """Tepe ve dip donus noktalarinin indeksleri: mum, iki yanindaki `wing` mumun hepsinden yuksek (dusuk).
+
+    Son `wing` mum donus noktasi sayilmaz: sagindaki mumlar henuz kapanmamistir (bakis-ileri yok)."""
+    highs: list[int] = []
+    lows: list[int] = []
+    for i in range(wing, len(bars) - wing):
+        window = bars[i - wing:i + wing + 1]
+        if all(bars[i]["high"] > other["high"] for other in window if other is not bars[i]):
+            highs.append(i)
+        if all(bars[i]["low"] < other["low"] for other in window if other is not bars[i]):
+            lows.append(i)
+    return highs, lows

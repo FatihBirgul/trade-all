@@ -78,3 +78,57 @@ def shape(side: str, entry: float, stop: float, at: float, bars: list[dict]) -> 
     return {"stop_pct": round(risk / entry * 100.0, 4) if entry else None,
             "stop_atr": round(risk / width, 2) if width else None,
             "late_r": round((entry - before[-1]["close"]) * sign / risk, 3) if before and risk > 0 else None}
+
+
+# ---------------------------------------------------------------- swing ailesinin cikis plani
+# Kullanicinin kurallari (2026-11-26). Rakamlar onceden sabittir, sonuca gore ayarlanmaz:
+#   - TP1 = 1R: pozisyonun yarisi kapatilir, stop girise cekilir.
+#   - Hedefe ilerleme %60 olunca stop hedef mesafesinin %30'una, %80 olunca %60'ina cekilir (kar kilidi).
+#     ("%60/%80'de kar kilitle" kuralinin yorumu: kilit seviyesi, ulasilan ilerlemenin yaklasik yarisi / dortte ucu.)
+#   - Kalan yari hedefte (`target_r`, 1,5-2,5R) kapanir.
+SWING_TP1_R = 1.0
+SWING_TP1_FRACTION = 0.5
+SWING_LOCKS = ((0.6, 0.3), (0.8, 0.6))  # (hedefe ilerleme, kilitlenen pay)
+SWING_MAX_BARS = 3000  # ~31 gun; bu kadar surede sonuclanmayan islem "acik" raporlanir
+
+
+def simulate_swing(side: str, entry: float, stop: float, target_r: float, at: float, bars: list[dict], *,
+                   spread_at=None) -> dict | None:
+    """Swing cikis planiyla sonuc -> {r, closed_at, bars, first, mfe_r, mae_r} (acik kalirsa r None, open_r dolu).
+
+    `bars`: giris anini iceren mumdan baslayan bid mumlari. `spread_at(zaman)`: o andaki spread (SELL ask'tan
+    kapanir). Ayni mumda once aleyhte hareket sayilir (kotumser)."""
+    risk = abs(entry - stop)
+    if risk <= 0 or target_r <= 0:
+        return None
+    sign = 1.0 if side == "BUY" else -1.0
+    spread_at = spread_at or (lambda moment: 0.0)
+    stop_r, realized, remaining, partial = -1.0, 0.0, 1.0, False
+    first, best, worst = None, 0.0, 0.0
+    after = [b for b in bars if b["time"] + BAR_SECONDS > at][:SWING_MAX_BARS]
+    for index, bar in enumerate(after):
+        shift = spread_at(bar["time"]) if side == "SELL" else 0.0
+        adverse = ((bar["low"] if side == "BUY" else bar["high"] + shift) - entry) * sign / risk
+        favour = ((bar["high"] if side == "BUY" else bar["low"] + shift) - entry) * sign / risk
+        worst, closed_at = min(worst, adverse), bar["time"] + BAR_SECONDS
+        if adverse <= stop_r:
+            first = first or ("SL" if stop_r <= -1.0 else None)
+            return {"first": first, "r": round(realized + remaining * stop_r, 3), "closed_at": closed_at,
+                    "bars": index + 1, "mfe_r": round(best, 2), "mae_r": round(worst, 2)}
+        best = max(best, favour)
+        if not partial and target_r > SWING_TP1_R and favour >= SWING_TP1_R:
+            realized += SWING_TP1_FRACTION * SWING_TP1_R
+            remaining -= SWING_TP1_FRACTION
+            partial = True
+            stop_r = max(stop_r, 0.0)
+            first = first or "TP1"
+        if favour >= target_r:
+            first = first or "TP"
+            return {"first": first, "r": round(realized + remaining * target_r, 3), "closed_at": closed_at,
+                    "bars": index + 1, "mfe_r": round(best, 2), "mae_r": round(worst, 2)}
+        for progress, locked in SWING_LOCKS:
+            if best >= progress * target_r:
+                stop_r = max(stop_r, locked * target_r)
+    last = ((after[-1]["close"] + (spread_at(after[-1]["time"]) if side == "SELL" else 0.0)) - entry) * sign / risk if after else 0.0
+    return {"first": first, "r": None, "open_r": round(realized + remaining * last, 3), "closed_at": None,
+            "bars": len(after), "mfe_r": round(best, 2), "mae_r": round(worst, 2)}
