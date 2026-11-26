@@ -1353,7 +1353,9 @@ class Bot:
         fresh = (isinstance(previous, dict) and previous.get("version") == yeartest.VERSION
                  and bool(previous.get("complete"))
                  and now - float(previous.get("finished_at") or 0) < YEAR_MAX_AGE)
-        if (fresh or not self.repo.get_bot_settings().dry_run or self.account is None
+        # Disa aktarim kipinde "taze sonuc" denetimi yoktur: her acilista is tanimi yeniden yazilir (gecmis, ayni
+        # pencere icin yeniden cekilmez). Boylece yuklenmis bir sonuc yeni pencerenin disa aktarilmasini engellemez.
+        if ((fresh and BACKTEST_ON_SERVER) or not self.repo.get_bot_settings().dry_run or self.account is None
                 or str(self.repo.db_path) == ":memory:" or self.backtest_state == "running"):
             return None
         self.backtest_state = "running"
@@ -1407,6 +1409,8 @@ class Bot:
             if history.exists() and {k: kept.get(k) for k in wanted} == wanted:
                 bars = int(kept.get("bars") or 0)
             else:
+                # Once is tanimi kaldirilir: gecmis yeniden cekilirken eski tanim "hazir" gorunmesin.
+                (folder / "export.json").unlink(missing_ok=True)
                 history.unlink(missing_ok=True)
                 marker.unlink(missing_ok=True)
                 bars = await self._backtest_history(instruments, start, end, history, year_start)
@@ -1433,8 +1437,9 @@ class Bot:
             if not BACKTEST_ON_SERVER:
                 # Hesap sunucuda yapilmaz: is tanimi (yalnizca piyasa verisi ve ayarlar) disa aktarima hazirlanir.
                 export = {key: value for key, value in spec.items() if key not in ("history", "result", "year_result")}
-                (folder / "export.json").write_text(json.dumps({**export, "bars": bars, "ready": True,
-                                                                "version": yeartest.VERSION}))
+                draft = folder / "export.json.new"
+                draft.write_text(json.dumps({**export, "bars": bars, "ready": True, "version": yeartest.VERSION}))
+                os.replace(draft, folder / "export.json")
                 self.backtest_state = "exported"
                 kept_history = True
                 return None
@@ -1512,10 +1517,20 @@ class Bot:
             if not isinstance(data, dict) or data.get("version") != version:
                 log.warning("sonuc dosyasi alinmadi (surum/bicim uymuyor): %s", name)
                 continue
-            if name == "year.json" and not isinstance(data.get("strategies"), dict):
+            if name == "year.json" and not yeartest.well_formed(data, self._clock()):
+                log.warning("sonuc dosyasi alinmadi (bicim bozuk): %s", name)
                 continue
-            data["finished_at"] = self._clock()
+            # Dosyanin kendi bitis zamani korunur (yeniden baslatmada ayni dosya "yeni sonuc" sayilmasin).
+            try:
+                finished = min(float(data.get("finished_at") or 0.0), self._clock())
+            except (TypeError, ValueError):
+                finished = 0.0
+            data["finished_at"] = finished or self._clock()
             data["imported"] = True
+            current = self.repo.get_setting(key)
+            if (isinstance(current, dict) and current.get("imported") and current.get("to") == data.get("to")
+                    and current.get("finished_at") == data["finished_at"]):
+                continue  # ayni sonuc zaten ice alinmis
             self.repo.set_setting(key, data)
             taken.append(name)
             await self._record("info", "backtest_imported", f"Backtest sonucu yüklendi ({name})", {"file": name})
@@ -1527,7 +1542,10 @@ class Bot:
         """Yillik backtestin son sonucu. `full` degilse sembol tablolari ve egriler cikarilir (herkese acik uc)."""
         result = self.repo.get_setting("yeartest_result")
         result = result if isinstance(result, dict) else None
-        return {"state": self.backtest_state, "result": result if full else yeartest.public(result)}
+        try:
+            return {"state": self.backtest_state, "result": result if full else yeartest.public(result)}
+        except (KeyError, AttributeError, TypeError):
+            return {"state": self.backtest_state, "result": None}
 
     def backtest_report(self) -> dict:
         """Herkese acik: son ileri testin ozeti (yalnizca sayilar ve R)."""

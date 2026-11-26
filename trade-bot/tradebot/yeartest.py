@@ -326,6 +326,30 @@ def public(result: dict | None) -> dict | None:
             "combined": slim(result["combined"]) if result.get("combined") else None}
 
 
+def well_formed(result: object, now: float) -> bool:
+    """Disaridan yuklenen sonuc beklenen bicimde mi? (Bozuk ya da eski bicimli dosya ice alinmaz.)"""
+    try:
+        if not isinstance(result, dict) or not isinstance(result.get("strategies"), dict):
+            return False
+        if not isinstance(result.get("history"), dict) or not isinstance(result.get("rules"), dict):
+            return False
+        if not isinstance(result.get("to"), (int, float)) or result["to"] > now + DAY:
+            return False  # pencere gelecekte bitemez
+        rows = list(result["strategies"].values()) + ([result["combined"]] if result.get("combined") else [])
+        for row in rows:
+            if not isinstance(row, dict) or not isinstance(row.get("verdict"), dict):
+                return False
+            windows = row.get("windows")
+            if not isinstance(windows, dict) or set(windows) != set(WINDOW_SHARES):
+                return False
+            if not all(isinstance(w, dict) and isinstance(w.get("net_r"), (int, float)) for w in windows.values()):
+                return False
+        public(result)
+        return True
+    except (KeyError, AttributeError, TypeError, ValueError):
+        return False
+
+
 def passed(result: dict | None, strategy_id: str, now: float, max_spread_stop_pct: float) -> bool:
     """Bu strateji gecme olcutunu sagliyor mu? Gecis yalnizca su kosullarda sayilir: guncel surum; olcum penceresi
     en cok `PASS_MAX_AGE` once bitmis (eski sonuc suresiz gecerli olmaz); olcumdeki maliyet siniri SIMDIKI ayardan

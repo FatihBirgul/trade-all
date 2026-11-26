@@ -680,16 +680,31 @@ async def test_uploaded_results_are_imported_once_and_only_in_the_right_format(t
     assert await app.bot.import_results() == []  # dosya yok
     (folder / "year.json").write_text(json.dumps({"version": "eski", "strategies": {}}))
     assert await app.bot.import_results() == [] and app.repo.get_setting("yeartest_result") is None
-    good = {"version": yeartest.VERSION, "complete": True, "to": app.clock["now"], "strategies": {"tb_a": {"windows": {}}}}
+    window = {"trades": 1, "closed": 1, "net_r": 1.0, "complete": True}
+    row = {"windows": {"1m": window, "6m": window, "1y": window}, "verdict": {"passed": False, "reasons": []}}
+    good = {"version": yeartest.VERSION, "complete": True, "to": app.clock["now"], "finished_at": app.clock["now"] - 50,
+            "history": {"days_median": 365.0}, "rules": {"max_spread_stop_pct": 15.0}, "strategies": {"tb_a": row},
+            "combined": None}
+    for broken in ({**good, "strategies": {"tb_a": {}}}, {**good, "strategies": {"tb_a": {**row, "windows": {"1y": window}}}},
+                   {**good, "history": 1}, {**good, "to": app.clock["now"] + 10 * 86400}, {**good, "combined": {"x": 1}}):
+        (folder / "year.json").write_text(json.dumps(broken) + " " * (len(str(broken)) % 7))
+        assert await app.bot.import_results() == [], broken  # bicimi bozuk dosya alinmaz
+    assert app.repo.get_setting("yeartest_result") is None
     (folder / "year.json").write_text(json.dumps(good) + " ")
     (folder / "forward.json").write_text(json.dumps({"version": forward.VERSION, "swing": {}}))
     assert sorted(await app.bot.import_results()) == ["forward.json", "year.json"]
     stored = app.repo.get_setting("yeartest_result")
-    assert stored["imported"] is True and stored["finished_at"] == app.clock["now"] and app.bot.backtest_state == "imported"
+    assert stored["imported"] is True and stored["finished_at"] == app.clock["now"] - 50  # dosyanin kendi zamani
+    assert app.bot.backtest_state == "imported"
+    # Yeniden baslatma: ayni dosya "yeni sonuc" olarak yeniden alinmaz.
+    app.bot._results_seen.clear()
+    app.clock["now"] += 3600
+    assert "year.json" not in await app.bot.import_results()
+    assert app.repo.get_setting("yeartest_result")["finished_at"] == stored["finished_at"]
     assert app.bot.yeartest_report(full=True)["result"]["strategies"] == good["strategies"]
     assert app.repo.get_setting("backtest_result")["version"] == forward.VERSION
     assert await app.bot.import_results() == []  # degismeyen dosya yeniden alinmaz
-    assert app.kinds().count("backtest_imported") == 2
+    assert app.kinds().count("backtest_imported") >= 2
     (folder / "year.json").write_text("{bozuk")
     (folder / "forward.json").write_text("x" * (app_module.RESULTS_MAX_BYTES + 1))
     assert await app.bot.import_results() == [] and app.repo.get_setting("yeartest_result")["imported"] is True

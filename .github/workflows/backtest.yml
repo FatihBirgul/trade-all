@@ -84,11 +84,13 @@ jobs:
           path: data
       - name: Backtest (${{ matrix.symbol }})
         working-directory: trade-bot
+        env:
+          SYMBOL: ${{ matrix.symbol }}
         run: |
           set -euo pipefail
           gunzip ../data/history.db.gz
           python -m tradebot.yeartest ../data/job.json --history ../data/history.db --out ../out \
-            --only "${{ matrix.symbol }}" --workers "$(nproc)"
+            --only "$SYMBOL" --workers "$(nproc)"
           ls ../out | head -40
       - uses: actions/upload-artifact@v4
         with:
