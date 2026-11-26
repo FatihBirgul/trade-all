@@ -152,7 +152,13 @@ def run_symbol(data: Path, job: dict, symbol: str, out: Path, only: list[str] | 
                             float(weights[int(np.searchsorted(s.time, t.entry_time - s.seconds))]), t.reason)
                     for t in trades]
                 wf = E.walk_forward(weighted, plan, data_from)
-                row["variants"][f"{fname}/{sizing}"] = {**wf, "stats": stats}
+                entry = {**wf, "stats": stats}
+                if wf["passed"]:  # portfoy icin: sayilan test pencerelerindeki islemler (gorulmemis donem)
+                    spans = [w["test"] for w, r in zip(plan["windows"], wf["windows"]) if r.get("selected")]
+                    entry["oos_trades"] = [[t.entry_time, t.exit_time, t.side, round(t.r, 4), round(t.weight, 4)]
+                                           for t in weighted if t.r is not None
+                                           and any(a <= t.entry_time < b for a, b in spans)]
+                row["variants"][f"{fname}/{sizing}"] = entry
         mk = E.monkey(s, spec, costs, real or [], plan, data_from, reps=reps)
         region = [t for t in E.simulate(s, spec, costs)[0] if plan["region"][0] <= t.entry_time < plan["region"][1]]
         real_pf = E.metrics(region)["pf"] or 0.0
@@ -185,18 +191,41 @@ def assemble(parts: Path, out: Path) -> dict:
                 rows.append({**key, "passed": wf["passed"], "counted": wf["counted"], "oos": wf["oos"],
                              "positive_share": wf["positive_share"]})
                 if wf["passed"]:
-                    passed.append(key)
+                    passed.append({**key, "oos_trades": wf.get("oos_trades", [])})
     by_strategy: dict = {}
     for r in rows:
         agg = by_strategy.setdefault(r["strategy"], {"tested": 0, "passed": 0, "selected_windows": 0})
         agg["tested"] += 1
         agg["passed"] += r["passed"]
         agg["selected_windows"] += r["counted"]
-    summary = {"version": "wf-1", "tested": tested, "passed": len(passed), "expected_by_chance": round(chance, 2),
+    from .portfolio import build as build_portfolio
+    portfolio = build_portfolio(passed) if passed else None
+    summary = {"version": "wf-1", "tested": tested, "portfolio": portfolio, "passed": len(passed), "expected_by_chance": round(chance, 2),
                "approved_candidates": passed, "by_strategy": by_strategy, "errors": errors, "rows": rows,
                "finished_at": time.time()}
     out.write_text(json.dumps(summary))
     return summary
+
+
+def report(summary: dict) -> str:
+    """Gunluge yazilan ozet: strateji basina denenen / gecen; gecenlerin gorulmemis sonucu; tesadufi beklenti."""
+    lines = [f"denenen eslesme: {summary['tested']} | gecen: {summary['passed']} | "
+             f"tesadufen beklenen gecen: {summary['expected_by_chance']}"]
+    for sid, agg in sorted(summary["by_strategy"].items()):
+        lines.append(f"  {sid:26s} denenen={agg['tested']:4d} gecen={agg['passed']:3d} secilen_pencere={agg['selected_windows']}")
+    for key in summary["approved_candidates"]:
+        row = next(r for r in summary["rows"] if r["symbol"] == key["symbol"] and r["strategy"] == key["strategy"]
+                   and r["variant"] == key["variant"])
+        oos = row["oos"]
+        lines.append(f"  GECTI {key['symbol']:7s} {key['strategy']:26s} {key['variant']:6s} islem={oos['trades']} "
+                     f"R={oos['net_r']} PF={oos['pf']} DD%={oos['max_dd_pct']} pencere={row['counted']} "
+                     f"arti_pay={row['positive_share']}")
+    if summary.get("portfolio"):
+        p = summary["portfolio"]
+        lines.append("portfoy (gorulmemis donem): " + json.dumps({k: p[k] for k in ("trades", "rejected", "risk")}))
+    if summary["errors"]:
+        lines.append("hatalar: " + json.dumps(summary["errors"]))
+    return "\n".join(lines)
 
 
 def holdout(data: Path, job: dict, wf: dict, out: Path) -> dict:
@@ -258,7 +287,7 @@ def main(argv: list[str]) -> None:
         run_symbol(args.data, job, args.symbol, args.out / f"{args.symbol}.json", args.only, args.reps)
     elif args.mode == "assemble":
         summary = assemble(args.parts, args.out)
-        print(json.dumps({k: v for k, v in summary.items() if k not in ("rows",)}, indent=1)[:20000])
+        print(report(summary))
     else:
         holdout(args.data, job, json.loads(args.wf.read_text()), args.out)
 
