@@ -227,7 +227,7 @@ test("unconfigured shows link to connection", async () => {
   const ui = await screen();
   expect(ui.getByText("Bot ile bağlantı kurulmadı.")).toBeTruthy();
   expect(ui.queryByText("Durdur")).toBeNull();
-  await fireEvent.press(ui.getByText("Bağlantı sekmesine git"));
+  await fireEvent.press(ui.getByText("Bağlantı ekranını aç"));
   expect(mockPush).toHaveBeenCalledWith("/connection");
 });
 

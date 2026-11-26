@@ -34,7 +34,14 @@ jest.mock("expo-router", () => {
       <Text>{name + (options.href === null ? ":hidden" : ":visible")}</Text>
     );
   };
-  return { Tabs };
+  return { Tabs, router: { push: (...args: unknown[]) => mockPush(...args) } };
+});
+const mockPush = jest.fn();
+let mockPhase = "ready";
+jest.mock("../src/bot/state", () => ({ useBot: () => ({ phase: mockPhase }) }));
+beforeEach(() => {
+  mockPush.mockClear();
+  mockPhase = "ready";
 });
 test("tabs show bot screens and hide legacy ones", async () => {
   const ui = await render(
@@ -45,6 +52,42 @@ test("tabs show bot screens and hide legacy ones", async () => {
   expect(ui.getByText("firstRoute")).toBeTruthy();
   for (const name of ["index", "positions", "reports", "events", "settings-bot"])
     expect(ui.getByText(name + ":visible")).toBeTruthy();
-  for (const name of ["connection", "legacy", "analysis", "portfolios", "scanner", "settings"])
+  for (const name of ["legacy", "analysis", "portfolios", "scanner", "settings"])
     expect(ui.getByText(name + ":hidden")).toBeTruthy();
+  // Bağlantı ekranı sekme değildir: gizli sekmeye router.push gerçek cihazda çalışmaz.
+  expect(ui.queryByText(/^connection:/)).toBeNull();
+  expect(mockPush).not.toHaveBeenCalled(); // bağlıyken açılışta yönlendirme yok
+});
+
+const tabs = () =>
+  render(
+    <ThemeProvider>
+      <TabsLayout />
+    </ThemeProvider>,
+  );
+
+test("without a pairing the app opens the connection screen once", async () => {
+  mockPhase = "loading";
+  const ui = await tabs();
+  expect(mockPush).not.toHaveBeenCalled(); // kayıtlı bağlantı okunana kadar beklenir
+  mockPhase = "unconfigured";
+  await ui.rerender(
+    <ThemeProvider>
+      <TabsLayout />
+    </ThemeProvider>,
+  );
+  expect(mockPush).toHaveBeenCalledWith("/connection");
+  mockPhase = "revoked";
+  await ui.rerender(
+    <ThemeProvider>
+      <TabsLayout />
+    </ThemeProvider>,
+  );
+  expect(mockPush).toHaveBeenCalledTimes(1); // geri dönen kullanıcı yeniden zorlanmaz
+});
+
+test("a revoked pairing also opens the connection screen at start", async () => {
+  mockPhase = "revoked";
+  await tabs();
+  expect(mockPush).toHaveBeenCalledWith("/connection");
 });

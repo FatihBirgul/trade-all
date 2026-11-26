@@ -84,7 +84,7 @@ export function Disconnected() {
       <Label>
         {phase === "revoked" ? "Bu telefonun bağlantı anahtarı artık geçerli değil." : "Bot ile bağlantı kurulmadı."}
       </Label>
-      <Button title="Bağlantı sekmesine git" onPress={() => router.push("/connection")} />
+      <Button title="Bağlantı ekranını aç" onPress={() => router.push("/connection")} />
     </Card>
   );
 }
