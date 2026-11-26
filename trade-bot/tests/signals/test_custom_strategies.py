@@ -110,7 +110,9 @@ def test_indicators():
 
 
 def test_registry_has_the_new_strategies_and_they_default_to_shadow():
-    assert {m.id for m in modules("strategy")} == {PULLBACK, BREAKOUT} == custom.strategy_ids()
+    swing = {"tb_smc_sweep_v1", "tb_emapb_h1_20_21_v1", "tb_emapb_h1_21_50_v1"}
+    assert {m.id for m in modules("strategy")} == {PULLBACK, BREAKOUT} | swing == custom.strategy_ids()
+    assert all(strategy_mode(BotSettings(), strategy_id) == "shadow" for strategy_id in swing)
     settings = BotSettings()
     assert strategy_mode(settings, PULLBACK) == "shadow" and strategy_mode(settings, BREAKOUT) == "shadow"
     assert strategy_mode(settings, "fx_trend_momentum_v6") == "live"  # V9 stratejileri etkilenmez
@@ -200,7 +202,7 @@ def test_opposing_v9_confirmation_is_a_hard_veto():
 def test_off_strategy_is_not_evaluated_and_a_broken_one_does_not_stop_the_others(monkeypatch):
     assert only(run(pullback_m15(), h1_up(), modes={PULLBACK: "off"}), PULLBACK) == []
     provider = Provider(pullback_m15(), h1_up())
-    assert custom.evaluate(provider, eurusd(), equity=1e4, risk_pct=0.5, modes={PULLBACK: "off", BREAKOUT: "off"},
+    assert custom.evaluate(provider, eurusd(), equity=1e4, risk_pct=0.5, modes={strategy_id: "off" for strategy_id in custom.strategy_ids()},
                            now=NOW) == [] and provider.calls == []  # hepsi kapaliysa veri bile okunmaz
     breakout = next(m for m in modules("strategy") if m.id == BREAKOUT)
     monkeypatch.setattr(type(breakout), "evaluate", lambda self, context: 1 / 0)

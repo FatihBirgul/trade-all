@@ -114,6 +114,12 @@ def evaluate(provider, instrument, *, equity: float, risk_pct: float, modes: dic
     if not (-QUOTE_FUTURE_TOLERANCE <= now - quote["time"] <= QUOTE_MAX_AGE):
         return []
     bars = {frame: provider.candles(symbol, frame, 256) for frame in ("M15", "H1")}
+    # Swing stratejileri ust zaman dilimlerini de okur; onbellekte yoksa bos gelir ve o stratejiler sinyal uretmez.
+    for frame, count in (("H4", 120), ("D1", 90)):
+        try:
+            bars[frame] = provider.candles(symbol, frame, count)
+        except (LookupError, KeyError):
+            bars[frame] = []
     m15 = bars["M15"]
     # Yalnizca kapanmis ve GUNCEL mum: son kapanmis M15 mumu az once kapanmis olmali (bakis-ileri ve bayat veri yok).
     if not m15 or not (0 <= now - (m15[-1]["time"] + BAR_SECONDS) < BAR_SECONDS):

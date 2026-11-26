@@ -6,6 +6,8 @@ Oy modullerinin sirasi `config.FUSION_MODULES` ile aynidir (puan agirliklari o a
 from .base import Context, Module, Signal, Vote, get, modules, register
 from .strategies.donchian_breakout import DonchianBreakout
 from .strategies.ema_pullback import EmaPullback
+from .strategies.ema_pullback_h1 import EmaPullbackH1
+from .strategies.smc_sweep import SmcSweep
 from .votes.confluence import Confluence
 from .votes.momentum import Momentum
 from .votes.mtf import Mtf
@@ -28,5 +30,9 @@ register(Session())
 # Yeni stratejiler: kimlikleri `tb_` ile baslar ve varsayilan olarak golge kipindedir (config.strategy_mode).
 register(EmaPullback())
 register(DonchianBreakout())
+# Swing ailesi (kullanicinin eski masasindaki kurallar; gecmis testi yok): yalnizca golgede izlenir.
+register(SmcSweep())
+register(EmaPullbackH1("20_21"))
+register(EmaPullbackH1("21_50"))
 
 __all__ = ["Context", "Module", "Signal", "Vote", "get", "modules", "register"]

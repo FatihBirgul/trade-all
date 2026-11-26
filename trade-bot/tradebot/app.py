@@ -675,6 +675,7 @@ class Bot:
             try:
                 for frame in FRAMES:
                     await self.candles.get(symbol, frame, 256)
+                await self._daily_candles(symbol)
             except ExnessAuthError as exc:
                 if exc.code == schema.AUTH_INVALID_API_KEY:
                     # Mum servisi iki kez ust uste reddetti. Bu kod canlida piyasa verisi icin gecici olarak
@@ -1299,6 +1300,15 @@ class Bot:
         if self._restart_pause <= 0:
             return False
         return self.entries_from is None or self._clock() < self.entries_from
+
+    async def _daily_candles(self, symbol: str) -> None:
+        """Gunluk mumlar (swing stratejilerinin yonu ve gunluk ATR'si icin). Yeni bir gunluk mum kapanmadikca ag
+        istegi yapilmaz. Bu ikincil bir veridir: alinamazsa V9 taramasi etkilenmez, swing stratejileri o sembolde
+        sinyal uretmez."""
+        try:
+            await self.candles.get(symbol, "D1", 120)
+        except ExnessError as exc:
+            log.info("gunluk mumlar alinamadi %s: %s", symbol, type(exc).__name__)
 
     def _spread_r(self, candidate: Candidate) -> float | None:
         spread, risk = self._spread(candidate.symbol), abs(candidate.entry - candidate.stop_loss)
