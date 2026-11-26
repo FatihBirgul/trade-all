@@ -185,3 +185,154 @@ async def test_a_task_that_keeps_failing_is_reported_once(tmp_path):
         await app.bot._every(1.0, action, "yonetim")
     assert app.kinds().count("loop_failing") == 1 and "loop_failing" in app.notifier.kinds()
     assert app.bot._loop_failures == {}
+
+
+async def test_shadow_trade_survives_a_two_day_outage_with_the_right_result(tmp_path):
+    """Inceleme C-I1: 32 saatten uzun kesintide stopa degen mum son 128 mumun disinda kaliyor, islem 0R ya da
+    kazanc diye kaydediliyordu. Sonuc, acilistan bugune butun mumlardan hesaplanir."""
+    from tests.app_helpers import load_market, restart
+    from tests.execution.helpers import candidate
+
+    app = await started(tmp_path, dry_run=True)
+    await app.bot.on_bar_close()
+    entry = app.bot.quotes.quote("XAUUSD")["ask"]
+    shadow = candidate(symbol="XAUUSD", side="BUY", setup="iki-gun-golge-0001", entry=entry, sl=entry - 5.0,
+                       tp1=entry + 10.0, tp2=entry + 15.0)
+    assert app.bot.shadow.open(shadow, "shadow", 70.0, app.clock["now"])
+    app.advance(48 * 3600)
+    load_market(app.fake, "XAUUSD", app.clock["now"])
+    last = app.fake.candles[("XAUUSD", "M15")][-1]["time"]
+    rows = [{"time": t, "open": entry, "high": entry + 1.0, "low": entry - 1.0, "close": entry, "volume": 100.0}
+            for t in range(NOW - 300 * 900, int(last) + 900, 900)]
+    hit = next(i for i, r in enumerate(rows) if r["time"] >= NOW + 900)
+    rows[hit] = {**rows[hit], "low": entry - 6.0}  # acilistan sonraki ikinci mum stopa iner
+    for r in rows[hit + 100:]:
+        r["high"] = entry + 12.0  # cok sonra hedefin ustune cikar: yalnizca son mumlara bakilirsa "kazanc" gorunur
+    app.fake.set_candles("XAUUSD", "M15", rows)
+    again = restart(app)
+    await again.bot.start()
+    await feed_ticks(again, "XAUUSD", entry, entry + 0.2, again.clock["now"])
+    await again.bot.on_bar_close()
+    row = again.repo.conn.execute("SELECT result_r, closed_at FROM shadow_trades WHERE setup_id = 'iki-gun-golge-0001'").fetchone()
+    assert row is not None and row["result_r"] == pytest.approx(-1.0) and row["closed_at"] == rows[hit]["time"] + 900
+
+
+async def test_one_broken_trade_does_not_stop_stop_management_for_the_others(tmp_path, monkeypatch):
+    """Inceleme A-I4: bir islemde hata olursa dongu orada kesiliyor, sonraki islemlerin stopu ilerlemiyordu."""
+    import tradebot.app as app_module
+
+    app = await started(tmp_path)
+    trade = await open_one(app)
+    await app.fake.set_price("BTCUSD", 60_000.0, 60_010.0)
+    await app.fake.external_open("BTCUSD", "buy", 0.01, sl=50_000.0)  # ikinci (elle) pozisyon
+    await app.fake.flush()
+    await app.bot.reconcile_now()
+    assert len(app.repo.open_trades()) == 2
+    listed = [t.position_id for t in app.repo.open_trades()]
+    real_manage = app.bot._manage_one
+    seen = []
+
+    async def flaky(item, settings, now):
+        seen.append(item.position_id)
+        if item.position_id == listed[0]:
+            raise RuntimeError("bozuk kayit")  # listedeki ILK islem hata verir
+        return await real_manage(item, settings, now)
+
+    monkeypatch.setattr(app.bot, "_manage_one", flaky)
+    with pytest.raises(RuntimeError):  # hata gizlenmez: dongu sayaci gorur
+        await app.bot.manage_tick()
+    assert seen == listed  # ilk islemdeki hataya ragmen ikincisi de yonetildi
+    assert app_module.LOOP_ALERT_AFTER >= 2 and trade.position_id in listed
+
+
+async def test_failing_loops_are_visible_on_health_and_realerted_daily(tmp_path):
+    import httpx
+
+    from tradebot.api.server import create_app
+
+    app = await started(tmp_path)
+    for _ in range(4):
+        await app.bot._loop_failed("tarama", RuntimeError("x"))
+    assert app.bot.failing_loops() == {} and "loop_failing" not in app.kinds()
+    await app.bot._loop_failed("tarama", RuntimeError("x"))
+    await app.bot._loop_failed("tarama", RuntimeError("x"))
+    assert app.bot.failing_loops() == {"tarama": 6} and app.kinds().count("loop_failing") == 1
+    api = create_app(app.bot, clock=lambda: app.clock["now"])
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api), base_url="http://bot") as http:
+        assert (await http.get("/health")).json()["failing_loops"] == {"tarama": 6}
+    app.advance(86400 + 1)
+    await app.bot._loop_failed("tarama", RuntimeError("x"))
+    assert app.kinds().count("loop_failing") == 2  # hata suruyorsa ertesi gun yeniden haber verilir
+
+
+async def test_clock_alarm_is_not_repeated_and_needs_consecutive_beats(tmp_path):
+    app = await started(tmp_path)
+    quote = app.bot.quotes.quote("XAUUSD")
+
+    async def beat(lead):
+        await feed_ticks(app, "XAUUSD", quote["bid"], quote["ask"], app.clock["now"] + lead + 5, count=5)
+        await app.bot.heartbeat()
+
+    await beat(10)
+    await beat(-10)  # araya normal bir kalp atisi girdi: sayac sifirlanir
+    await beat(10)
+    assert "clock_skew" not in app.kinds()
+    await beat(10)
+    await beat(10)
+    await beat(10)
+    assert app.kinds().count("clock_skew") == 1  # surse de tek uyari
+
+
+async def test_a_new_failure_streak_alerts_again_after_recovery_and_the_scan_loop_resets(tmp_path):
+    """Inceleme: duzelen gorev bir saat sonra yeniden bozulursa uyari 24 saat beklemez; hemen gidip gelen gorev
+    ise bildirim yagdirmaz."""
+    app = await started(tmp_path)
+    for _ in range(5):
+        await app.bot._loop_failed("yonetim", RuntimeError("x"))
+    assert app.kinds().count("loop_failing") == 1
+    app.bot._loop_ok("yonetim")
+    assert app.bot.failing_loops() == {}
+    for _ in range(5):  # hemen yeniden bozuldu: ayni olayin devami sayilir
+        await app.bot._loop_failed("yonetim", RuntimeError("x"))
+    assert app.kinds().count("loop_failing") == 1
+    app.advance(3600 + 1)
+    app.bot._loop_ok("yonetim")
+    for _ in range(5):  # bir saat sonra yeni hata dizisi: yeniden haber verilir
+        await app.bot._loop_failed("yonetim", RuntimeError("x"))
+    assert app.kinds().count("loop_failing") == 2
+
+    # Tarama dongusu de ayni sayaci kullanir ve basarili taramada sifirlar.
+    calls = {"n": 0}
+
+    async def scan():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("tarama hatasi")
+        if calls["n"] == 3:
+            raise asyncio.CancelledError
+
+    async def no_sleep(_):
+        return None
+
+    app.bot.on_bar_close = scan
+    app.bot._sleep = no_sleep
+    with pytest.raises(asyncio.CancelledError):
+        await app.bot._bar_loop()
+    assert "tarama" not in app.bot._loop_failures  # ikinci (basarili) tarama sayaci sifirladi
+
+
+async def test_a_persistently_broken_trade_does_not_flood_the_log(tmp_path, monkeypatch, caplog):
+    import logging
+
+    app = await started(tmp_path)
+    await open_one(app)
+
+    async def broken(item, settings, now):
+        raise RuntimeError("bozuk kayit")
+
+    monkeypatch.setattr(app.bot, "_manage_one", broken)
+    caplog.set_level(logging.ERROR)
+    for _ in range(50):
+        with pytest.raises(RuntimeError):
+            await app.bot.manage_tick()
+    assert sum("stop yonetimi hatasi" in r.message for r in caplog.records) == 1

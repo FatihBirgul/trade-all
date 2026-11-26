@@ -38,6 +38,11 @@ elif [ -n "$backup_at" ]; then
 else
   echo "yedek: henuz alinmadi"
 fi
+# Art arda hata veren ic gorev varsa uyar (bos olmali).
+case "$body" in
+  *'"failing_loops":{}'*|*'"failing_loops":null'*) ;;
+  *'"failing_loops":'*) echo "gorevler: UYARI bazi ic gorevler art arda hata veriyor (journalctl -u tradebot)" >&2 ;;
+esac
 case "$body" in
   *'"stream_connected":true'*) echo "akislar: bagli" ;;
   *) echo "akislar: BAGLI DEGIL" >&2; exit 2 ;;
