@@ -159,7 +159,7 @@ async def test_bot_runs_forward_then_year_test_in_dry_run_and_publishes_only_num
     assert job["end"] % 86400 == 0 and job["year_start"] == job["end"] - 0.1 * 86400 and len(job["v9_ids"]) == 4
     year = app.bot.yeartest_report(full=True)["result"]
     assert year["version"] == yeartest.VERSION and year["complete"] is True and app.bot.backtest_state == "done"
-    assert set(year["strategies"]) == set(yeartest.TB_IDS) | set(job["v9_ids"])  # 14 strateji
+    assert set(year["strategies"]) == set(yeartest.TB_IDS) | set(job["v9_ids"]) | {yeartest.WEEK_VARIANT_ID}
     assert year["progress"]["v9_chunks_done"] == year["progress"]["v9_chunks_total"] == 2
     assert year["progress"]["v9_evaluations"] >= 8 and year["rules"]["swap"] == 0
     for row in year["strategies"].values():

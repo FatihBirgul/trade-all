@@ -215,3 +215,25 @@ def test_coverage_is_judged_by_the_weakest_symbols_and_unfinished_v9_parts_do_no
     assert partial["complete"] is False and partial["progress"]["v9_days_complete"] == 0.0
     assert v9["windows"]["1y"]["complete"] is False and v9["windows"]["1y"]["trades"] == 0 and v9["verdict"]["passed"] is None
     assert partial["strategies"]["tb_week_trade_v1"]["windows"]["1y"]["complete"] is True  # V9 disi stratejiler etkilenmez
+
+
+def test_week_trade_original_row_uses_its_six_symbols_and_its_own_portfolio_rule(tmp_path):
+    """Adil kiyas satiri: grup basina tek acik islem (kripto / usd / gbpaud), gunde en cok 2 giris; alti sembolun
+    disindakiler sayilmaz. Satir bilgi icindir: gecse de birlesik portfoye girmez."""
+    from tradebot import yeartest as yt
+    long = 5 * DAY
+    rows = [trade(0, 1.0, "EURUSD", hold=long), trade(10, 1.0, "XAUUSD", hold=long),  # ayni grup (usd): ikincisi yok
+            trade(20, 1.0, "BTCUSD", hold=long),  # kripto: olur (gunun 2. girisi)
+            trade(30, 1.0, "GBPAUD", hold=long),  # grup bos ama gunun 3. girisi: yok
+            trade(DAY + 5, -1.0, "GBPAUD", hold=long), trade(long + 50, 1.0, "USDCHF")]  # usd grubu bosaldi
+    accepted, rejected = yt.week_portfolio(rows)
+    assert [(t["y"], t["a"]) for t in accepted] == [("EURUSD", 0), ("BTCUSD", 20), ("GBPAUD", DAY + 5),
+                                                    ("USDCHF", long + 50)] and rejected == 2
+    waiting = yt.week_portfolio([trade(0, None, "ETHUSD"), trade(yt.UNRESOLVED_HOLD + 1, 1.0, "BTCUSD")])
+    assert len(waiting[0]) == 2  # sonuclanmamis islem grubu sonsuza kadar tutmaz
+    FakePool.skip = set()
+    result = year_job(tmp_path, {f"S{i}USD": (i, 60) for i in range(4)}, FakePool)
+    row = result["strategies"][yt.WEEK_VARIANT_ID]
+    assert row["source"] == "variant" and row["symbols"] == [] and len(row["symbols_missing"]) == 6
+    assert row["windows"]["1y"]["trades"] == 0 and row["verdict"]["passed"] is not True
+    assert yt.well_formed(result, result["to"]) and yt.WEEK_VARIANT_ID in yt.public(result)["strategies"]

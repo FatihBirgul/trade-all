@@ -137,6 +137,10 @@ class Instrument:
     swap_long: float | None = None
     swap_short: float | None = None
     swap_multipliers: dict | None = None
+    # `listed`: sozlesme bilgisi tam (evrene girebilir). `trade_mode`: broker'in o anki islem kipi; "enabled"
+    # degilse sembol GECICI olarak isleme kapalidir (tatil, bakim) ama evrenin uyesi olmayi surdurur.
+    listed: bool = True
+    trade_mode: str | None = None
 
 
 @dataclass(frozen=True)
@@ -463,6 +467,7 @@ def parse_instrument(raw: Any) -> Instrument:
         swap_long=_num(raw.get("swap_long")), swap_short=_num(raw.get("swap_short")),
         swap_multipliers=_swap_multipliers(raw.get("swap_multipliers")),
         tradable=bool(complete) and raw.get("trade_mode", "enabled") == "enabled",
+        listed=bool(complete), trade_mode=_text(raw.get("trade_mode")),
         commission_type=_text(commission.get("commission_type")), commission_value=_num(money.get("amount")),
         commission_currency=_text(money.get("currency")))
 

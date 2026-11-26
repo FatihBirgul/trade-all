@@ -50,7 +50,7 @@ async def feed_ticks(app_or_fake, symbol, bid, ask, now, count=120):
 
 
 def build(tmp_path, *, now=NOW, dry_run=False, fake=None, clock=None, news=None, restart_pause=0.0,
-          **fake_args) -> App:
+          policy=False, **fake_args) -> App:
     """`restart_pause`: testlerde varsayilan 0 (uretimde 30 dk: yeniden baslatmadan sonra yeni giris yok)."""
     clock = clock or {"now": float(now)}
     fake = fake or FakeExness(clock=lambda: clock["now"], **fake_args)
@@ -60,6 +60,10 @@ def build(tmp_path, *, now=NOW, dry_run=False, fake=None, clock=None, news=None,
         # bu adaylari eler; kapiyla ilgisi olmayan testler icin ayar en genis degerinde (%25) baslar. Kapinin
         # kendisi tests/test_cost_gate.py'de varsayilan degerle sinanir.
         repo.set_bot_settings(BotSettings(dry_run=dry_run, risk=RiskSettings(max_spread_stop_pct=TEST_MAX_COST)))
+    if not policy and repo.get_setting("strategy_policy") is None:
+        # Backtest sonrasi kip karari (V9 golgeye, M15 kapali) uretimde bir kez uygulanir; ortak testler V9'u
+        # canli kipte sinar. Kararin kendisi tests/test_strategy_policy.py'de sinanir (`policy=True`).
+        repo.set_setting("strategy_policy", 99)
     notifier = RecordingNotifier()
     factory = stream_factory(fake)
     calendar = news(repo, lambda: clock["now"]) if news is not None else None
