@@ -99,14 +99,15 @@ CREATE TABLE IF NOT EXISTS events (
     data_json TEXT
 );
 
--- Spread orneklerinin ozeti: yeniden baslatmada "spread ornegi yok" bekleme suresi olmasin diye saklanir.
--- Kural degismez; yalnizca son 30 dakikanin ornekleri geri yuklenir (tradebot/market/quotes.py).
-CREATE TABLE IF NOT EXISTS spread_samples (
+-- Son 30 dakikanin spread ornekleri (tick tick, ozetlenmeden): yeniden baslatmada "spread ornegi yok" bekleme
+-- suresi olmasin diye saklanir. Kural degismez; yalnizca pencere icindeki ornekler geri yuklenir
+-- (tradebot/market/quotes.py). Eski satirlar her kayitta silinir.
+CREATE TABLE IF NOT EXISTS spread_ticks (
     symbol TEXT NOT NULL,
     at REAL NOT NULL,
-    spread REAL NOT NULL,
-    weight REAL NOT NULL DEFAULT 1  -- bu kaydin ozetledigi tick sayisi
+    spread REAL NOT NULL
 );
+CREATE INDEX IF NOT EXISTS spread_ticks_at ON spread_ticks (at);
 
 -- Ozet ucu ve temizlik zamana gore okur.
 CREATE INDEX IF NOT EXISTS events_at ON events (at);

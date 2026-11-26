@@ -1093,10 +1093,12 @@ class Bot:
                 await self._tick_stream.subscribe(schema.subscribe_ticks(f"ticks-extra-{int(now)}", missing))
 
     async def save_spreads(self) -> None:
-        """Spread ornek ozetini saklar (yeniden baslatmada isinma beklenmesin). Kendi zamanlayicisinda calisir:
-        kayit yazilamazsa kalp atisinin diger isleri (sinir denetimi, baglanti uyarisi) etkilenmez."""
+        """Yeni spread orneklerini saklar (yeniden baslatmada isinma beklenmesin). Kendi zamanlayicisinda calisir:
+        kayit yazilamazsa kalp atisinin diger isleri (sinir denetimi, baglanti uyarisi) etkilenmez. Yazilamayan
+        ornekler kaybolur; bu yalnizca bir sonraki yeniden baslatmada daha uzun isinma demektir."""
+        fresh = self.quotes.drain_new()
         try:
-            self.repo.save_spreads(self.quotes.snapshot(), self.client.account_id)
+            self.repo.append_spreads(fresh, self._clock() - SPREAD_RESTORE_WINDOW, self.client.account_id)
         except sqlite3.Error as exc:
             log.warning("spread ornekleri saklanamadi: %s", type(exc).__name__)
 

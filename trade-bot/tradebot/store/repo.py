@@ -326,23 +326,25 @@ class Repo:
             "INSERT INTO settings (key, value_json) VALUES (?, ?) "
             "ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json", (key, json.dumps(value)))
 
-    def save_spreads(self, samples: dict[str, list[tuple[float, float, float]]], account_id: str = "") -> None:
-        """Spread ornek ozetini bastan yazar (tek islem: yarim kayit kalmaz, eski kayit birikmez)."""
-        rows = [(symbol, float(at), float(spread), float(weight))
-                for symbol, items in samples.items() for at, spread, weight in items]
+    def append_spreads(self, samples: dict[str, list[tuple[float, float]]], cutoff: float,
+                       account_id: str = "") -> None:
+        """Yeni spread orneklerini ekler, `cutoff`tan eskileri siler (tek islem)."""
+        rows = [(symbol, float(at), float(spread)) for symbol, items in samples.items() for at, spread in items]
         with transaction(self.conn):
-            self.conn.execute("DELETE FROM spread_samples")
-            self.conn.executemany("INSERT INTO spread_samples (symbol, at, spread, weight) VALUES (?, ?, ?, ?)", rows)
-            self.set_setting("spread_samples_account", account_id)
+            if self.get_setting("spread_ticks_account", "") != account_id:
+                self.conn.execute("DELETE FROM spread_ticks")  # baska hesabin spread profili kullanilmaz
+                self.set_setting("spread_ticks_account", account_id)
+            self.conn.executemany("INSERT INTO spread_ticks (symbol, at, spread) VALUES (?, ?, ?)", rows)
+            self.conn.execute("DELETE FROM spread_ticks WHERE at < ?", (float(cutoff),))
 
-    def load_spreads(self, since: float, account_id: str = "") -> dict[str, list[tuple[float, float, float]]]:
-        """`since`ten yeni ornekler. Baska bir hesap icin saklanmissa (farkli spread profili) hic yuklenmez."""
-        if self.get_setting("spread_samples_account", "") != account_id:
+    def load_spreads(self, since: float, account_id: str = "") -> dict[str, list[tuple[float, float]]]:
+        """`since`ten yeni ornekler. Baska bir hesap icin saklanmissa hic yuklenmez."""
+        if self.get_setting("spread_ticks_account", "") != account_id:
             return {}
-        out: dict[str, list[tuple[float, float, float]]] = {}
-        for symbol, at, spread, weight in self.conn.execute(
-                "SELECT symbol, at, spread, weight FROM spread_samples WHERE at >= ? ORDER BY at", (float(since),)):
-            out.setdefault(symbol, []).append((at, spread, weight))
+        out: dict[str, list[tuple[float, float]]] = {}
+        for symbol, at, spread in self.conn.execute(
+                "SELECT symbol, at, spread FROM spread_ticks WHERE at >= ? ORDER BY at", (float(since),)):
+            out.setdefault(symbol, []).append((at, spread))
         return out
 
     def get_bot_settings(self) -> BotSettings:

@@ -195,10 +195,11 @@ async def test_restart_does_not_wait_for_spread_samples_again(tmp_path):
     app = await started(tmp_path, dry_run=True)
     limit = app.bot.quotes.max_spread("XAUUSD")
     assert limit is not None
+    held = len(app.bot.quotes._spreads["XAUUSD"])
     await app.bot.save_spreads()  # dakikada bir calisan kayit
-    await app.bot.save_spreads()  # ikinci kayit oncekinin USTUNE yazar: ornekler cogalmaz
-    saved = app.repo.conn.execute("SELECT COUNT(*) FROM spread_samples WHERE symbol = 'XAUUSD'").fetchone()[0]
-    assert saved == len(app.bot.quotes.snapshot()["XAUUSD"])
+    await app.bot.save_spreads()  # ikinci kayit yalnizca YENI ornekleri ekler: ornekler cogalmaz
+    saved = app.repo.conn.execute("SELECT COUNT(*) FROM spread_ticks WHERE symbol = 'XAUUSD'").fetchone()[0]
+    assert saved == held
     app.advance(20)  # dagitim: servis 20 sn kapali
 
     again = restart(app)
@@ -206,6 +207,11 @@ async def test_restart_does_not_wait_for_spread_samples_again(tmp_path):
     assert again.bot.quotes.max_spread("XAUUSD") == pytest.approx(limit)
     assert again.bot.quotes.quote("XAUUSD") is None  # fiyat geri yuklenmez; taze tick beklenir
 
+    # Eski satirlar her kayitta silinir: tablo son 30 dakikayla sinirli kalir.
+    again.advance(1800 + 60)
+    await again.bot.save_spreads()
+    assert again.repo.conn.execute("SELECT COUNT(*) FROM spread_ticks").fetchone()[0] == 0
+    again.advance(-(1800 + 60))
     # Uzun kesintiden sonra eski ornekler kullanilmaz: isinma yeniden gerekir.
     again.advance(1800 + 60)
     later = restart(again)
@@ -225,7 +231,7 @@ async def test_spread_samples_survive_only_for_the_same_account_and_a_failed_sav
     def full(*args, **kwargs):
         raise sqlite3.OperationalError("database or disk is full")
 
-    monkeypatch.setattr(app.repo, "save_spreads", full)
+    monkeypatch.setattr(app.repo, "append_spreads", full)
     await app.bot.save_spreads()  # hata yutulur; kalp atisi ve tarama etkilenmez
     await app.bot.heartbeat()
     assert (await app.bot.on_bar_close()).would_open == 1

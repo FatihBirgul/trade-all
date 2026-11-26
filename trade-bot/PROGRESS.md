@@ -344,18 +344,27 @@ bilgisini içermiyor; kısmi dolumda `risk_amount` planlanan tutarda kalıyor (R
 - Sonuç: devirden etkilenen sembol devirden sonraki 4 saat analiz dışı kalır, sonra geri döner (önceden 64 saat).
 - Testler: `tests/signals/test_weekend_gap.py` (gerçek Exness saatleriyle uçtan uca ve sınır değerleriyle).
 
-### Yeniden başlatmada spread ısınması (2026-11-25)
+### Yeniden başlatmada spread ısınması (2026-11-26)
 
 Canlıda görüldü: her dağıtımdan sonra sessiz semboller bir süre `max_spread missing or invalid` ile eleniyordu,
 çünkü spread örnekleri süreç belleğindeydi ve sıfırdan birikiyordu (gece devrine denk gelen dağıtımda 6 sembol).
-Karar: örneklerin özeti dakikada bir SQLite'a yazılır (`spread_samples`) ve açılışta geri yüklenir. **Kural
-değişmedi:** `max_spread` yine yalnızca son 30 dakikanın örneklerine bakar ve en az 100 kayıt ister; pencereden eski
-ya da gelecekten görünen örnek yüklenmez; son fiyat geri yüklenmez (taze tick gelmeden değerlendirme yok). 30
-dakikadan uzun kesintide ısınma yine gerekir.
 
-Bağımsız inceleme sonrası (kritik yok): ilk sürüm sembol başına eşit aralıklı 200 örnek saklıyordu; yoğun sembolde
-geçmiş 200 örneğe inince, yeniden başlatmadan hemen sonra genişleyen spread sınırı hiç durmamış bottan çok daha hızlı
-yükseltebiliyordu (kural lafzen aynı, ama fiilen daha gevşek). Özet artık **kova başına ağırlıklı medyan + tick
-ağırlığı** taşır ve medyan ağırlıklı hesaplanır: yeniden başlatılmış bot hiç durmamış botla aynı sınırı verir
-(testle doğrulanır). Ayrıca: kayıt kendi zamanlayıcısında ve hatası yutulur (kalp atışının sınır denetimini
-atlatamaz); geri yükleme iki kez çağrılsa da örnek çoğaltamaz; başka bir hesap için saklanmış örnekler kullanılmaz.
+Karar: son 30 dakikanın spread örnekleri **özetlenmeden, tick tick** SQLite'a yazılır (`spread_ticks`; dakikada bir
+yalnızca yeni örnekler eklenir, pencereden eskiler silinir) ve açılışta geri yüklenir. **Kural değişmedi:**
+`max_spread` yine yalnızca son 30 dakikanın örneklerine bakar ve en az 100 örnek ister; pencereden eski ya da
+gelecekten görünen örnek yüklenmez; son fiyat geri yüklenmez (taze tick gelmeden değerlendirme yok). 30 dakikadan
+uzun kesintide ısınma yine gerekir.
+
+İki tasarım denendi ve bağımsız incelemelerde reddedildi (ders: bir kapıyı besleyen veriyi özetlemek kapıyı
+gevşetebilir):
+1. Sembol başına eşit aralıklı 200 örnek: yoğun sembolde geçmişin ağırlığı kayboluyor, yeniden başlatmadan sonra
+   genişleyen spread sınırı hiç durmamış bottan çok daha hızlı yükseltiyordu.
+2. Kova başına ağırlıklı medyan: "medyanların medyanı" yukarı kayabiliyor; rejim değiştiren spread'lerde
+   yeniden başlatılmış botun sınırı 4 kata kadar daha geniş çıktı (sentetik veriyle).
+Tick tick saklamada yeniden başlatılmış bot ile hiç durmamış bot her an **aynı** sınırı verir; rastgele rejimler,
+farklı tick hızları, art arda yeniden başlatmalar ve 8000 örnek sınırıyla testte doğrulanır. Kalan tek fark,
+kesinti sırasında ve son kayıttan (en çok 60 sn) sonra gelen örneklerin eksik olmasıdır; bu kaçınılmazdır ve
+kuralın "en az 100 gerçek örnek, en çok 30 dakikalık" şartını değiştirmez.
+Ayrıca: kayıt kendi zamanlayıcısında, hatası yutulur (kalp atışının sınır denetimini atlatamaz); geri yükleme iki
+kez çağrılsa da örnek çoğaltamaz; başka bir hesap için saklanmış örnekler kullanılmaz.
+Maliyet: tablo en çok ~240 bin satır (30 sembol × 8000); yedekler bu kadar büyür.
