@@ -231,6 +231,10 @@ Servisi yeniden başlatma:
 sudo systemctl restart tradebot
 ```
 
+Bot her başladığında (elle yeniden başlatma, güncelleme, sunucunun yeniden açılması) **ilk 30 dakika yeni işlem
+açmaz**. Bu sürede piyasayı izlemeye, açık pozisyonları yönetmeye (zarar durdurma, kademeli stop) ve elle işlem
+kabul etmeye devam eder. Neden: spread sınırı gibi kısa süreli ölçümler yeniden başlatmadan sonra eksiktir.
+
 Yeni eşleştirme kodu:
 
 ```bash

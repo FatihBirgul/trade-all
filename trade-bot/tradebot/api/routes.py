@@ -58,7 +58,9 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
                 # Son basarili gunluk yedegin zamani (hesap verisi degil); 36 saatten eskiyse yedek calismiyor.
                 "last_backup_at": repo.get_setting("last_backup_at"),
                 # Art arda hata veren ic gorevler (ad -> sayi). Bos olmali; doluysa gunluge bakilir.
-                "failing_loops": bot.failing_loops() if hasattr(bot, "failing_loops") else {}}
+                "failing_loops": bot.failing_loops() if hasattr(bot, "failing_loops") else {},
+                # Yeniden baslatmadan sonraki bekleme suruyor mu (bu surede yeni islem acilmaz).
+                "entries_paused": bot.entry_paused() if hasattr(bot, "entry_paused") else False}
 
     @public.get("/health/summary")
     async def health_summary(hours: float = Query(default=24.0, ge=0.25, le=168.0)):

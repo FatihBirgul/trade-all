@@ -46,7 +46,9 @@ async def feed_ticks(app_or_fake, symbol, bid, ask, now, count=120):
         await fake.set_price(symbol, bid, ask, at=now - count + i)
 
 
-def build(tmp_path, *, now=NOW, dry_run=False, fake=None, clock=None, news=None, **fake_args) -> App:
+def build(tmp_path, *, now=NOW, dry_run=False, fake=None, clock=None, news=None, restart_pause=0.0,
+          **fake_args) -> App:
+    """`restart_pause`: testlerde varsayilan 0 (uretimde 30 dk: yeniden baslatmadan sonra yeni giris yok)."""
     clock = clock or {"now": float(now)}
     fake = fake or FakeExness(clock=lambda: clock["now"], **fake_args)
     repo = Repo(tmp_path / "bot.db", clock=lambda: clock["now"])
@@ -55,7 +57,8 @@ def build(tmp_path, *, now=NOW, dry_run=False, fake=None, clock=None, news=None,
     notifier = RecordingNotifier()
     factory = stream_factory(fake)
     calendar = news(repo, lambda: clock["now"]) if news is not None else None
-    bot = Bot(settings(), fake, repo, notifier, clock=lambda: clock["now"], stream_factory=factory, news=calendar)
+    bot = Bot(settings(), fake, repo, notifier, clock=lambda: clock["now"], stream_factory=factory, news=calendar,
+              restart_pause=restart_pause)
     return App(bot, fake, repo, notifier, factory.created, clock, tmp_path)
 
 
@@ -70,9 +73,9 @@ async def started(tmp_path, *, symbol="XAUUSD", direction="BUY", now=NOW, **kwar
     return app
 
 
-def restart(app: App) -> App:
+def restart(app: App, **kwargs) -> App:
     """Servis yeniden baslamis gibi: ayni broker ve ayni veritabani dosyasi, yeni surec durumu."""
     app.fake.event_listeners.clear()
     app.fake.tick_listeners.clear()
     app.repo.close()
-    return build(app.path, fake=app.fake, clock=app.clock)
+    return build(app.path, fake=app.fake, clock=app.clock, **kwargs)
