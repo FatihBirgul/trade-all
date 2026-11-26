@@ -1,6 +1,7 @@
 """Ileri test: gecmis mumlarin yeniden oynatilmasi ve botun bu isi nasil calistirdigi."""
 import asyncio
 import json
+from pathlib import Path
 
 import pytest
 
@@ -533,3 +534,25 @@ async def test_first_result_is_published_before_the_long_v9_phase_and_includes_t
     assert "error" not in replica and set(replica["missing"]) | set(replica["coverage"]) == set(forward.week_replica.SYMBOLS)
     assert replica["soft"]["match"]["reference"] == 182 and replica["strict"]["match"]["reference"] == 184
     assert (tmp_path / "backtest" / "swing.json").exists()  # A asamasi V9 turlarinda yeniden hesaplanmaz
+
+
+def test_corrected_week_measurement_takes_the_trail_atr_from_before_the_entry():
+    """Kaynak, iz suren stopun ATR'sini giris mumunu da katarak aliyordu; duzeltilmis olcum almaz."""
+    from tradebot import week_replica as W
+    from tradebot.signals.modules.strategies import week_trade
+    from tradebot.signals.modules.strategies.v13 import Frame
+    golden = json.loads((Path(__file__).parent / "week_golden.json").read_text())
+    bars = week_bars(golden)
+    found = W.all_signals(bars)
+    fixed = W.run(bars, soft=True, mode="fixed", spread=lambda symbol, moment: 0.0, found=found)
+    seen = 0
+    for at, symbol, sign, stretch, risk, atr_closed in found:
+        h4 = bars[symbol]["H4"]
+        index = next(i for i, b in enumerate(h4) if b["time"] == at - 14400)  # sinyal mumu = giristen onceki mum
+        assert atr_closed == week_trade.simple_atr(Frame(h4[max(0, index - W.WINDOW_H4 + 1):index + 1]))[-1]
+        with_entry_bar = week_trade.simple_atr(Frame(h4[:index + 2]))[-1]
+        seen += int(abs(with_entry_bar - atr_closed) > 1e-12)
+    assert seen > len(found) * 0.9 and len(fixed) > 40  # iki ATR neredeyse her zaman farklidir
+    # Ayni girdiyle iki kip yalnizca ATR kaynagi ve dolum kuraliyla ayrisir: en az bir islemin sonucu degisir.
+    plain = W.run(bars, soft=True, mode="bt", found=found)
+    assert [t["at"] for t in plain][:5] == [t["at"] for t in fixed][:5]

@@ -22,6 +22,7 @@ Hicbir esik sonuca gore degistirilmez. Sonuc yalnizca sayilar ve R'dir.
 from __future__ import annotations
 
 import bisect
+import hashlib
 import json
 import multiprocessing
 import os
@@ -456,6 +457,8 @@ def run_job(job_path: Path, pool_factory=None) -> dict:
     kinds = {row["symbol"]: row["kind"] for row in job["instruments"]}
     began = time.time()
     signature = f"{VERSION}:{job['v9_start']}:{job['end']}"
+    # A asamasinin imzasi girdileri de kapsar: semboller ya da spread profili degisirse yeniden hesaplanir.
+    inputs = hashlib.sha1(json.dumps([symbols, job["spreads"], job["start"]], sort_keys=True).encode()).hexdigest()[:12]
     # A asamasi (swing + WEEK TRADE yeniden uretimi) ayni pencere icin bir kez hesaplanir; V9 turlari yeniden kullanir.
     cached = folder / "swing.json"
     first = None
@@ -464,7 +467,7 @@ def run_job(job_path: Path, pool_factory=None) -> dict:
             first = json.loads(cached.read_text())
         except ValueError:
             first = None
-        if not isinstance(first, dict) or first.get("signature") != signature:
+        if not isinstance(first, dict) or first.get("signature") != f"{signature}:{inputs}":
             first = None
     if first is None:
         swing: list[dict] = []
@@ -481,9 +484,10 @@ def run_job(job_path: Path, pool_factory=None) -> dict:
             replica = week_replica.report(long_bars, spreads.at, job["end"])
         except Exception as exc:  # noqa: BLE001 - yeniden uretim hatasi ana olcumu dusurmez
             replica = {"error": type(exc).__name__}
-        first = {"signature": signature, "swing": summarize_swing(swing, job["split"]), "week_replica": replica,
-                 "swing_seconds": round(time.time() - began, 1)}
-        cached.write_text(json.dumps(first))
+        first = {"signature": f"{signature}:{inputs}", "swing": summarize_swing(swing, job["split"]),
+                 "week_replica": replica, "swing_seconds": round(time.time() - began, 1)}
+        if "error" not in replica:  # hatali sonuc saklanmaz: sonraki turda yeniden denenir
+            cached.write_text(json.dumps(first))
     summary = {"version": VERSION, "from": job["start"], "to": job["end"], "split": job["split"],
                "v9_from": job["v9_start"], "spread_profile": spreads.coverage(),
                "swing": first["swing"], "week_replica": first["week_replica"],

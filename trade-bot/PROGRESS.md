@@ -624,3 +624,13 @@ yazılmıştı; onlar karşılaştırma için duruyor, yanlarına gerçek kodun 
 görülüp görülmediği ve `sl_missing` olay sayısı (tutar/fiyat yok).
 
 **Uygulama:** Raporlar'da "Stratejiye göre" ve "Sembole göre" veri yokken açıklama metni gösterir (sonraki APK'da).
+
+**Bağımsız inceleme (PR #26):** kritik bulgu yok; lot tavanını atlayan açma yolu yok, kapatma/değiştirme
+engellenmiyor, yeni stratejiler emir gönderemiyor, herkese açık bloklarda hesap verisi yok. Düzeltilenler:
+`/health/outcomes` çapraz denetimi son 48 saat ve en çok 120 işlemle sınırlandı (olay döngüsünü yavaşlatmasın);
+ileri testin A aşaması önbelleği girdileri (semboller, spread profili) de kapsıyor ve hatalı sonucu saklamıyor;
+lot tavanı aynı kurulumun yinelenen çağrısında tekrar çalışmıyor; kimlik reddi kaydı bekleme kilidini
+geciktiremiyor; üç test boşluğu kapatıldı. Bilinen sınırlar: canlı gölge kaydı WEEK stratejilerini de sabit 2R
+planıyla izler (iz süren stoplu ileri test / yeniden üretim sonuçlarıyla KARŞILAŞTIRILMAZ); yeniden üretim 300
+mumluk, canlı 120 mumluk pencere kullanır (sentetik veride 245 sinyalin 4'ü farklı); düzeltilmiş ölçümdeki
+"gerçek spread" bugünkü saatlik profilin 2 yıla uygulanmasıdır.

@@ -497,3 +497,17 @@ async def test_public_summary_says_whether_closed_positions_had_a_broker_side_st
         {"origin": "manual", "symbol": "XAUUSD", "side": "SELL", "held_s": 240, "stop_seen": True, "sltp_order": True,
          "target_seen": True}]  # kapanis sirasiyla
     assert "0.18" not in str(positions) and "2005" not in str(positions)  # tutar ve fiyat yok
+
+
+async def test_lot_ceiling_fails_closed_when_it_cannot_be_checked(tmp_path):
+    """Giris, stop ya da lot bilinmiyorsa tavan denetlenemez: emir GONDERILMEZ (sessizce gecmez)."""
+    app = await started(tmp_path)
+    entry = app.bot.quotes.quote("XAUUSD")["ask"]
+    guard = app.bot.lot_guard
+    for lots, price, stop in ((0.1, entry, None), (0.0, entry, entry - 5.0), (float("nan"), entry, entry - 5.0)):
+        with pytest.raises(ValueError, match="denetlenemedi"):
+            guard("XAUUSD", "BUY", lots, price, stop)
+    guard("XAUUSD", "BUY", 0.1, None, entry - 5.0)  # fiyat verilmediyse anlik fiyat kullanilir
+    app.bot.quotes._last.clear()
+    with pytest.raises(ValueError, match="denetlenemedi"):
+        guard("XAUUSD", "BUY", 0.1, None, entry - 5.0)  # fiyat da yoksa emir yok

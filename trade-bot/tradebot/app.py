@@ -86,6 +86,8 @@ DATA_REJECTS_MAX = 40
 HEAL_PER_SCAN = 4  # tarama basina en cok bu kadar bosluk onarim istegi
 HEAL_RETRY = 6 * 3600.0  # borsanin da vermedigi bosluk icin yeniden deneme araligi
 # Ileri test (yalnizca deneme modunda, ayri dusuk oncelikli surecte): bkz. backtest.py
+SHADOW_CHECK_HOURS = 48.0  # /health/outcomes capraz denetimi: en cok bu kadar eski golge islemler
+SHADOW_CHECK_MAX = 120  # ...ve cagri basina en cok bu kadar islem
 HARD_MAX_RISK_PCT = 5.0  # tek emirde stopta olusacak zararin varliga orani icin MUTLAK tavan (ayar degil)
 HARD_MAX_NOTIONAL_X = 50.0  # tek pozisyonun buyuklugu / varlik icin MUTLAK tavan (ayar degil)
 BACKTEST_DELAY = 180.0  # acilistan sonra bekleme (sn)
@@ -622,12 +624,15 @@ class Bot:
         """
         now = self._clock()
         self._auth_streak += 1
-        self.repo.add_event("warning", "auth_reject", "Exness bir isteği kimlik hatasıyla reddetti",
-                            {"code": exc.code, "status": exc.status, "source": getattr(exc, "source", None) or "okuma",
-                             "streak": self._auth_streak})
         self._auth_error_at = now
         self._auth_blocked_until = now + self._auth_backoff
         self._auth_backoff = min(self._auth_backoff * 2, AUTH_BACKOFF_MAX)
+        try:  # tanilama kaydi; yazilamasa da bekleme kilidi yukarida kuruldu
+            self.repo.add_event("warning", "auth_reject", "Exness bir isteği kimlik hatasıyla reddetti",
+                                {"code": exc.code, "status": exc.status,
+                                 "source": getattr(exc, "source", None) or "okuma", "streak": self._auth_streak})
+        except sqlite3.Error:
+            log.warning("kimlik reddi kaydedilemedi")
         if self._auth_alerted and now - self._auth_alerted_at < AUTH_ALERT_TTL:
             log.error("kimlik dogrulamasi hala reddediliyor: %s", exc)
             return
@@ -1492,10 +1497,10 @@ class Bot:
             except (KeyError, TypeError, ValueError):
                 pass
             signals.append(item)
-        shadows, check = [], {"agree": 0, "differ": 0, "unknown": 0, "sl_first_bar": 0, "mfe_ge_1r": 0}
+        shadows, check, checked = [], {"agree": 0, "differ": 0, "unknown": 0, "sl_first_bar": 0, "mfe_ge_1r": 0}, 0
         for r in self.repo.conn.execute(
                 "SELECT symbol, side, strategy_id, reason, score, opened_at, closed_at, result_r, "
-                "entry, sl, tp, spread FROM shadow_trades WHERE opened_at >= ? ORDER BY opened_at", (since,)):
+                "entry, sl, tp, spread FROM shadow_trades WHERE opened_at >= ? ORDER BY opened_at DESC", (since,)):
             item = {"symbol": r[0], "side": r[1], "strategy_id": r[2], "reason": r[3],
                     "score": round(r[4], 1) if r[4] is not None else None, "opened_at": r[5], "closed_at": r[6],
                     "result_r": round(r[7], 3) if r[7] is not None else None,
@@ -1505,6 +1510,11 @@ class Bot:
             # Capraz denetim: ayni islem, golge izleyiciden BAGIMSIZ ikinci hesapla ve onbellekteki gercek mumlarla
             # yeniden sonuclandirilir. Iki sonuc ayni olmali; MFE/MAE islemin nasil gittigini gosterir.
             try:
+                # Herkese acik uc olay dongusunde calisir: yalnizca son `SHADOW_CHECK_HOURS` saatte acilan en cok
+                # `SHADOW_CHECK_MAX` islem yeniden hesaplanir (islem basi ~1 ms).
+                if now - r[5] > SHADOW_CHECK_HOURS * 3600.0 or checked >= SHADOW_CHECK_MAX:
+                    raise ValueError("capraz denetim kapsami disinda")
+                checked += 1
                 count = min(1500, int((now - r[5]) // 900) + 40)
                 bars = self.candles.cached(str(r[0]), "M15", count)
                 if not bars or bars[0]["time"] > r[5] + 900:
@@ -1521,6 +1531,7 @@ class Bot:
             except (TypeError, ValueError):
                 check["unknown"] += int(r[7] is not None)
             shadows.append(item)
+        shadows.reverse()  # eskiden yeniye (denetim en yenilerden baslar)
         return {"hours": round((now - since) / 3600.0, 2), "rules": rules, "signals": signals, "shadows": shadows,
                 "shadow_check": check,
                 "hourly": [[hour, *row.values()] for hour, row in sorted(hourly.items())]}

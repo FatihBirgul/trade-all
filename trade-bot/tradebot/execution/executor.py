@@ -93,13 +93,13 @@ class Executor:
         """
         key = f"bot-{candidate.setup_id}"
         instrument = self.catalog.get(candidate.symbol)
-        if self._lot_guard is not None:
-            self._lot_guard(candidate.symbol, candidate.side, candidate.lots, candidate.entry, candidate.stop_loss)
         path, body = schema.open_position_request(
             self.client.account_id, instrument, candidate.side, candidate.lots,
             sl=candidate.stop_loss, tp=candidate.take_profit_2, price=candidate.entry)
         if self.already_submitted(candidate):
             return key
+        if self._lot_guard is not None:  # kayit ve gonderimden ONCE: tavani asan emir hic kaydedilmez
+            self._lot_guard(candidate.symbol, candidate.side, candidate.lots, candidate.entry, candidate.stop_loss)
         payload = {"path": path, "body": body, "symbol": candidate.symbol, "side": candidate.side,
                    "entry": candidate.entry, "sl": candidate.stop_loss, "tp1": candidate.take_profit_1,
                    "tp2": candidate.take_profit_2, "strategy_id": candidate.strategy_id,

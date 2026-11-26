@@ -249,3 +249,19 @@ def test_a_swing_becomes_a_sweepable_level_only_after_it_is_confirmed():
     assert 10 in highs
     assert (104.0, "swing H") not in v13.levels(frame, [], highs, lows, 13)[0]
     assert (104.0, "swing H") in v13.levels(frame, [], highs, lows, 14)[0]
+
+
+def test_trailing_stop_never_moves_back():
+    """Yapi stopu yalnizca ileri tasinir: daha asagida yeni bir donus noktasi stopu geri cekmez."""
+    at = 14400 * 100
+    levels = iter([(at + 900, 102.5), (at + 1800, 101.0)])  # ikinci donus noktasi daha asagida
+    current = {}
+
+    def state(moment):
+        current["low"] = next(levels, current.get("low"))
+        return {"atr": 0.5, "low": current["low"], "high": None}
+
+    bars = ([bar(at + i * 900, 103.0, 103.1, 102.9, 103.0) for i in range(1, 33)]
+            + [bar(at + 33 * 900, 103.0, 103.0, 99.9, 100.2)])
+    result = outcome.simulate_trail("BUY", 100.0, 99.0, at + 5, bars, state, structure=True)
+    assert result["first"] == "TRAIL" and result["r"] == pytest.approx(102.5 - 0.15 - 100.0)  # ilk (yuksek) seviye
