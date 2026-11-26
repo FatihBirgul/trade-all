@@ -239,3 +239,13 @@ async def test_spread_samples_survive_only_for_the_same_account_and_a_failed_sav
     again = restart(app)
     await again.bot.start()
     assert again.bot.quotes.max_spread("XAUUSD") is not None
+
+
+async def test_another_accounts_spread_samples_are_wiped_on_the_first_save(tmp_path):
+    """Hesap degisince eski hesabin ornekleri yeni hesabin etiketi altinda karismaz: ilk kayitta silinir."""
+    app = await started(tmp_path, dry_run=True)
+    now = app.clock["now"]
+    app.repo.append_spreads({"XAUUSD": [(now - 5, 9.0), (now - 4, 9.0)]}, now - 1800, "A")
+    app.repo.append_spreads({"XAUUSD": [(now - 3, 0.2)]}, now - 1800, "B")
+    assert app.repo.load_spreads(now - 1800, "A") == {}
+    assert app.repo.load_spreads(now - 1800, "B") == {"XAUUSD": [(now - 3, 0.2)]}

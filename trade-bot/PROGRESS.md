@@ -349,7 +349,7 @@ bilgisini içermiyor; kısmi dolumda `risk_amount` planlanan tutarda kalıyor (R
 Canlıda görüldü: her dağıtımdan sonra sessiz semboller bir süre `max_spread missing or invalid` ile eleniyordu,
 çünkü spread örnekleri süreç belleğindeydi ve sıfırdan birikiyordu (gece devrine denk gelen dağıtımda 6 sembol).
 
-Karar: son 30 dakikanın spread örnekleri **özetlenmeden, tick tick** SQLite'a yazılır (`spread_ticks`; dakikada bir
+Karar: son 30 dakikanın spread örnekleri **özetlenmeden, tick tick** SQLite'a yazılır (`spread_ticks`; 10 saniyede bir
 yalnızca yeni örnekler eklenir, pencereden eskiler silinir) ve açılışta geri yüklenir. **Kural değişmedi:**
 `max_spread` yine yalnızca son 30 dakikanın örneklerine bakar ve en az 100 örnek ister; pencereden eski ya da
 gelecekten görünen örnek yüklenmez; son fiyat geri yüklenmez (taze tick gelmeden değerlendirme yok). 30 dakikadan
@@ -362,9 +362,21 @@ gevşetebilir):
 2. Kova başına ağırlıklı medyan: "medyanların medyanı" yukarı kayabiliyor; rejim değiştiren spread'lerde
    yeniden başlatılmış botun sınırı 4 kata kadar daha geniş çıktı (sentetik veriyle).
 Tick tick saklamada yeniden başlatılmış bot ile hiç durmamış bot her an **aynı** sınırı verir; rastgele rejimler,
-farklı tick hızları, art arda yeniden başlatmalar ve 8000 örnek sınırıyla testte doğrulanır. Kalan tek fark,
-kesinti sırasında ve son kayıttan (en çok 60 sn) sonra gelen örneklerin eksik olmasıdır; bu kaçınılmazdır ve
-kuralın "en az 100 gerçek örnek, en çok 30 dakikalık" şartını değiştirmez.
+farklı tick hızları, art arda yeniden başlatmalar ve 8000 örnek sınırıyla testte doğrulanır.
+
+**Kalan sınır (dördüncü inceleme, simülasyonla doğrulandı; kullanıcıya açıkça bildirilecek):** "aynı sınır"
+yalnızca bütün örnekler saklanmışsa geçerlidir. Kesinti süresince ve son kayıttan sonra gelen örnekler eksiktir ve
+bu delik 30 dakika pencerede kalır. Örnek **sayısı** hiçbir zaman hiç durmamış bottan fazla olmaz (sıralı
+zaman damgalarıyla); ama eksik dilimdeki spread'ler geri kalandan darsa medyan, dolayısıyla sınır, hiç durmamış
+bottan **yüksek** çıkabilir. Olağan durumda etkisi yok sayılır (eksik pay ~%1-4 → en çok ~52. yüzdelik). Spread iki
+rejim arasında gidip gelirken ve medyan tam sınırdayken fark rejim oranı kadar olabilir (4 kat ayrık iki rejimli
+simülasyonda yeniden başlatma sonrası saniyelerin ~%3'ünde 2 kata, 5 dakikalık kesintide 2,7 kata kadar; benzer
+oranda saniyede ise daha sıkı). main'deki eski davranış da hiç durmamış botla aynı değildi (ısınma bitince yalnızca
+yeni örneklerden hesaplıyordu). Azaltmak için kayıt aralığı 60 sn'den **10 sn**'ye indirildi (ölçülen kayıt süresi
+1-12 ms); kesintinin kendisindeki eksik giderilemez. `systemctl stop` sırasında son kayıt yapılmıyor (uvicorn
+SIGTERM'i yeniden yükseltiyor); istenirse FastAPI kapanış kancasına eklenebilir.
+Küçük, iki yönlü sapmalar (olağan dışı koşul ister): sembol içinde saniyelerce sırasız tick, kesintiden uzun
+broker saat ilerisi, bot saatinin geri adım atması.
 Ayrıca: kayıt kendi zamanlayıcısında, hatası yutulur (kalp atışının sınır denetimini atlatamaz); geri yükleme iki
 kez çağrılsa da örnek çoğaltamaz; başka bir hesap için saklanmış örnekler kullanılmaz.
 Maliyet: tablo en çok ~240 bin satır (30 sembol × 8000); yedekler bu kadar büyür.

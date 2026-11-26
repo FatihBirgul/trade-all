@@ -126,3 +126,13 @@ def test_restore_ignores_stale_future_and_invalid_samples():
     twin = QuoteBook(clock=lambda: 10_000.0)
     assert twin.restore({"EURUSD": [(9_999.0, 0.0002)] * 120}) == 120
     assert twin.max_spread("EURUSD") == pytest.approx(0.0006)
+
+
+def test_restore_sorts_samples_by_time():
+    """Sirasiz verilen ornekler zamana gore dizilir; yoksa pencere disina cikan eski ornek kuyrukta kalirdi."""
+    clock = {"now": 10_000.0}
+    book = QuoteBook(clock=lambda: clock["now"])
+    saved = [(9_990.0 - i, 5.0) for i in range(60)] + [(8_300.0 + i, 1.0) for i in range(60)]
+    assert book.restore({"XAUUSD": saved}) == 120
+    clock["now"] = 10_200.0  # 8300..8359 artik pencere disinda: kalan 60 ornek sinirin altinda
+    assert book.max_spread("XAUUSD") is None
