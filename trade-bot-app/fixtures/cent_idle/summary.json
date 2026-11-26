@@ -12,6 +12,9 @@
  "news_blocked": 0,
  "portfolio_blocked": 0,
  "errors": 0,
+ "cost_blocked": 0,
+ "cost_by_strategy": {},
+ "max_spread_stop_pct": 15.0,
  "decisions": {
   "PROVIDER_UNAVAILABLE": 12,
   "NO_TRADE": 4
@@ -28,5 +31,10 @@
   "EURUSD": "provider unavailable: quote",
   "GBPUSD": "provider unavailable: quote"
  },
+ "positions": {
+  "sl_missing_events": 0,
+  "closed": []
+ },
+ "auth": [],
  "signals": 0
 }

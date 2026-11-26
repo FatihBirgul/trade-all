@@ -3,6 +3,7 @@ import type { BotSettings } from "./types";
 
 export type Draft = {
   risk_pct: string;
+  max_spread_stop_pct: string;
   max_open_bot: string;
   daily_loss_pct: string;
   total_loss_pct: string;
@@ -18,7 +19,7 @@ export type Draft = {
   symbols: string[] | null; // null = hepsi açık
 };
 
-type NumberKey = "risk_pct" | "max_open_bot" | "daily_loss_pct" | "total_loss_pct" | "news_window" | "min_score" | "mid_score" | "high_score";
+type NumberKey = "risk_pct" | "max_spread_stop_pct" | "max_open_bot" | "daily_loss_pct" | "total_loss_pct" | "news_window" | "min_score" | "mid_score" | "high_score";
 export type ToggleKey = "news_enabled" | "fusion_enabled" | "be_enabled" | "partial_enabled" | "trail_enabled";
 
 type Field = {
@@ -34,9 +35,16 @@ type Field = {
   riskier: "up" | "down";
 };
 
+export const COST_GATE_DEFAULT = 15;
+
 export const NUMBER_FIELDS: Field[] = [
   { key: "risk_pct", label: "İşlem başı risk", min: 0.25, max: 1, unit: "%", riskier: "up",
     read: (s) => s.risk.risk_pct, write: (s, v) => { s.risk.risk_pct = v; } },
+  // Maliyet kapısı: giriş anındaki alış-satış farkı stop mesafesinin bu yüzdesinden büyükse işlem açılmaz.
+  // Sınır yükselirse daha pahalı işlemlere izin verilir: risk artar. Eski sunucuda alan yoktur (varsayılan 15).
+  { key: "max_spread_stop_pct", label: "En çok maliyet (alış-satış farkı ÷ stop)", min: 5, max: 25, unit: "%", riskier: "up",
+    read: (s) => (typeof s.risk.max_spread_stop_pct === "number" ? s.risk.max_spread_stop_pct : COST_GATE_DEFAULT),
+    write: (s, v) => { s.risk.max_spread_stop_pct = v; } },
   { key: "max_open_bot", label: "Aynı anda açık bot işlemi", min: 1, max: 5, integer: true, unit: "", riskier: "up",
     read: (s) => s.risk.max_open_bot, write: (s, v) => { s.risk.max_open_bot = v; } },
   { key: "daily_loss_pct", label: "Günlük kayıp sınırı", min: 2, max: 10, unit: "%", riskier: "up",
@@ -83,6 +91,7 @@ const text = (value: number) => String(value).replace(".", ",");
 export function draftFrom(settings: BotSettings): Draft {
   return {
     risk_pct: text(settings.risk.risk_pct),
+    max_spread_stop_pct: text(typeof settings.risk.max_spread_stop_pct === "number" ? settings.risk.max_spread_stop_pct : COST_GATE_DEFAULT),
     max_open_bot: text(settings.risk.max_open_bot),
     daily_loss_pct: text(settings.risk.daily_loss_pct),
     total_loss_pct: text(settings.risk.total_loss_pct),
@@ -205,6 +214,14 @@ export function strategyName(id: string): string {
     fx_failed_breakout_v6: "Sahte kırılım",
     tb_ema_pullback_v1: "EMA geri çekilme (yeni)",
     tb_donchian_breakout_v1: "Kanal kırılımı (yeni)",
+    tb_smc_sweep_v1: "SMC süpürme (yorum)",
+    tb_emapb_h1_20_21_v1: "H1 EMA 20/21 geri çekilme (yorum)",
+    tb_emapb_h1_21_50_v1: "H1 EMA 21/50 geri çekilme (yorum)",
+    tb_smc_day_v13: "SMC gün içi (v13)",
+    tb_smc_week_v13: "SMC haftalık (v13)",
+    tb_emapb_day_v13: "EMA geri çekilme gün içi (v13)",
+    tb_emapb_week_v13: "EMA geri çekilme haftalık (v13)",
+    tb_week_trade_v1: "Week trade",
   };
   return names[id] ?? id;
 }

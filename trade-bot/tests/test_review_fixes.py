@@ -102,7 +102,7 @@ async def test_c1_imported_position_with_locked_in_stop_is_left_alone(tmp_path):
 # ---------------------------------------------------------------- C2
 async def test_c2_orders_in_flight_count_against_max_open(tmp_path):
     app = await multi(tmp_path, ["XAUUSD", "XAGUSD"])
-    app.repo.set_bot_settings(BotSettings(dry_run=False, risk=RiskSettings(max_open_bot=1)))
+    app.repo.set_bot_settings(BotSettings(dry_run=False, risk=RiskSettings(max_open_bot=1, max_spread_stop_pct=25)))
     summary = await app.bot.on_bar_close()
     assert summary.candidates == 2 and summary.opened == 1 and summary.blocked == 1
     assert len(posts(app)) == 1

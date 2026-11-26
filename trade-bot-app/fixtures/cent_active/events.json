@@ -49,6 +49,8 @@
     "quoted": 1,
     "candle_retries": 0,
     "would_open": 0,
+    "cost_blocked": 0,
+    "cost_reasons": {},
     "reasons": {
      "PROVIDER_UNAVAILABLE": 3
     },
@@ -161,6 +163,8 @@
     "quoted": 1,
     "candle_retries": 0,
     "would_open": 0,
+    "cost_blocked": 0,
+    "cost_reasons": {},
     "reasons": {
      "PROVIDER_UNAVAILABLE": 3
     },

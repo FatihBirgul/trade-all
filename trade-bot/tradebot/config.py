@@ -64,6 +64,9 @@ class RiskSettings(BaseModel):
     per_currency_side: Literal[2] = 2
     daily_loss_pct: float = Field(default=5, ge=2, le=10)
     total_loss_pct: float = Field(default=25, ge=10, le=30)
+    # Maliyet kapisi (kullanici karari 2026-11-26): giris anindaki spread, stop mesafesinin bu yuzdesinden buyukse
+    # islem acilmaz (canli ve golge). Kucuk deger daha SIKIdir.
+    max_spread_stop_pct: float = Field(default=15, ge=5, le=25)
 
 
 class ManageSettings(BaseModel):

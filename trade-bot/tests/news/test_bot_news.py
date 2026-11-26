@@ -4,7 +4,7 @@ import httpx
 from tests.app_helpers import NOW, build, feed_ticks, load_market
 from tradebot.api.auth import issue_token
 from tradebot.api.server import create_app
-from tradebot.config import BotSettings, NewsSettings
+from tradebot.config import BotSettings, NewsSettings, RiskSettings
 from tradebot.news.calendar import STALE_SECONDS, NewsCalendar
 from tradebot.store.repo import Trade
 
@@ -62,13 +62,13 @@ async def test_window_setting_and_disable_are_respected(tmp_path):
     assert (await app.bot.on_bar_close()).opened == 1  # 50 dk sonra: 30 dk'lik pencerenin disinda
 
     wide, _ = await app_with_news(tmp_path / "wide", rows)
-    wide.repo.set_bot_settings(BotSettings(dry_run=False, news=NewsSettings(window_minutes=60)))
+    wide.repo.set_bot_settings(BotSettings(dry_run=False, risk=RiskSettings(max_spread_stop_pct=25), news=NewsSettings(window_minutes=60)))
     assert (await wide.bot.on_bar_close()).news_blocked >= 1
 
 
 async def test_disabled_news_filter_blocks_nothing(tmp_path):
     app, _ = await app_with_news(tmp_path, USD_NOW)
-    app.repo.set_bot_settings(BotSettings(dry_run=False, news=NewsSettings(enabled=False)))
+    app.repo.set_bot_settings(BotSettings(dry_run=False, risk=RiskSettings(max_spread_stop_pct=25), news=NewsSettings(enabled=False)))
     summary = await app.bot.on_bar_close()
     assert summary.news_blocked == 0 and summary.opened == 1
 

@@ -73,6 +73,11 @@ async def live_active(folder, **account):
 
 async def capture(app, target: Path):
     target.mkdir(parents=True, exist_ok=True)
+    # Senaryolar test kurulumunun genis maliyet sinirinda (%25) uretilir (sahte piyasada adaylar acilabilsin);
+    # uygulamanin gorecegi ayar ise uretimdeki varsayilan degerdir.
+    current = app.repo.get_bot_settings()
+    app.repo.set_bot_settings(current.model_copy(update={
+        "risk": current.risk.model_copy(update={"max_spread_stop_pct": 15.0})}))
     token = issue_token(app.repo, now=app.clock["now"])
     api = create_app(app.bot, clock=lambda: app.clock["now"])
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api), base_url="http://bot") as http:

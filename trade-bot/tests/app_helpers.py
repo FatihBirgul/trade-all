@@ -7,7 +7,7 @@ from tests.fakes.exness import FakeExness
 from tests.fakes.streams import stream_factory
 from tests.signals.helpers import v9_fixtures
 from tradebot.app import Bot
-from tradebot.config import BotSettings
+from tradebot.config import BotSettings, RiskSettings
 from tradebot.store.repo import Repo
 
 NOW = 1_800_000_000  # 2027-01-15 Cuma 08:00 UTC
@@ -29,6 +29,9 @@ class App:
 
     def kinds(self):
         return [e["kind"] for e in self.repo.events()]
+
+
+TEST_MAX_COST = 25.0
 
 
 def load_market(fake, symbol, now, direction="BUY"):
@@ -53,7 +56,10 @@ def build(tmp_path, *, now=NOW, dry_run=False, fake=None, clock=None, news=None,
     fake = fake or FakeExness(clock=lambda: clock["now"], **fake_args)
     repo = Repo(tmp_path / "bot.db", clock=lambda: clock["now"])
     if repo.get_setting("bot_settings") is None:
-        repo.set_bot_settings(BotSettings(dry_run=dry_run))
+        # Ortak sahte piyasada (V9 fixture) spread stop mesafesinin ~%17'sidir. Maliyet kapisinin varsayilani (%15)
+        # bu adaylari eler; kapiyla ilgisi olmayan testler icin ayar en genis degerinde (%25) baslar. Kapinin
+        # kendisi tests/test_cost_gate.py'de varsayilan degerle sinanir.
+        repo.set_bot_settings(BotSettings(dry_run=dry_run, risk=RiskSettings(max_spread_stop_pct=TEST_MAX_COST)))
     notifier = RecordingNotifier()
     factory = stream_factory(fake)
     calendar = news(repo, lambda: clock["now"]) if news is not None else None

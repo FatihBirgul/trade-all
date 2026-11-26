@@ -227,6 +227,310 @@
     }
    },
    "shadow_since_pause": null
+  },
+  "tb_emapb_day_v13": {
+   "mode": "shadow",
+   "paused": null,
+   "live": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   },
+   "shadow": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null
+   },
+   "shadow_by_reason": {
+    "shadow": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "low_score": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "paused": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    }
+   },
+   "shadow_since_pause": null
+  },
+  "tb_emapb_h1_20_21_v1": {
+   "mode": "shadow",
+   "paused": null,
+   "live": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   },
+   "shadow": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null
+   },
+   "shadow_by_reason": {
+    "shadow": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "low_score": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "paused": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    }
+   },
+   "shadow_since_pause": null
+  },
+  "tb_emapb_h1_21_50_v1": {
+   "mode": "shadow",
+   "paused": null,
+   "live": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   },
+   "shadow": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null
+   },
+   "shadow_by_reason": {
+    "shadow": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "low_score": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "paused": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    }
+   },
+   "shadow_since_pause": null
+  },
+  "tb_emapb_week_v13": {
+   "mode": "shadow",
+   "paused": null,
+   "live": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   },
+   "shadow": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null
+   },
+   "shadow_by_reason": {
+    "shadow": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "low_score": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "paused": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    }
+   },
+   "shadow_since_pause": null
+  },
+  "tb_smc_day_v13": {
+   "mode": "shadow",
+   "paused": null,
+   "live": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   },
+   "shadow": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null
+   },
+   "shadow_by_reason": {
+    "shadow": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "low_score": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "paused": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    }
+   },
+   "shadow_since_pause": null
+  },
+  "tb_smc_sweep_v1": {
+   "mode": "shadow",
+   "paused": null,
+   "live": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   },
+   "shadow": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null
+   },
+   "shadow_by_reason": {
+    "shadow": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "low_score": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "paused": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    }
+   },
+   "shadow_since_pause": null
+  },
+  "tb_smc_week_v13": {
+   "mode": "shadow",
+   "paused": null,
+   "live": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   },
+   "shadow": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null
+   },
+   "shadow_by_reason": {
+    "shadow": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "low_score": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "paused": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    }
+   },
+   "shadow_since_pause": null
+  },
+  "tb_week_trade_v1": {
+   "mode": "shadow",
+   "paused": null,
+   "live": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null,
+    "profit_factor": null
+   },
+   "shadow": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null
+   },
+   "shadow_by_reason": {
+    "shadow": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "low_score": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    },
+    "paused": {
+     "trades": 0,
+     "wins": 0,
+     "win_rate": null,
+     "avg_r": null
+    }
+   },
+   "shadow_since_pause": null
   }
  },
  "modules": {
