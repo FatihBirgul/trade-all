@@ -1465,8 +1465,9 @@ class Bot:
             for instrument in self.catalog.members():
                 symbol = instrument.symbol
                 if symbol not in profile:
-                    age = self.quotes.age(symbol)  # eski (kapanis oncesi, genislemis) fiyat spread olcusu olamaz
-                    fresh = age is not None and age <= UNIVERSE_QUOTE_MAX_AGE
+                    # Isleme KAPALI uyenin eski (kapanis oncesi, genislemis) fiyati spread olcusu olamaz.
+                    age = self.quotes.age(symbol)
+                    fresh = instrument.tradable or (age is not None and age <= UNIVERSE_QUOTE_MAX_AGE)
                     limit, quote = self.quotes.max_spread(symbol), (self.quotes.quote(symbol) if fresh else None)
                     if limit is None and quote is None:
                         continue
