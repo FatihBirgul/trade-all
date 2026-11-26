@@ -365,3 +365,9 @@ Açık öneri (kullanıcı kararı): veritabanındaki son kayıt çok eskiyse (g
 "durdurulmuş" başlaması. Güvenli yönde bir davranış değişikliği; onaysız yapılmadı.
 Bilinen, bırakılanlar: `pages=-1` düzeltmesini kıran bir test yok (zamanlamaya bağlı); sunucu saatinin İLERİDE
 olması algılanmıyor; hata yollarındaki gizli bilgi kalıpları `test_log_secrets`'te sınanmıyor.
+
+Üçüncü (odaklı) inceleme sonrası eklenenler (kritik yok; stop yönetimindeki yeniden düzenlemenin hatasız durumda
+öncekiyle birebir aynı davrandığı satır satır doğrulandı): düzelen bir görev bir saat sonra yeniden bozulursa uyarı
+24 saat beklemez; sürekli bozuk bir işlem günlüğe her 2 saniyede iz yazmaz (ilk görülüşte bir kez); gölge işlemde
+mum listesinin ortasında 5 günden uzun veri boşluğu varsa da sonuç tahmin edilmez; kılavuzda geri yüklemeden sonra
+başlatma anı için uyarı.

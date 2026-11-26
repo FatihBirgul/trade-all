@@ -60,6 +60,7 @@ BASE_LIVE = "capital_base_live"  # ayar anahtari: sermaye tabani canli moda geci
 LOOP_ALERT_AFTER = 5  # bir gorev art arda bu kadar hata verirse kullaniciya haber verilir
 LOOP_LOG_EVERY = 100
 LOOP_REALERT = 86400.0  # hata surdukce uyari gunde bir yinelenir
+LOOP_STREAK_GAP = 3600.0  # duzelen gorev yeniden bozulursa en erken bu kadar sonra yeniden uyarilir
 CLOCK_SKEW_LIMIT = 5.0  # V9 fiyat saati "simdi"den bu kadar ilerideyse veriyi reddeder
 MAINTENANCE_INTERVAL = 1800.0  # gunluk yedek ve temizlik denetimi (is gunde bir kez yapilir)
 RECONCILE_INTERVAL = 300.0  # olay kacirilmis olabilir: broker durumu duzenli olarak yeniden okunur
@@ -144,6 +145,7 @@ class Bot:
         self._skew_beats = 0
         self._loop_failures: dict[str, int] = {}
         self._loop_alerted: dict[str, float] = {}
+        self._manage_errors: set[tuple[str, str]] = set()
         self._heal_tried: dict[tuple[str, str, int], float] = {}
         self._last_equity_sample = 0.0
         self._balance_synced_at = 0.0
@@ -946,8 +948,14 @@ class Bot:
                 raise
             except Exception as exc:  # noqa: BLE001 - bir islemdeki hata digerlerinin stop yonetimini durdurmamali
                 failed = exc
-                log.exception("stop yonetimi hatasi: pozisyon %s", listed.position_id)
-        if failed is not None:
+                # Ilk gorulusunde (ve hata turu degisince) tam iz; sonrasi dongu sayacinda (her 2 sn'de bir iz yazilmaz).
+                seen = (listed.position_id, type(exc).__name__)
+                if seen not in self._manage_errors:
+                    self._manage_errors.add(seen)
+                    log.exception("stop yonetimi hatasi: pozisyon %s", listed.position_id)
+        if failed is None:
+            self._manage_errors.clear()
+        else:
             raise failed  # dongu sayaci ve "gorev hata veriyor" uyarisi icin (diger islemler yonetildikten SONRA)
 
     async def _manage_one(self, listed: Trade, settings: BotSettings, now: float) -> None:
@@ -1260,7 +1268,16 @@ class Bot:
             except Exception as exc:  # tek bir turun hatasi donguyu durdurmamali
                 await self._loop_failed(name, exc)
             else:
-                self._loop_failures.pop(name, None)
+                self._loop_ok(name)
+
+    def _loop_ok(self, name: str) -> None:
+        """Gorev basarili calisti: hata sayaci sifirlanir. Onceki uyari LOOP_STREAK_GAP'ten eskiyse unutulur,
+        boylece yeni bir hata dizisi 24 saati beklemeden yeniden haber verir (surekli gidip gelen gorev ise
+        her seferinde bildirim yagdirmaz)."""
+        self._loop_failures.pop(name, None)
+        alerted = self._loop_alerted.get(name)
+        if alerted is not None and self._clock() - alerted >= LOOP_STREAK_GAP:
+            del self._loop_alerted[name]
 
     async def _loop_failed(self, name: str, exc: Exception) -> None:
         """Bir zamanlayici gorevinin art arda hatalarini sayar; surerse kullaniciya haber verir (gunde bir yineler)."""
@@ -1296,7 +1313,7 @@ class Bot:
             except Exception as exc:  # noqa: BLE001
                 await self._loop_failed("tarama", exc)
             else:
-                self._loop_failures.pop("tarama", None)
+                self._loop_ok("tarama")
 
     async def run(self) -> None:
         await self._start_with_backoff()

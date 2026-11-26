@@ -16,6 +16,7 @@ from .adapter import Candidate
 log = logging.getLogger(__name__)
 
 MAX_BARS = 96
+MAX_CLOSED_GAP = 5 * 86400  # ardisik iki mum arasinda bundan uzun bosluk veri eksigidir
 BAR_SECONDS = 900
 REASONS = ("shadow", "low_score", "paused")
 
@@ -72,7 +73,10 @@ class ShadowBook:
             # Islem, mum kapanisindan birkac saniye sonra (yeni mumun icinde) acilir; o mum da sayilir.
             # Yalnizca acilistan once kapanmis mumlar disarida kalir.
             after = [b for b in bars if b["time"] + BAR_SECONDS > opened_at]
-            if bars and bars[0]["time"] > opened_at + BAR_SECONDS:
+            # Onbellek cok uzun bir kesintiden sonra bastan doldurulduysa eski ve yeni mumlar arasinda bosluk kalir;
+            # olagan kapali donemler (hafta sonu, tatil) MAX_CLOSED_GAP'i asmaz.
+            hole = any(b["time"] - a["time"] > MAX_CLOSED_GAP for a, b in zip(after, after[1:]))
+            if hole or (bars and bars[0]["time"] > opened_at + BAR_SECONDS):
                 # Verilen mumlar acilistan SONRA basliyor: aradaki mumlar gorulmeden karar verilemez (stopa degip
                 # degmedigi bilinmez). Yanlis bir sonuc karneyi bozar; islem sonucsuz olarak silinir.
                 self._db.execute("DELETE FROM shadow_trades WHERE id = ?", (trade_id,))

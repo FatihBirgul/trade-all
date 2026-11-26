@@ -179,7 +179,9 @@ eski veritabanının yanındaki `-wal` dosyası yerinde kalırsa, kopyalanan yed
 yazılır ve geri yükleme sessizce işe yaramaz. `tradebot.db.eski` eski veritabanınızdır; her şeyin yolunda olduğundan
 emin olunca silebilirsiniz (ikinci bir geri yüklemede üstüne yazılır).
 
-**Başlattıktan hemen sonra uygulamada Panel'i açıp Durdur'a basın**, sonra aşağıdakileri kontrol edin. Geri yükleme
+Son komutu (başlatma) saatin 00, 15, 30 ve 45. dakikalarına bir-iki dakika kala **vermeyin**: bot her çeyrek saatte
+tarama yapar ve siz Durdur'a basamadan işlem açabilir. **Başlattıktan hemen sonra uygulamada Panel'i açıp Durdur'a
+basın**, sonra aşağıdakileri kontrol edin. Geri yükleme
 botun hafızasını o güne döndürür, hesabınızı değil:
 
 - **Kip:** bot, yedeğin alındığı andaki kipe döner. Yedek canlı moddayken alındıysa bot canlı başlar.

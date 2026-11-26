@@ -214,3 +214,18 @@ def test_shadow_is_dropped_rather_than_guessed_when_its_first_bars_are_missing(t
     full = [bar(0, 1.0990, 1.1010), bar(1, 1.0960, 1.1000)] + [bar(n, 1.1000, 1.1070) for n in range(2, 330)]
     closed = shadow.resolve("EURUSD", full, NOW + 330 * M15)
     assert len(closed) == 1 and closed[0]["result_r"] == pytest.approx(-1.0)
+
+
+def test_shadow_is_dropped_when_there_is_a_data_hole_after_the_open(tmp_path):
+    """Onbellek cok uzun kesintiden sonra bastan dolarsa eski ve yeni mumlar arasinda bosluk kalir; hafta sonu
+    gibi olagan kapali donemler ise veri boslugu sayilmaz."""
+    shadow = book(tmp_path)
+    shadow.open(candidate(), "shadow", None, NOW)
+    weekend = [bar(0, 1.0990, 1.1010), bar(1, 1.0990, 1.1010)] + [bar(n, 1.1000, 1.1070) for n in range(200, 205)]
+    closed = shadow.resolve("EURUSD", weekend, NOW + 205 * M15)  # ~50 saatlik kapali donem: normal
+    assert len(closed) == 1 and closed[0]["result_r"] == pytest.approx(2.0)
+
+    shadow.open(candidate(setup="setup000000000000000003"), "shadow", None, NOW)
+    holed = [bar(0, 1.0990, 1.1010)] + [bar(n, 1.1000, 1.1070) for n in range(700, 705)]  # 7 gunluk bosluk
+    assert shadow.resolve("EURUSD", holed, NOW + 705 * M15) == []
+    assert shadow.open_symbols() == set() and shadow.stats("fx_trend_momentum_v6", "shadow")["trades"] == 1

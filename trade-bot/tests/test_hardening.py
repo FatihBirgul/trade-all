@@ -281,3 +281,58 @@ async def test_clock_alarm_is_not_repeated_and_needs_consecutive_beats(tmp_path)
     await beat(10)
     await beat(10)
     assert app.kinds().count("clock_skew") == 1  # surse de tek uyari
+
+
+async def test_a_new_failure_streak_alerts_again_after_recovery_and_the_scan_loop_resets(tmp_path):
+    """Inceleme: duzelen gorev bir saat sonra yeniden bozulursa uyari 24 saat beklemez; hemen gidip gelen gorev
+    ise bildirim yagdirmaz."""
+    app = await started(tmp_path)
+    for _ in range(5):
+        await app.bot._loop_failed("yonetim", RuntimeError("x"))
+    assert app.kinds().count("loop_failing") == 1
+    app.bot._loop_ok("yonetim")
+    assert app.bot.failing_loops() == {}
+    for _ in range(5):  # hemen yeniden bozuldu: ayni olayin devami sayilir
+        await app.bot._loop_failed("yonetim", RuntimeError("x"))
+    assert app.kinds().count("loop_failing") == 1
+    app.advance(3600 + 1)
+    app.bot._loop_ok("yonetim")
+    for _ in range(5):  # bir saat sonra yeni hata dizisi: yeniden haber verilir
+        await app.bot._loop_failed("yonetim", RuntimeError("x"))
+    assert app.kinds().count("loop_failing") == 2
+
+    # Tarama dongusu de ayni sayaci kullanir ve basarili taramada sifirlar.
+    calls = {"n": 0}
+
+    async def scan():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("tarama hatasi")
+        if calls["n"] == 3:
+            raise asyncio.CancelledError
+
+    async def no_sleep(_):
+        return None
+
+    app.bot.on_bar_close = scan
+    app.bot._sleep = no_sleep
+    with pytest.raises(asyncio.CancelledError):
+        await app.bot._bar_loop()
+    assert "tarama" not in app.bot._loop_failures  # ikinci (basarili) tarama sayaci sifirladi
+
+
+async def test_a_persistently_broken_trade_does_not_flood_the_log(tmp_path, monkeypatch, caplog):
+    import logging
+
+    app = await started(tmp_path)
+    await open_one(app)
+
+    async def broken(item, settings, now):
+        raise RuntimeError("bozuk kayit")
+
+    monkeypatch.setattr(app.bot, "_manage_one", broken)
+    caplog.set_level(logging.ERROR)
+    for _ in range(50):
+        with pytest.raises(RuntimeError):
+            await app.bot.manage_tick()
+    assert sum("stop yonetimi hatasi" in r.message for r in caplog.records) == 1
