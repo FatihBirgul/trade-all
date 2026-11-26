@@ -348,7 +348,14 @@ bilgisini içermiyor; kısmi dolumda `risk_amount` planlanan tutarda kalıyor (R
 
 Canlıda görüldü: her dağıtımdan sonra sessiz semboller bir süre `max_spread missing or invalid` ile eleniyordu,
 çünkü spread örnekleri süreç belleğindeydi ve sıfırdan birikiyordu (gece devrine denk gelen dağıtımda 6 sembol).
-Karar: örneklerin özeti dakikada bir SQLite'a yazılır (`spread_samples`; sembol başına en çok 200, pencereye eşit
-aralıkla yayılmış) ve açılışta geri yüklenir. **Kural değişmedi:** `max_spread` yine yalnızca son 30 dakikanın
-örneklerine bakar ve en az 100 örnek ister; pencereden eski ya da gelecekten görünen örnek yüklenmez; son fiyat
-geri yüklenmez (taze tick gelmeden değerlendirme yok). 30 dakikadan uzun kesintide ısınma yine gerekir.
+Karar: örneklerin özeti dakikada bir SQLite'a yazılır (`spread_samples`) ve açılışta geri yüklenir. **Kural
+değişmedi:** `max_spread` yine yalnızca son 30 dakikanın örneklerine bakar ve en az 100 kayıt ister; pencereden eski
+ya da gelecekten görünen örnek yüklenmez; son fiyat geri yüklenmez (taze tick gelmeden değerlendirme yok). 30
+dakikadan uzun kesintide ısınma yine gerekir.
+
+Bağımsız inceleme sonrası (kritik yok): ilk sürüm sembol başına eşit aralıklı 200 örnek saklıyordu; yoğun sembolde
+geçmiş 200 örneğe inince, yeniden başlatmadan hemen sonra genişleyen spread sınırı hiç durmamış bottan çok daha hızlı
+yükseltebiliyordu (kural lafzen aynı, ama fiilen daha gevşek). Özet artık **kova başına ağırlıklı medyan + tick
+ağırlığı** taşır ve medyan ağırlıklı hesaplanır: yeniden başlatılmış bot hiç durmamış botla aynı sınırı verir
+(testle doğrulanır). Ayrıca: kayıt kendi zamanlayıcısında ve hatası yutulur (kalp atışının sınır denetimini
+atlatamaz); geri yükleme iki kez çağrılsa da örnek çoğaltamaz; başka bir hesap için saklanmış örnekler kullanılmaz.

@@ -104,9 +104,9 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE TABLE IF NOT EXISTS spread_samples (
     symbol TEXT NOT NULL,
     at REAL NOT NULL,
-    spread REAL NOT NULL
+    spread REAL NOT NULL,
+    weight REAL NOT NULL DEFAULT 1  -- bu kaydin ozetledigi tick sayisi
 );
-CREATE INDEX IF NOT EXISTS spread_samples_symbol ON spread_samples (symbol);
 
 -- Ozet ucu ve temizlik zamana gore okur.
 CREATE INDEX IF NOT EXISTS events_at ON events (at);
