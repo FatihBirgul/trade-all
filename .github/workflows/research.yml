@@ -1,0 +1,72 @@
+name: Arastirma (Faz 5 walk-forward)
+# Faz 5 strateji arastirmasi. Sunucuda HICBIR hesap yapilmaz; sunucudan hicbir sey cekilmez:
+#   data : 5 yillik piyasa verisi. Exness'in son ~12 ayi, son yillik backtest calismasinin "market-data"
+#          artifact'indan (yalnizca piyasa verisi); oncesi Dukascopy (FX, metal, endeks) ve Binance (BTC, ETH).
+# Artifact'lar herkese aciktir: yalnizca piyasa verisi ve benzetim sonucu, kisa saklama. Hesap verisi YOK.
+on:
+  workflow_dispatch:
+    inputs:
+      market_run:
+        description: 'Exness piyasa verisinin alinacagi backtest calismasi (run id)'
+        required: false
+        default: '45890500451'
+      years:
+        description: 'Kac yillik veri'
+        required: false
+        default: '5'
+  push:
+    branches: ['claude/faz5-**']
+    paths:
+      - '.github/workflows/research.yml'
+      - 'trade-bot/tradebot/research/data.py'
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: research-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  PYTHONUTF8: '1'
+jobs:
+  data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: trade-bot
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --quiet -e trade-bot
+      - name: Exness piyasa verisi (onceki calismanin artifact'i)
+        uses: actions/download-artifact@v4
+        with:
+          name: market-data
+          path: market
+          run-id: ${{ inputs.market_run || '45890500451' }}
+          github-token: ${{ github.token }}
+      - name: Dukascopy / Binance + Exness birlestirme
+        working-directory: trade-bot
+        run: |
+          set -euo pipefail
+          gunzip -k ../market/history.db.gz
+          python -m tradebot.research.data --job ../market/job.json --exness ../market/history.db \
+            --out ../research.db --years "${{ inputs.years || '5' }}"
+          python - <<'PY'
+          import json, sqlite3
+          db = sqlite3.connect("../research.db")
+          meta = json.loads(db.execute("SELECT value FROM meta").fetchone()[0])
+          print("sembol:", len(meta["symbols"]))
+          for tf, n in db.execute("SELECT tf, COUNT(*) FROM bars GROUP BY tf"):
+              print(tf, n)
+          print("ozet:", json.dumps({s: {k: v.get(k) for k in ("days", "source", "exness_h1", "other_h1", "compare", "error")}
+                                     for s, v in meta["symbols"].items()}))
+          PY
+          gzip -1 ../research.db
+      - uses: actions/upload-artifact@v4
+        with:
+          name: research-data
+          path: research.db.gz
+          retention-days: 3
