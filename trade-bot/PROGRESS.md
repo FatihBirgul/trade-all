@@ -999,3 +999,31 @@ yönü başına 2; %0,5 ve %1 risk ile 2000 USC eğrisi; aylık/üç aylık sonu
 
 **Canlıya alma:** bot yalnızca onaylı eşleşmeleri kullanır; canlıya geçiş yine kullanıcının uygulamadan açık
 onayıyla. Risk ayarları değişmez.
+
+## Faz 5 altyapısı (2026-11-26 gece) — `trade-bot/tradebot/research/`, iş akışı `.github/workflows/research.yml`
+
+- **Veri** (`data.py`): Dukascopy saatlik BID+ASK aylık dosyaları (`{ad}/{yıl}/{ay-1}/BID_candles_hour_1.bi5`,
+  LZMA, 24 baytlık kayıt), Binance aylık kline zip'leri, Exness'in son ~12 ayı (son yıllık backtestin piyasa verisi
+  artifact'ı). 6 yıl indirilir (5 yıl + 1 yıl gösterge ısınması). Fiyat ölçeği Exness'le örtüşen dönemden (endekslerde
+  kaba aralıktan) 10'un kuvveti olarak bulunur. Exness'in ilk mumundan itibaren Exness, öncesi diğer kaynak.
+  H4/D1 H1'den UTC sınırlarında. Yoklama (22:36 UTC): Dukascopy ve Binance GitHub Actions'tan erişilebilir;
+  Dukascopy isteği ~15 sn, endeks dosyasında bir kez 503 (yeniden denenir).
+- **Exness son yıl verisinde XAUUSD/XAGUSD yok** (o artifact metaller listeden düşmüşken alındı): metallerin tamamı
+  Dukascopy'den; kasa dönemleri de Dukascopy verisiyle ölçülür. Endeksler için Exness spread ölçümü yok: maliyet
+  Dukascopy'nin kendi ask-bid medyanı (raporda `costs: dukascopy`).
+- **Motor** (`engine.py`): tek pozisyon; giriş mum kapanışında; stop/hedef mum içinde (aynı mumda stop önce);
+  açılış stopun ötesindeyse (boşluk) çıkış AÇILIŞTAN (önceki benzetimlerin −1R iyimserliği burada yok); SAT ask'tan
+  kapanır; maliyet kapısı %15. F3 D1 stratejilerinde uygulanmaz (giriş gece yarısı; o varyant hiç denenmez, çoklu
+  deneme sayısına da girmez). F4: kaynağın kendi saatlik ask-bid ölçümüne göre (son 60 gün aynı saat medyanının
+  1,5 katı); ölçüm olmayan dönemde (Exness yılı) filtre geçer.
+- **Stratejiler** (`strategies.py`, kural testleri `tests/research/test_strategies.py`): listenin 30 stratejisi +
+  WEEK TRADE (`bt.py`, H4) + EMA pullback H1 20/21 ve 21/50. Kaynaktan bilinçli farklar her stratejinin `note`
+  alanında; özet: gün içi stop emriyle giren kurallar (Larry Williams, NR7, NR4, ORB, Turtle Soup) seviyenin
+  KAPANIŞLA aşılmasında girer; ORB'nin "ilk saat"i 09:00–10:00 NY H1 mumu; gece getirisi çıkışı 09:00–10:00 NY
+  mumunun kapanışı; Turtle'da piramitleme ve "önceki işlem kazandıysa atla" yok; endeks stratejileri (IBS, 3 gün,
+  ORB, takvim) yalnızca US30/US500/USTEC'te; para birimi momentumu yalnızca FX'te.
+- **Dışarıda kalanlar:** V9 (5 yılda ~450 işlemci saati; yalnızca 1 yıllık sonucu var), SMC süpürme (M15 tetik mumu
+  gerekir; 5 yıllık M15 yok), V13 SMC/EMA DAY/WEEK (M15 yalnızca zamanlama için ama çıkış planları M15'e göre
+  yazılı; H1 uyarlaması sonraki adım), Silver Bullet ve diğer M15 stratejileri (karar: M15 yok).
+- **Kasa koruması:** araştırma koşusunda veri kasa başlangıcında kesilir; test: kasa dönemi tamamen değiştirilse de
+  araştırma sonucu birebir aynı (`tests/research/test_run.py`).
