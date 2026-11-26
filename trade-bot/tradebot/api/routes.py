@@ -71,6 +71,11 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
         """Deneme modundaki sinyallerin sonradan ne olacagi (R cinsinden). Herkese acik: lot, tutar, bakiye yok."""
         return bot.dryrun_outcomes(hours)
 
+    @public.get("/health/backtest")
+    async def health_backtest():
+        """Son ileri testin ozeti (V9 stratejileri, gecmis gercek mumlar). Herkese acik: yalnizca sayilar ve R."""
+        return bot.backtest_report()
+
     @public.post("/pair")
     async def pair(body: PairRequest):
         token = auth.redeem_pair_code(repo, body.code, now=clock())

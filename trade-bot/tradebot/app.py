@@ -10,10 +10,13 @@ import asyncio
 import dataclasses
 from importlib import metadata
 import logging
+import json
 import re
 import sqlite3
+import sys
 import time
 from collections.abc import Callable
+from pathlib import Path
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
@@ -21,6 +24,7 @@ from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 from .config import BotSettings, Settings, strategy_mode
 from .execution.executor import Executor
 from .execution.reconcile import fetch_all_deals, reconcile
+from . import backtest
 from .store import backup
 from .store.repo import Trade
 from .exness import schema
@@ -79,6 +83,13 @@ DATA_DECISIONS = frozenset({"INSUFFICIENT_DATA", "STALE_DATA", "PROVIDER_UNAVAIL
 DATA_REJECTS_MAX = 40
 HEAL_PER_SCAN = 4  # tarama basina en cok bu kadar bosluk onarim istegi
 HEAL_RETRY = 6 * 3600.0  # borsanin da vermedigi bosluk icin yeniden deneme araligi
+# Ileri test (yalnizca deneme modunda, ayri dusuk oncelikli surecte): bkz. backtest.py
+BACKTEST_DELAY = 180.0  # acilistan sonra bekleme (sn)
+BACKTEST_DAYS = 30
+BACKTEST_BUDGET = 7200.0  # oynatma icin en uzun sure (sn)
+BACKTEST_MAX_AGE = 20 * 3600.0  # bundan yeni bir sonuc varsa yeniden calismaz
+BACKTEST_FETCH_PAUSE = 0.3  # gecmis mum istekleri arasinda bekleme (sn)
+BACKTEST_MAJORS = ("EURUSD", "GBPUSD", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD")
 PUBLIC_NUMBER = re.compile(r"\d+[.,]\d+|\d{3,}")  # ondalikli ya da 3+ haneli sayilar
 SUMMARY_SAMPLES = 5
 RATE_PAUSE_LIMIT = 2  # bir taramada 429 sonrasi en cok bu kadar kisa bekleme; sonra tarama birakilir
@@ -124,6 +135,7 @@ class Bot:
         self._sleep = sleep
         self.news = news  # NewsCalendar | None (None: haber filtresi yok)
         self._stream_factory = stream_factory or _default_stream_factory
+        self.backtest_state = "idle"
         self.catalog = InstrumentCatalog(client)
         self.quotes = QuoteBook(clock=clock)
         self.candles = CandleStore(repo.conn, client, self.catalog, clock=clock, sleep=sleep)
@@ -1171,6 +1183,101 @@ class Bot:
         out["samples"] = out["samples"][-SUMMARY_SAMPLES:]
         return out
 
+    async def _backtest_history(self, instruments: list[Instrument], start: float, now: float) -> list[tuple]:
+        rows: list[tuple] = []
+        for instrument in instruments:
+            for tf, duration in backtest.DURATIONS.items():
+                step = (self.candles.max_candles - 1) * duration
+                cursor = int((start - backtest.WARMUP_DAYS[tf] * 86400) // duration) * duration
+                while cursor < now:
+                    path = schema.candles_path(self.client.account_id, instrument.broker_symbol, tf, cursor,
+                                               min(now, cursor + step))
+                    for r in schema.parse_candles(await self.candles._fetch(path)):
+                        if r["time"] + duration <= now:
+                            rows.append((instrument.symbol, tf, r["time"], r["open"], r["high"], r["low"],
+                                         r["close"]))
+                    cursor += step
+                    await self._sleep(BACKTEST_FETCH_PAUSE)
+        return rows
+
+    async def _backtest_spawn(self, job: Path) -> int:
+        process = await asyncio.create_subprocess_exec(
+            sys.executable, "-m", "tradebot.backtest", str(job),
+            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+        return await process.wait()
+
+    async def backtest_once(self) -> dict | None:
+        """V9 stratejilerini son `BACKTEST_DAYS` gunun gercek mumlariyla olcer (bkz. backtest.py).
+
+        Yalnizca deneme modunda ve en cok gunde bir kez. Gecmisi bu surec ceker (ayni istemci, yavas);
+        oynatma ayri, dusuk oncelikli bir surectedir. Hicbir hata botu etkilemez: kimlik hatasi dahil her
+        hata yalnizca bu isi bitirir.
+        """
+        now = self._clock()
+        previous = self.repo.get_setting("backtest_result")
+        fresh = (isinstance(previous, dict) and previous.get("version") == backtest.VERSION
+                 and now - float(previous.get("finished_at") or 0) < BACKTEST_MAX_AGE)
+        if (fresh or not self.repo.get_bot_settings().dry_run or self.account is None
+                or str(self.repo.db_path) == ":memory:" or self.backtest_state == "running"):
+            return None
+        self.backtest_state = "running"
+        folder = Path(self.repo.db_path).parent / "backtest"
+        try:
+            spreads = {}
+            for instrument in self.catalog.universe():
+                limit, quote = self.quotes.max_spread(instrument.symbol), self.quotes.quote(instrument.symbol)
+                if limit is not None or quote is not None:  # tipik spread: 30 dk medyani, yoksa su anki
+                    spreads[instrument.symbol] = limit / 3.0 if limit is not None else float(quote["spread"])
+            instruments = sorted((i for i in self.catalog.universe() if i.symbol in spreads),
+                                 key=lambda i: (i.symbol not in BACKTEST_MAJORS, i.kind != "forex", i.symbol))
+            start = now - BACKTEST_DAYS * 86400.0
+            rows = await self._backtest_history(instruments, start, now)
+            folder.mkdir(parents=True, exist_ok=True)
+            history, job, result = folder / "history.db", folder / "job.json", folder / "result.json"
+            for stale in (history, result):
+                stale.unlink(missing_ok=True)
+            await asyncio.to_thread(backtest.write_history, history, rows)
+            manage = self.repo.get_bot_settings().manage
+            job.write_text(json.dumps({
+                "instruments": backtest.job_instruments(instruments), "spreads": spreads,
+                # Sozlesme hesabi icin yalnizca para birimi gerekir; bakiye/varlik sabit bir sayidir (yazilmaz).
+                "account": {"currency": self.account.currency, "balance": 10_000.0, "equity": 10_000.0,
+                            "margin": 0.0, "margin_free": 10_000.0, "leverage": self.account.leverage,
+                            "can_open": True, "can_trade": True},
+                "rules": {"be_at_r": manage.be_at_r if manage.be_enabled else None,
+                          "partial_at_r": manage.partial_at_r if manage.partial_enabled else None,
+                          "partial_fraction": manage.partial_fraction,
+                          "trail_atr_mult": manage.trail_atr_mult if manage.trail_enabled else None},
+                "start": start, "end": now, "budget": BACKTEST_BUDGET,
+                "history": str(history), "result": str(result)}))
+            code = await self._backtest_spawn(job)
+            if code != 0 or not result.exists():
+                raise RuntimeError(f"alt surec {code}")
+            summary = json.loads(result.read_text())
+            summary["bars"] = len(rows)
+            summary["finished_at"] = self._clock()  # botun saati (tazelik denetimi bununla yapilir)
+            self.repo.set_setting("backtest_result", summary)
+            self.backtest_state = "done"
+            log.info("ileri test bitti: %d islem", summary["total"]["trades"])
+            return summary
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - olcum isi botu asla etkilemez
+            self.backtest_state = "failed: " + type(exc).__name__
+            log.warning("ileri test tamamlanamadi: %s", type(exc).__name__)
+            return None
+        finally:
+            (folder / "history.db").unlink(missing_ok=True)
+
+    def backtest_report(self) -> dict:
+        """Herkese acik: son ileri testin ozeti (yalnizca sayilar ve R)."""
+        result = self.repo.get_setting("backtest_result")
+        return {"state": self.backtest_state, "result": result if isinstance(result, dict) else None}
+
+    async def _once_after(self, delay: float, action) -> None:
+        await self._sleep(delay)
+        await action()
+
     def _spread_r(self, candidate: Candidate) -> float | None:
         spread, risk = self._spread(candidate.symbol), abs(candidate.entry - candidate.stop_loss)
         return round(spread / risk, 4) if spread is not None and risk > 0 else None
@@ -1389,6 +1496,7 @@ class Bot:
             self._every(RESOLVE_INTERVAL, self.resolve_orders, "emir cozumleme"),
             self._every(RECONCILE_INTERVAL, self.reconcile_now, "mutabakat"),
             self._every(MAINTENANCE_INTERVAL, self.maintenance, "bakim"),
+            self._once_after(BACKTEST_DELAY, self.backtest_once),
         )
 
 
