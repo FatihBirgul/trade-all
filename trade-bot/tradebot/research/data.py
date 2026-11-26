@@ -149,18 +149,21 @@ def compare(exness: list[dict], other: list[dict]) -> dict | None:
 
 
 # ---------------------------------------------------------------- indirme (yalnizca Actions)
-def _get(url: str, tries: int = 5) -> bytes | None:
+def _get(url: str, tries: int = 4) -> bytes | None:
+    """404 -> None (o ay yok). 401/403 kalici: hemen hata. Diger hatalar kisa beklemeyle yeniden denenir."""
     for attempt in range(tries):
         try:
             with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "research-bot"}),
-                                        timeout=60) as response:
+                                        timeout=30) as response:
                 return response.read()
         except urllib.error.HTTPError as exc:
             if exc.code == 404:
                 return None
-        except (urllib.error.URLError, TimeoutError, ConnectionError):
+            if exc.code in (401, 403):
+                raise RuntimeError(f"erisim reddedildi ({exc.code}): {url}") from exc
+        except (urllib.error.URLError, TimeoutError, ConnectionError, OSError):
             pass
-        time.sleep(2.0 * (attempt + 1))
+        time.sleep(1.0 + attempt)
     raise RuntimeError(f"indirilemedi: {url}")
 
 
