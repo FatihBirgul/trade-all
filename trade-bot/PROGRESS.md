@@ -165,6 +165,7 @@ Kritik bulgu yok; "deneme modunda dağıtılabilir". İkinci tur düzeltmeleri (
 2. Kapanan elle işlemde `trade_closed` K/Z'sinin terminaldekiyle (USC, komisyon işareti) aynı olduğunu doğrula.
 3. İlk bot emrinde: PATCH verilmeyen TP'yi koruyor mu (I7), dolum olayı sltp emrini taşıyor mu, ACK/operasyon biçimleri, yeniden bağlanmada snapshot, `client_request_id` yankısı.
 4. Cuma 21:45 UTC girişleri (kapanıştan 13 dk önce) isteniyor mu: kullanıcı kararı.
+5. Yeniden başlatmadan sonraki 30 dakikada `max_spread` sınırının, saklanamayan örnekler yüzünden hiç durmamış bottan geniş çıkabilmesi (bkz. "Yeniden başlatmada spread ısınması", kalan sınır) kabul ediliyor mu: kullanıcı kararı. Kabul edilmezse seçenek: yeniden başlatmadan sonra 30 dakika yeni giriş açmamak.
 - Ertelenen (Minor): WS yönlendirmesinde imzalı başlıklar, hız sınırında pay, seansların yalnızca açılışta okunması (yaz saati), tick aboneliklerinde tek hatalı sembolün grubunu düşürmesi, N5 testlerinin eksikleri.
 
 ## Faz 3 (plan: `docs/superpowers/plans/2026-11-25-trade-bot-faz3.md`)
