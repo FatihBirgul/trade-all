@@ -634,3 +634,67 @@ geciktiremiyor; üç test boşluğu kapatıldı. Bilinen sınırlar: canlı göl
 planıyla izler (iz süren stoplu ileri test / yeniden üretim sonuçlarıyla KARŞILAŞTIRILMAZ); yeniden üretim 300
 mumluk, canlı 120 mumluk pencere kullanır (sentetik veride 245 sinyalin 4'ü farklı); düzeltilmiş ölçümdeki
 "gerçek spread" bugünkü saatlik profilin 2 yıla uygulanmasıdır.
+
+## İlk ft-5 sonuçları ve kullanıcı kararları (2026-11-26 akşam)
+
+### WEEK TRADE — 2 yıl, 6 sembol, Exness mumları (2024-12-15 → 2026-11-26)
+| Ölçüm (yumuşak) | İşlem | Kazanma | Net R | PF | En büyük düşüş |
+|---|---|---|---|---|---|
+| Özgün liste (yfinance/Binance) | 182 | %43 | +21,79 | 1,44 | −6,29 |
+| Bizde, kaynak varsayımlarıyla | 184 | %41 | +26,26 | 1,47 | −6,54 |
+| Bizde, düzeltilmiş | 182 | %40 | +23,78 | 1,42 | −7,01 |
+| Düzeltilmiş, altın hariç | 150 | %38 | +10,16 | 1,22 | −11,10 |
+| Düzeltilmiş, 1. yıl / 2. yıl | 102 / 80 | %39 / %41 | +9,45 / +14,34 | 1,26 / 1,70 | −7,01 / −4,26 |
+
+- Liste eşleşmesi (yumuşak): 182 özgün işlemin 71'i aynı anda, 17'si 1 gün içinde (88/182); 94 yalnızca özgünde,
+  96 yalnızca bizde; eşleşen 88'in 82'sinde sonuç işareti aynı. Sıkı: 63 + 21 / 184. Fark veri kaynağından
+  (altın vadeli ↔ spot, FX saatleri) ve yola bağımlı portföy kuralından; kod aynı veride birebir.
+- Sembol (düzeltilmiş, yumuşak): XAU +13,63R (PF 2,22), ETH +8,96R (PF 2,33), BTC +2,09R, GBPAUD +0,47R,
+  USDCHF −0,34R, EURUSD −1,03R. Açık 3 işlem (+1,02R) toplam dışında.
+- Gecelik faiz ölçülemedi (API'de oran yok). 1522 gece taşınmış; yıllık %3 aleyhte varsayımla net +16,92R
+  (altın hariç +4,00R), %6 ile +10,05R (altın hariç −2,16R).
+- Sıkı sürüm düzeltilmiş: 182 işlem +20,91R PF 1,43; altın hariç +11,40R PF 1,27.
+
+### 90 gün, 30 sembol (2026-08-28 → 11-26; ilk 60 gün iç, son 30 gün dış örneklem; maliyet kapısı ÖNCESİ)
+| Strateji | İşlem | Kazanma | Net R | PF | En büyük düşüş | Maliyet/stop | İç → dış |
+|---|---|---|---|---|---|---|---|
+| `tb_smc_day_v13` | 118 | %34 | −4,95 | 0,92 | −16,9 | %3,7 | −10,6 → +4,6 |
+| `tb_emapb_day_v13` | 541 | %33 | −18,3 | 0,93 | −58,3 | %5,1 | −39,9 → +13,5 |
+| `tb_smc_week_v13` | 57 | %25 | −7,8 | 0,66 | −10,9 | %2,1 | −10,0 → −0,7 |
+| `tb_emapb_week_v13` | 316 | %18 | −75,5 | 0,50 | −75,5 | %3,0 | −69,5 → −27,4 |
+| `tb_week_trade_v1` | 199 | %36 | −1,3 | 0,98 | −13,5 | %1,2 | −11,5 → +4,9 |
+| `tb_ema_pullback_v1` (M15) | 3574 | %30 | −431 | 0,83 | −501 | %10,9 | −453 → +3,7 |
+| `tb_donchian_breakout_v1` (M15) | 2735 | %30 | −316 | 0,84 | −389 | %12,2 | −281 → −39 |
+| Eski yorum: `tb_smc_sweep_v1` (2R) | 30 | %68 | +12,6 | 2,40 | −2,0 | %1,5 | +3,3 → +7,8 |
+| Eski yorum: `tb_emapb_h1_20_21_v1` (1,5R) | 124 | %59 | +17,4 | 1,36 | −6,1 | %1,3 | — |
+
+- 90 günde eski masanın stratejilerinden net pozitif olan yok; dış örneklem iç örneklemle tutarsız (kenar sayılmaz).
+- `tb_emapb_week_v13`: 16 açık işlem +53R anlık kârda; uygulanan "4H yapısının arkasından" çıkış bu strateji için
+  çok sıkı olabilir (kaynak net değildi).
+- Belge ölçütleri: hafta sonu kripto gün içi (EMA gün içi 16 işlem +9,7R) destekleniyor; hacim filtresi SMC'de
+  destekleniyor (düşük hacim −3,3R), EMA gün içinde desteklenmiyor (düşük hacim +12,8R); kısa vadenin maliyet
+  yüzünden kenarsız olması açıkça destekleniyor. WEEK TRADE'de aşırı uzamış 18 giriş +8,3R, normal girişler −9,5R.
+- Eski yorum stratejileri (stop ≥ 1,5 × günlük ATR) 90 günde pozitif; birlikte portföy kurallarıyla 128 işlem
+  +22,0R PF 1,45 (iç +7,2 / dış +12,1). Örneklem küçük.
+- Spread profili henüz sığ (sembol başına medyan 3 saat ölçülü). V9 aşaması bu okumada 0/30 semboldü.
+
+### Doğrulamalar (canlı sunucudan)
+- Gölge çapraz denetim: 32 kapanmış gölge işlemin 32'si bağımsız hesapla aynı (fark 0). 32'nin 1'i +1R gördü,
+  2'si ilk mumda stop. %3 kazanma hesap hatası değil; 90 günde aynı stratejinin kazanma oranı %30.
+- GBPUSD elle testi (58 sn açık): broker tarafında stop görüldü, stop/hedef emri eşleşti, hedef görüldü;
+  `sl_missing` 0. Kullanıcı tarafında "Stop eksik" bildirimi yok, açılış bildirimi stop seviyesiyle geldi.
+  → "İlk gerçek emirden ÖNCE" listesinin 1. maddesi karşılandı. 2. madde (K/Z'nin terminalle aynı olması)
+  kullanıcının terminaldeki rakamla karşılaştırmasını bekliyor.
+- Kimlik reddi (1000): 26.11'de üç kez, 05:01 / 06:50 / 12:15 UTC; 192 sn / 301 sn / 1 sn sonra kendiliğinden
+  düzeldi. Kaynak kaydı ft-5 sürümüyle başladı (sonraki olayda görülecek).
+
+### Kullanıcı kararları (Fatih, kontrolcü aracılığıyla)
+1. **Maliyet kapısı spread'i sayar:** giriş anındaki spread ÷ stop mesafesi > %15 ise işlem açılmaz. Ayar
+   `risk.max_spread_stop_pct` (aralık %5–%25, varsayılan 15); canlı adaylara ve gölge kayıtlarına uygulanır
+   (`Bot._consider` başında; spread bilinmiyorsa aday geçmez). Tarama özeti `cost_blocked` ve strateji bazında
+   `cost_by_strategy` verir. İleri test ft-6 aynı kuralı uygular: kapıya takılan işlem toplamlara girmez ve
+   stratejiyi meşgul etmez; `cost_gate` altında sayı, oran ve "açılsaydı" sonucu raporlanır (V9 dahil).
+   Uygulama 1.0.1: Ayarlar'da "En çok maliyet (alış-satış farkı ÷ stop)"; yükseltmek risk artışı onayı ister.
+   Test kurulumunda ortak sahte piyasanın oranı ~%17 olduğundan testler %25 ile başlar; kapının kendisi
+   `tests/test_cost_gate.py`'de varsayılanla sınanır.
+2. **Lot tavanları** (%5 stop zararı, 50 kat varlık) onaylandı; değişmedi.

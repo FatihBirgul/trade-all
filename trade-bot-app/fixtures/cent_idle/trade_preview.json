@@ -20,7 +20,8 @@
   "volume_max": 200.0,
   "warnings": [
    "Hesap küçük: en küçük lot (0.01) bile risk sınırınızı aşıyor",
-   "Bu lotla zarar, risk sınırınızın (%0.5) üstünde"
+   "Bu lotla zarar, risk sınırınızın (%0.5) üstünde",
+   "Bu emir GÖNDERİLEMEZ: lot mutlak üst sınırı aşıyor: stopta zarar varlığın %5'inden fazla"
   ]
  }
 }

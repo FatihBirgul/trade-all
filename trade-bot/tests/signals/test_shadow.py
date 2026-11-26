@@ -4,7 +4,7 @@ import pytest
 
 from tests.app_helpers import NOW, started
 from tests.execution.helpers import candidate
-from tradebot.config import BotSettings, strategy_mode
+from tradebot.config import BotSettings, strategy_mode, RiskSettings
 from tradebot.signals.adapter import evaluate_all
 from tradebot.signals.shadow import MAX_BARS, ShadowBook
 from tradebot.store.repo import Repo
@@ -144,7 +144,8 @@ def test_shadow_stats(tmp_path):
 
 async def test_shadow_strategy_never_sends_order(tmp_path):
     app = await started(tmp_path)
-    app.repo.set_bot_settings(BotSettings(dry_run=False, strategy_modes={"fx_trend_momentum_v6": "shadow"}))
+    app.repo.set_bot_settings(BotSettings(dry_run=False, risk=RiskSettings(max_spread_stop_pct=25),
+                                          strategy_modes={"fx_trend_momentum_v6": "shadow"}))
     summary = await app.bot.on_bar_close()
     assert summary.candidates == 1 and summary.shadowed == 1 and summary.opened == 0
     assert app.fake.calls("POST", "/positions") == [] and app.notifier.sent == []
@@ -158,7 +159,7 @@ async def test_shadow_strategy_never_sends_order(tmp_path):
 async def test_low_score_candidate_is_tracked_as_shadow(tmp_path):
     from tradebot.config import FusionSettings
     app = await started(tmp_path)
-    app.repo.set_bot_settings(BotSettings(dry_run=False, fusion=FusionSettings(min_score=100, mid_score=100, high_score=100)))
+    app.repo.set_bot_settings(BotSettings(dry_run=False, risk=RiskSettings(max_spread_stop_pct=25), fusion=FusionSettings(min_score=100, mid_score=100, high_score=100)))
     await app.bot.on_bar_close()
     rows = app.repo.conn.execute("SELECT reason, score FROM shadow_trades").fetchall()
     assert len(rows) == 1 and rows[0][0] == "low_score" and rows[0][1] >= 80

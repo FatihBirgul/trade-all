@@ -18,5 +18,6 @@
  "tick_acks": 0,
  "quoted_now": 1,
  "last_backup_at": null,
- "failing_loops": {}
+ "failing_loops": {},
+ "entries_paused": false
 }

@@ -98,7 +98,7 @@ export type BotStrategy = {
   live_blocker: string | null;
 };
 export type BotSettings = {
-  risk: { risk_pct: number; max_open_bot: number; daily_loss_pct: number; total_loss_pct: number; [key: string]: unknown };
+  risk: { risk_pct: number; max_open_bot: number; daily_loss_pct: number; total_loss_pct: number; max_spread_stop_pct?: number; [key: string]: unknown };
   news: { enabled: boolean; window_minutes: number };
   fusion: { enabled: boolean; min_score: number; mid_score: number; high_score: number; [key: string]: unknown };
   // Kademeli stop aşamaları; eski sunucuda anahtarlar yoktur (hepsi açık sayılır).

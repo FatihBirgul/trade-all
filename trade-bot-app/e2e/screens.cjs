@@ -263,7 +263,10 @@ run([
     assert.equal(await page.getByLabel("İşlem başı risk").inputValue(), String(settings.risk.risk_pct).replace(".", ","));
     assert.match(await text(page, "settings-symbols"), /4 \/ 4/);
     assert.match(await text(page, "settings-strategies"), /Sahte kırılım/);
-    assert.match(await text(page, "settings-app"), /Trade Bot 1\.0\.0/);
+    assert.match(await text(page, "settings-app"), /Trade Bot 1\.0\.1/);
+    // Maliyet kapısı: sunucudaki gerçek değer (%15) görünür; yükseltmek risk artışıdır.
+    assert.equal(await page.getByLabel("En çok maliyet (alış-satış farkı ÷ stop)").inputValue(), String(settings.risk.max_spread_stop_pct));
+    assert.equal(settings.risk.max_spread_stop_pct, 15);
     await shot(page, "21-ayarlar");
     await shot(page, "21b-ayarlar-korumalar-semboller", "settings-symbols");
     await shot(page, "21c-ayarlar-stratejiler", "settings-app");
@@ -276,6 +279,7 @@ run([
     assert.match(await text(page, "settings-notice"), /Ayarlar kaydedildi/);
     const put = calls.find((call) => call.method === "PUT");
     assert.equal(put.body.risk.risk_pct, 1);
+    assert.equal(put.body.risk.max_spread_stop_pct, 15); // dokunulmayan alan olduğu gibi gider
     assert.equal(put.body.dry_run, true); // deneme/canlı kipi bu yoldan değişmez
   }],
   ["ayarlar: sınır dışı değer kaydedilmez", async (page) => {
@@ -286,6 +290,25 @@ run([
     await page.getByTestId("save-settings").click();
     await page.getByTestId("settings-notice").waitFor();
     assert.equal(calls.filter((call) => call.method === "PUT").length, 0);
+  }],
+  ["ayarlar: maliyet kapısı %5–%25 arasında değişir, gevşetmek onay ister", async (page) => {
+    const calls = await mock(page, "dry_idle", { "PUT /settings": (request) => ({ body: request.postDataJSON() }) });
+    await pair(page);
+    await page.getByTestId("tab-settings").click();
+    await page.getByTestId("settings-risk").waitFor();
+    const field = page.getByLabel("En çok maliyet (alış-satış farkı ÷ stop)");
+    await field.fill("30"); // sınır dışı
+    await page.getByTestId("save-settings").click();
+    await page.getByTestId("settings-notice").waitFor();
+    assert.equal(calls.filter((call) => call.method === "PUT").length, 0);
+    await field.fill("20");
+    await page.getByTestId("save-settings").click();
+    assert.match(await text(page, "confirm"), /risk artıyor/);
+    assert.match(await text(page, "confirm"), /15% → 20%/);
+    await shot(page, "22b-ayarlar-maliyet-kapisi");
+    await page.getByTestId("confirm-yes").click();
+    assert.match(await text(page, "settings-notice"), /Ayarlar kaydedildi/);
+    assert.equal(calls.find((call) => call.method === "PUT").body.risk.max_spread_stop_pct, 20);
   }],
   ["bağlantı ve tanı: bağlı durumu ve istek günlüğü", async (page) => {
     await mock(page, "live_active");

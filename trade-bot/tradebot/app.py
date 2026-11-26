@@ -131,6 +131,8 @@ class ScanSummary:
     quoted: int = 0  # taranan sembollerden taze fiyati (tick) olanlar; 0 ise fiyat akisi calismiyor demektir
     candle_retries: int = 0  # ikinci denemede gecen mum istekleri (gecici AUTH_INVALID_API_KEY)
     would_open: int = 0  # deneme modunda tum kapilardan gecen (canlida emir gonderilecek) adaylar
+    cost_blocked: int = 0  # maliyet kapisi: spread / stop mesafesi sinirin ustunde (canli ve golge adaylar)
+    cost_reasons: dict[str, int] = field(default_factory=dict)  # strateji -> maliyet kapisina takilan aday sayisi
     reasons: dict[str, int] = field(default_factory=dict)
     blocked_reasons: dict[str, int] = field(default_factory=dict)
     veto_reasons: dict[str, int] = field(default_factory=dict)  # aday cikmayan sembollerde V9'un ilk nedeni
@@ -832,6 +834,16 @@ class Bot:
         candidate = result.candidate
         if self.executor.already_submitted(candidate):
             return  # ayni mum ikinci kez tarandi
+        # Maliyet kapisi: giris anindaki GERCEK spread stop mesafesinin `max_spread_stop_pct`'inden buyukse islem
+        # yok. Canli adaylara da golge kayitlarina da uygulanir (karne ayni kuralla olussun). Spread bilinmiyorsa
+        # aday gecmez.
+        spread_r = self._spread_r(candidate) if self.quotes.quote(candidate.symbol) is not None else None
+        if spread_r is None or spread_r * 100.0 > settings.risk.max_spread_stop_pct:
+            summary.cost_blocked += 1
+            summary.cost_reasons[candidate.strategy_id] = summary.cost_reasons.get(candidate.strategy_id, 0) + 1
+            log.info("aday maliyet kapisina takildi %s %s %s: spread/stop %s", candidate.symbol, candidate.side,
+                     candidate.strategy_id, spread_r)
+            return
         score, votes, multiplier = self._score(result, instrument, settings)
         if result.mode == "shadow":
             # Golge kipindeki strateji: sinyali ve sanal sonucu izle, gercek emir gonderme.
@@ -1179,6 +1191,8 @@ class Bot:
         out = {"hours": round((now - since) / 3600.0, 2), "dry_run": self.repo.get_bot_settings().dry_run,
                "scans": 0, "scans_skipped": {}, "symbols_scanned": 0, "candidates": 0, "would_open": 0, "opened": 0,
                "observed": 0, "shadowed": 0, "news_blocked": 0, "portfolio_blocked": 0, "errors": 0,
+               "cost_blocked": 0, "cost_by_strategy": {},
+               "max_spread_stop_pct": self.repo.get_bot_settings().risk.max_spread_stop_pct,
                "decisions": {}, "veto_reasons": {}, "portfolio_reasons": {}, "observed_reasons": {}, "samples": [],
                "last_data_rejects": {}}
 
@@ -1211,7 +1225,8 @@ class Bot:
                 for key, field_name in (("symbols_scanned", "scanned"), ("candidates", "candidates"),
                                         ("would_open", "would_open"), ("opened", "opened"), ("observed", "observed"),
                                         ("shadowed", "shadowed"), ("news_blocked", "news_blocked"),
-                                        ("portfolio_blocked", "blocked"), ("errors", "errors")):
+                                        ("portfolio_blocked", "blocked"), ("errors", "errors"),
+                                        ("cost_blocked", "cost_blocked")):
                     value = data.get(field_name)
                     out[key] += value if isinstance(value, int) else 0
                 add(out["decisions"], data.get("reasons"))
@@ -1220,6 +1235,7 @@ class Bot:
                 out["last_data_rejects"] = ({str(k)[:16]: str(v)[:160] for k, v in rejects.items()}
                                             if isinstance(rejects, dict) else {})
                 add(out["portfolio_reasons"], data.get("blocked_reasons"))
+                add(out["cost_by_strategy"], data.get("cost_reasons"))
             elif event["kind"] == "scan_skipped":
                 add(out["scans_skipped"], {data.get("reason") or "?": 1})
             elif event["kind"] == "signal_observed":
@@ -1347,6 +1363,7 @@ class Bot:
                 "start": start, "end": end, "split": start + (end - start) * 2.0 / 3.0,
                 "v9_start": end - BACKTEST_V9_DAYS * 86400.0,
                 "workers": BACKTEST_WORKERS or (os.cpu_count() or 1),
+                "max_spread_stop_pct": self.repo.get_bot_settings().risk.max_spread_stop_pct,
                 "history": str(history), "result": str(result)}
             summary = None
             # Ilk tur yalnizca A asamasidir (swing + WEEK TRADE): sonuc dakikalar icinde yayinlanir; V9 sonra gelir.

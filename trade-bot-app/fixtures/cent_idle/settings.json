@@ -5,7 +5,8 @@
   "per_symbol": 1,
   "per_currency_side": 2,
   "daily_loss_pct": 5.0,
-  "total_loss_pct": 25.0
+  "total_loss_pct": 25.0,
+  "max_spread_stop_pct": 15.0
  },
  "manage": {
   "be_enabled": true,

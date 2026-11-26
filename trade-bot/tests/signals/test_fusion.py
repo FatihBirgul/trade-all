@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from tests.signals.helpers import NOW, instrument, provider_from_fixture
-from tradebot.config import FusionSettings
+from tradebot.config import FusionSettings, RiskSettings
 from tradebot.signals import v9
 from tradebot.signals.fusion import MODULES, Vote, collect_votes, risk_multiplier, scale_lots, score
 
@@ -133,7 +133,7 @@ async def test_filled_trade_stores_score_and_votes(tmp_path):
 
 async def test_low_score_records_observation_and_sends_no_order(tmp_path):
     app = await started(tmp_path)
-    app.repo.set_bot_settings(BotSettings(dry_run=False, fusion=FusionSettings(min_score=100, mid_score=100, high_score=100)))
+    app.repo.set_bot_settings(BotSettings(dry_run=False, risk=RiskSettings(max_spread_stop_pct=25), fusion=FusionSettings(min_score=100, mid_score=100, high_score=100)))
     summary = await app.bot.on_bar_close()
     assert summary.candidates == 1 and summary.observed == 1 and summary.opened == 0
     assert app.fake.calls("POST", "/positions") == [] and app.notifier.sent == []
@@ -149,7 +149,7 @@ async def test_mid_score_reduces_lots_and_risk(tmp_path):
     full_trade = full.repo.open_trades("bot")[0]
 
     app = await started(tmp_path / "half")
-    app.repo.set_bot_settings(BotSettings(dry_run=False, fusion=FusionSettings(min_score=40, mid_score=100, high_score=100)))
+    app.repo.set_bot_settings(BotSettings(dry_run=False, risk=RiskSettings(max_spread_stop_pct=25), fusion=FusionSettings(min_score=40, mid_score=100, high_score=100)))
     await app.bot.on_bar_close()
     await app.fake.flush()
     half = app.repo.open_trades("bot")[0]
@@ -160,7 +160,7 @@ async def test_mid_score_reduces_lots_and_risk(tmp_path):
 
 async def test_fusion_disabled_uses_full_risk(tmp_path):
     app = await started(tmp_path)
-    app.repo.set_bot_settings(BotSettings(dry_run=False, fusion=FusionSettings(enabled=False, min_score=100,
+    app.repo.set_bot_settings(BotSettings(dry_run=False, risk=RiskSettings(max_spread_stop_pct=25), fusion=FusionSettings(enabled=False, min_score=100,
                                                                               mid_score=100, high_score=100)))
     summary = await app.bot.on_bar_close()
     await app.fake.flush()

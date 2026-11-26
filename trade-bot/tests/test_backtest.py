@@ -183,7 +183,8 @@ async def test_unfinished_v9_phase_is_resumed_without_redoing_finished_symbols(t
     job.write_text(json.dumps({"instruments": [{"symbol": "XAUUSD", "kind": "metal"}], "spreads": {"XAUUSD": {"hours": {}, "all": 0.2}},
                                "start": float(signature[1]), "end": float(signature[2]), "split": float(signature[1]),
                                "v9_start": float(signature[1]), "history": str(history),
-                               "result": str(tmp_path / "backtest" / "again.json"), "workers": 1}))
+                               "result": str(tmp_path / "backtest" / "again.json"), "workers": 1,
+                               "max_spread_stop_pct": float(signature[3])}))
     monkeypatch.setattr(forward, "v9_symbol", lambda args: (_ for _ in ()).throw(AssertionError("yeniden calisti")))
     again = forward.run_job(job, InlinePool)
     assert again["v9_coverage"]["complete"] is True and again["v9"] == second["v9"]
