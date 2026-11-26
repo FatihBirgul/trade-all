@@ -66,6 +66,11 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
         ornek adaylarin lot / risk yuzdesi. Hesap numarasi, bakiye ya da para tutari icermez."""
         return bot.scan_summary(hours)
 
+    @public.get("/health/outcomes")
+    async def health_outcomes(hours: float = Query(default=48.0, ge=1.0, le=168.0)):
+        """Deneme modundaki sinyallerin sonradan ne olacagi (R cinsinden). Herkese acik: lot, tutar, bakiye yok."""
+        return bot.dryrun_outcomes(hours)
+
     @public.post("/pair")
     async def pair(body: PairRequest):
         token = auth.redeem_pair_code(repo, body.code, now=clock())

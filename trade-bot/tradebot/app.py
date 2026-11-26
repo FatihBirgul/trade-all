@@ -1169,6 +1169,56 @@ class Bot:
         out["samples"] = out["samples"][-SUMMARY_SAMPLES:]
         return out
 
+    def dryrun_outcomes(self, hours: float = 48.0) -> dict:
+        """Deneme modundaki "acilirdi" sinyallerinin ve sanal islemlerin sonucu + saatlik veri sagligi.
+
+        Herkese acik uctan verilir: yalnizca sembol, yon, strateji, puan, zaman ve R cinsinden sonuc. Lot, tutar,
+        bakiye ICERMEZ. Benzetim yaklasiktir (bkz. signals/outcome.py).
+        """
+        from .signals import outcome
+
+        now = self._clock()
+        since = now - max(1.0, min(float(hours), 168.0)) * 3600.0
+        manage = self.repo.get_bot_settings().manage
+        rules = {"be_at_r": manage.be_at_r if manage.be_enabled else None,
+                 "partial_at_r": manage.partial_at_r if manage.partial_enabled else None,
+                 "partial_fraction": manage.partial_fraction,
+                 "trail_atr_mult": manage.trail_atr_mult if manage.trail_enabled else None}
+        signals, hourly = [], {}
+        for event in self.repo.events_since(since, ("scan", "scan_skipped", "signal")):
+            data = event["data"] if isinstance(event["data"], dict) else {}
+            if event["kind"] != "signal":
+                row = hourly.setdefault(int(event["at"] // 3600 * 3600), {"scans": 0, "skipped": 0, "stale": 0,
+                                                                          "insufficient": 0})
+                if event["kind"] == "scan_skipped":
+                    row["skipped"] += 1
+                    continue
+                row["scans"] += 1
+                reasons = data.get("reasons") if isinstance(data.get("reasons"), dict) else {}
+                row["stale"] += int(reasons.get("STALE_DATA") or 0)
+                row["insufficient"] += int(reasons.get("INSUFFICIENT_DATA") or 0)
+                continue
+            item = {"at": event["at"], "symbol": data.get("symbol"), "side": data.get("side"),
+                    "strategy_id": data.get("strategy_id"),
+                    "score": round(data["score"], 1) if isinstance(data.get("score"), (int, float)) else None,
+                    "dry_run": data.get("dry_run"), "result": None}
+            try:
+                levels = [float(data[k]) for k in ("entry", "stop_loss", "take_profit_1", "take_profit_2")]
+                count = min(1500, int((now - event["at"]) // 900) + 40)
+                bars = self.candles.cached(str(data["symbol"]), "M15", count)
+                item["result"] = outcome.simulate(str(data["side"]), *levels, event["at"], bars, **rules)
+            except (KeyError, TypeError, ValueError):
+                pass
+            signals.append(item)
+        shadows = [{"symbol": r[0], "side": r[1], "strategy_id": r[2], "reason": r[3],
+                    "score": round(r[4], 1) if r[4] is not None else None, "opened_at": r[5], "closed_at": r[6],
+                    "result_r": round(r[7], 3) if r[7] is not None else None}
+                   for r in self.repo.conn.execute(
+                       "SELECT symbol, side, strategy_id, reason, score, opened_at, closed_at, result_r "
+                       "FROM shadow_trades WHERE opened_at >= ? ORDER BY opened_at", (since,))]
+        return {"hours": round((now - since) / 3600.0, 2), "rules": rules, "signals": signals, "shadows": shadows,
+                "hourly": [[hour, *row.values()] for hour, row in sorted(hourly.items())]}
+
     def quoted_now(self) -> int:
         """Evrende su an taze (QUOTE_MAX_AGE icinde) fiyati olan sembol sayisi."""
         count = 0
