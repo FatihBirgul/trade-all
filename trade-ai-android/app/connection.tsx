@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Alert } from "react-native";
+import { router } from "expo-router";
 import { BotInput, BotPage } from "../src/bot/BotPage";
 import { useBot } from "../src/bot/state";
 import { useTheme } from "../src/theme";
@@ -13,6 +14,11 @@ export default function Connection() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  // Bu ekran sekmelerin üstünde açılır ve sekme çubuğu yoktur; eşleşme sonrası kullanıcı burada kalmamalı.
+  function openPanel() {
+    if (router.canGoBack()) router.back();
+    else router.replace("/");
+  }
   async function connect() {
     setBusy(true);
     setError("");
@@ -21,6 +27,7 @@ export default function Connection() {
       const address = origin.trim();
       await bot.pair(/^[a-z]+:\/\//i.test(address) ? address : "https://" + address, code.trim());
       setCode("");
+      openPanel();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Bağlantı kurulamadı.");
     } finally {
@@ -51,6 +58,7 @@ export default function Connection() {
             value={bot.lastOkAt ? new Date(bot.lastOkAt).toLocaleTimeString("tr-TR") : "henüz yok"}
           />
           {bot.error ? <Label style={{ color: theme.colors.red }}>{bot.error}</Label> : null}
+          <Button title="Panele git" onPress={openPanel} />
           <Button title="Bağlantıyı sil" onPress={confirmDisconnect} secondary />
         </Card>
       ) : bot.phase === "loading" ? null : (
