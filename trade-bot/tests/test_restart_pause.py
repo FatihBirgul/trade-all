@@ -2,6 +2,7 @@
 import inspect
 
 from tests.app_helpers import feed_ticks, load_market, restart, started
+from tests.exness.test_client import settings
 from tests.test_scan_summary import public_get
 from tradebot import runtime
 from tradebot.app import RESTART_ENTRY_PAUSE, RESTART_PAUSE_REASON, Bot
@@ -26,10 +27,26 @@ async def next_bar(app):
     return await app.bot.on_bar_close()
 
 
-def test_production_default_is_thirty_minutes():
+async def test_production_runtime_uses_thirty_minutes_and_is_closed_before_start(tmp_path):
     assert RESTART_ENTRY_PAUSE == 1800.0
     assert inspect.signature(Bot.__init__).parameters["restart_pause"].default == RESTART_ENTRY_PAUSE
-    assert "restart_pause" not in inspect.getsource(runtime.build_runtime)
+    production = runtime.build_runtime(settings(TRADEBOT_DB_PATH=str(tmp_path / "bot.db")))
+    assert production.bot._restart_pause == 1800.0
+    assert production.bot.entry_paused()  # baslamamis (ya da baslamasi yarim kalmis) bot islem acamaz
+    await production.client.aclose()
+    production.repo.close()
+
+
+async def test_reconnects_and_periodic_tasks_do_not_restart_the_pause(tmp_path):
+    app = await started(tmp_path, restart_pause=RESTART_ENTRY_PAUSE)
+    armed = app.bot.entries_from
+    assert armed == app.clock["now"] + 1800.0
+    app.advance(600)
+    await app.bot.reconcile_now()
+    await app.bot.heartbeat()
+    await app.bot.manage_tick()
+    await app.bot.resolve_orders()
+    assert app.bot.entries_from == armed  # yalnizca surec baslangici kurar
 
 
 async def test_no_order_for_thirty_minutes_after_a_restart_then_entries_resume(tmp_path):

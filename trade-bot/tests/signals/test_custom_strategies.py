@@ -425,3 +425,20 @@ async def test_stale_quote_never_reaches_an_order_or_the_shadow_record(tmp_path)
     await app.bot.on_bar_close()
     assert [p[2]["instrument"] for p in app.fake.calls("POST", "/positions")] == ["XAUUSD"]
     assert app.repo.conn.execute("SELECT COUNT(*) FROM shadow_trades WHERE symbol='EURUSD'").fetchone()[0] == 0
+
+
+async def test_restart_pause_blocks_a_live_new_strategy_too_but_shadow_bookkeeping_goes_on(tmp_path):
+    """Yeniden baslatmadan sonraki 30 dk: canliya alinmis yeni strateji de emir gonderemez (tek kapi)."""
+    from tradebot.app import RESTART_ENTRY_PAUSE, RESTART_PAUSE_REASON
+    app = await pullback_app(tmp_path / "live", restart_pause=RESTART_ENTRY_PAUSE)
+    settings = app.repo.get_bot_settings()
+    settings.strategy_modes[PULLBACK] = "live"
+    app.repo.set_bot_settings(settings)
+    summary = await app.bot.on_bar_close()
+    assert app.fake.calls("POST", "/positions") == [] and summary.opened == 0
+    assert summary.blocked_reasons == {RESTART_PAUSE_REASON: 2}  # XAUUSD (V9) ve EURUSD (yeni strateji)
+    assert app.repo.conn.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == 0
+    shadow = await pullback_app(tmp_path / "shadow", restart_pause=RESTART_ENTRY_PAUSE)  # varsayilan: golge
+    await shadow.bot.on_bar_close()
+    rows = shadow.repo.conn.execute("SELECT symbol, strategy_id FROM shadow_trades").fetchall()
+    assert ("EURUSD", PULLBACK) in [tuple(r) for r in rows]  # golge kaydi bekleme sirasinda da tutulur
