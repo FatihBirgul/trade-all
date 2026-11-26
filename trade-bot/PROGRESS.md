@@ -404,3 +404,40 @@ Yalnızca sayılar ve nedenler; hesap bilgisi yok.
   birlikte ~%1 risk. Portföy engeli devreye girmedi (0). Canlıda birbirine bağlı iki pozisyonun aynı anda açılması
   isteniyor mu, akşam kararında sorulacak. Bu işlemlerin sonucu (ne olurdu) özet uç noktasında yok; gölge karnesinden
   ayrıca okunmalı.
+
+### 2026-11-26 10:10 UTC — "açılırdı" işlemlerin sonucu ve karar
+
+- Kaynak: `/health/outcomes` (`sonuclar:` satırı). "Açılırdı" 8 işlemin 8'i stop oldu (**−8,0R**); hiçbiri 1R'ye
+  ulaşmadı (en iyi an: 0,03–0,77R). Gölge (`tb_ema_pullback_v1`): 22 sonuçlanan işlemin 21'i stop, 1 kazanç
+  (**−19,0R**). Benzetim kötümser (aynı mumda önce stop), spread'siz; işlemlerin çoğu aynı temaya bağlı (CAD/CHF
+  alımı), bağımsız 30 deneme değil.
+- 03:45 EURCAD+GBPCAD: canlıda portföy kapısı ikisini de açardı (`per_currency_side` = 2 sabit); o anda GBPCHF de
+  açık olurdu → 3 işlem, toplam ~%1,33 risk, üçü de stop. Deneme modunda açık pozisyon olmadığı için portföy kapısı
+  hiç sınanmıyor.
+- 10 atlanan tarama (25 Kas 11:00–13:30) ve 354 STALE_DATA (25 Kas 13:30–18:00) eski hatalardan; 18:00'den beri sıfır.
+- **Karar (kullanıcı + kontrolcü): canlıya geçilmedi.** Önce kök neden.
+
+### Kök neden analizi (26 Kasım, sürüyor)
+
+- Yön ters çevrilmesi yok (sinyal → `Candidate.side` → emir gövdesi aynı); giriş fiyatı doğru (BUY ask, SELL bid,
+  sinyal mumunun kapanışına stop mesafesinin −%4…+%19'u kadar yakın).
+- **Maliyet kapısı spread'i saymıyor:** `reward_risk_after_costs` yalnızca komisyon ve kaymayı düşer; komisyon 0
+  olduğundan "net R/R" her işlemde tam 2,0. Spread fiyata gömülü: bid'in stopa gitmesi için `d − s`, hedefe gitmesi
+  için `2d + s` yol gerekir. Spread kapısı (`max_spread`) spread'i yalnızca kendi son 30 dakikasıyla kıyaslar; stop
+  mesafesine oranına bakan kural yok.
+- Ölçüm: stop çoğunlukla M15 ATR14 × 1,5 (8 işlemin 5'i; diğerleri 2,4–2,7). Gölge işlemlerde girişteki
+  spread/stop ortanca **0,16** (0,07–0,33). Yönsüz bir strateji bu oranla işlem başına ~0,16R kaybeder.
+- Bu tek başına 21/22 stopu açıklamaz; kenar olup olmadığını ileri test ölçecek.
+- Stop sonrası aynı sembole yeniden giriş beklemesi yok (gölgede USDCAD SELL beş kez art arda stop).
+- Araçlar: `/health/outcomes` (işlem kuruluşu tanıları), `/health/backtest` + `tradebot/backtest.py` (son 30 günün
+  gerçek mumlarıyla V9 oynatması; yalnızca deneme modunda, ayrı düşük öncelikli süreç; eşikler sonuca göre
+  ayarlanmaz). Sınırlar: sabit spread varsayımı, mum içi sıra kötümser, haber/puan/portföy kapıları yok.
+
+### Yeniden başlatma beklemesi (2026-11-26, kullanıcı kararı)
+
+PR #16 (spread örneklerini saklama) yerine B seçeneği: süreç her başladığında 30 dakika yeni bot işlemi açılmaz;
+analiz, gölge kayıtları, açık pozisyon yönetimi ve elle işlemler sürer (`RESTART_ENTRY_PAUSE`, `Bot.entry_paused`).
+Bağımsız inceleme: kritik bulgu yok; tek kapı (`_consider`) bütün bot açılışlarını kapsıyor. Bilinen: taramalar
+çeyrek saatte olduğu için fiilî bekleme 30–45 dk; deneme modunda her yeniden başlatma o kadar "açılırdı" kaydını
+eksiltir; saat ileri sıçrarsa bekleme kısalır (duvar saati kullanılıyor). PR #16 bu kararla gereksiz.
+"İlk gerçek emirden ÖNCE" listesindeki 5. madde (spread sınırı kararı) bu kararla kapandı.
