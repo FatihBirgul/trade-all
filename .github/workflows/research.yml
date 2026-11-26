@@ -13,7 +13,7 @@ on:
       market_run:
         description: 'Exness piyasa verisinin alinacagi backtest calismasi (run id)'
         required: false
-        default: '45890500451'
+        default: '45909940950'
   push:
     branches: ['claude/faz5-**']
     paths:
@@ -94,7 +94,7 @@ jobs:
         with:
           name: market-data
           path: market
-          run-id: ${{ inputs.market_run || '45890500451' }}
+          run-id: ${{ inputs.market_run || '45909940950' }}
           github-token: ${{ github.token }}
       - name: Indir (${{ matrix.symbol }})
         working-directory: trade-bot
