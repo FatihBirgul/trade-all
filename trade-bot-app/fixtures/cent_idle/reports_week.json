@@ -1,0 +1,36 @@
+{
+ "period": "week",
+ "totals": {
+  "bot": {
+   "pnl": 0,
+   "trades": 0,
+   "wins": 0,
+   "win_rate": null
+  },
+  "manual": {
+   "pnl": 0,
+   "trades": 0,
+   "wins": 0,
+   "win_rate": null
+  },
+  "all": {
+   "pnl": 0,
+   "trades": 0,
+   "wins": 0,
+   "win_rate": null
+  }
+ },
+ "periods": {
+  "bot": [],
+  "manual": [],
+  "all": []
+ },
+ "max_drawdown": {
+  "bot": 0.0,
+  "manual": 0.0,
+  "all": 0.0
+ },
+ "by_strategy": {},
+ "by_symbol": {},
+ "history": []
+}

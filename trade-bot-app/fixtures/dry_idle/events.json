@@ -1,0 +1,313 @@
+{
+ "events": [
+  {
+   "id": 10,
+   "at": 1800002700.0,
+   "level": "info",
+   "kind": "scan",
+   "message": "Tarama: 4 sembol, 1 aday, 0 emir",
+   "data": {
+    "at": 1800002700.0,
+    "scanned": 4,
+    "closed": 0,
+    "candidates": 1,
+    "opened": 0,
+    "blocked": 0,
+    "news_blocked": 0,
+    "observed": 0,
+    "shadowed": 0,
+    "errors": 0,
+    "skipped": null,
+    "quoted": 1,
+    "candle_retries": 0,
+    "would_open": 1,
+    "reasons": {
+     "PROVIDER_UNAVAILABLE": 3
+    },
+    "blocked_reasons": {},
+    "veto_reasons": {
+     "provider unavailable: quote": 3
+    },
+    "data_rejects": {
+     "BTCUSD": "provider unavailable: quote",
+     "EURUSD": "provider unavailable: quote",
+     "GBPUSD": "provider unavailable: quote"
+    }
+   }
+  },
+  {
+   "id": 9,
+   "at": 1800002700.0,
+   "level": "info",
+   "kind": "signal",
+   "message": "[dry-run] XAUUSD BUY 0.61 lot @ 2024.1, SL 2023.29, TP 2026.54 (fx_trend_momentum_v6)",
+   "data": {
+    "symbol": "XAUUSD",
+    "side": "BUY",
+    "entry": 2024.1000000000001,
+    "stop_loss": 2023.29,
+    "take_profit_1": 2025.73,
+    "take_profit_2": 2026.54,
+    "lots": 0.61,
+    "strategy_id": "fx_trend_momentum_v6",
+    "setup_id": "a5674551df77f699838e75db",
+    "net_rr": 2.012345679011771,
+    "analysis_id": "ed5173a7f870c88758f184bfcf2427b21b3905fc61858bec9c64be2c4bcff08f",
+    "risk_amount": 49.41,
+    "dry_run": true,
+    "score": 90.909091,
+    "votes": {
+     "mtf": 1,
+     "regime": 1,
+     "candle_pattern": 1,
+     "chart_pattern": 1,
+     "structure": 0,
+     "momentum": 1,
+     "confluence": 1,
+     "other_strategies": 0,
+     "session": 1
+    },
+    "risk_pct": 0.4941,
+    "spread_r": 0.2469
+   }
+  },
+  {
+   "id": 8,
+   "at": 1800001800.0,
+   "level": "info",
+   "kind": "scan",
+   "message": "Tarama: 4 sembol, 1 aday, 0 emir",
+   "data": {
+    "at": 1800001800.0,
+    "scanned": 4,
+    "closed": 0,
+    "candidates": 1,
+    "opened": 0,
+    "blocked": 0,
+    "news_blocked": 0,
+    "observed": 0,
+    "shadowed": 0,
+    "errors": 0,
+    "skipped": null,
+    "quoted": 1,
+    "candle_retries": 0,
+    "would_open": 1,
+    "reasons": {
+     "PROVIDER_UNAVAILABLE": 3
+    },
+    "blocked_reasons": {},
+    "veto_reasons": {
+     "provider unavailable: quote": 3
+    },
+    "data_rejects": {
+     "BTCUSD": "provider unavailable: quote",
+     "EURUSD": "provider unavailable: quote",
+     "GBPUSD": "provider unavailable: quote"
+    }
+   }
+  },
+  {
+   "id": 7,
+   "at": 1800001800.0,
+   "level": "info",
+   "kind": "signal",
+   "message": "[dry-run] XAUUSD BUY 0.61 lot @ 2024.1, SL 2023.29, TP 2026.54 (fx_trend_momentum_v6)",
+   "data": {
+    "symbol": "XAUUSD",
+    "side": "BUY",
+    "entry": 2024.1000000000001,
+    "stop_loss": 2023.29,
+    "take_profit_1": 2025.73,
+    "take_profit_2": 2026.54,
+    "lots": 0.61,
+    "strategy_id": "fx_trend_momentum_v6",
+    "setup_id": "cf3a5f6546ad261e1504b897",
+    "net_rr": 2.012345679011771,
+    "analysis_id": "1a5c933136002c7fd735bfaf6c35340ed53e68ef57ae6d33e279b82cd12b1b62",
+    "risk_amount": 49.41,
+    "dry_run": true,
+    "score": 90.909091,
+    "votes": {
+     "mtf": 1,
+     "regime": 1,
+     "candle_pattern": 1,
+     "chart_pattern": 1,
+     "structure": 0,
+     "momentum": 1,
+     "confluence": 1,
+     "other_strategies": 0,
+     "session": 1
+    },
+    "risk_pct": 0.4941,
+    "spread_r": 0.2469
+   }
+  },
+  {
+   "id": 6,
+   "at": 1800000900.0,
+   "level": "info",
+   "kind": "scan",
+   "message": "Tarama: 4 sembol, 1 aday, 0 emir",
+   "data": {
+    "at": 1800000900.0,
+    "scanned": 4,
+    "closed": 0,
+    "candidates": 1,
+    "opened": 0,
+    "blocked": 0,
+    "news_blocked": 0,
+    "observed": 0,
+    "shadowed": 0,
+    "errors": 0,
+    "skipped": null,
+    "quoted": 1,
+    "candle_retries": 0,
+    "would_open": 1,
+    "reasons": {
+     "PROVIDER_UNAVAILABLE": 3
+    },
+    "blocked_reasons": {},
+    "veto_reasons": {
+     "provider unavailable: quote": 3
+    },
+    "data_rejects": {
+     "BTCUSD": "provider unavailable: quote",
+     "EURUSD": "provider unavailable: quote",
+     "GBPUSD": "provider unavailable: quote"
+    }
+   }
+  },
+  {
+   "id": 5,
+   "at": 1800000900.0,
+   "level": "info",
+   "kind": "signal",
+   "message": "[dry-run] XAUUSD BUY 0.61 lot @ 2024.1, SL 2023.29, TP 2026.54 (fx_trend_momentum_v6)",
+   "data": {
+    "symbol": "XAUUSD",
+    "side": "BUY",
+    "entry": 2024.1000000000001,
+    "stop_loss": 2023.29,
+    "take_profit_1": 2025.73,
+    "take_profit_2": 2026.54,
+    "lots": 0.61,
+    "strategy_id": "fx_trend_momentum_v6",
+    "setup_id": "76a803f1bd387dcf36443577",
+    "net_rr": 2.012345679011771,
+    "analysis_id": "f1190df4057db12dc6c538db823642b4a6516784d5db2c6e582d44e9a2f2003e",
+    "risk_amount": 49.41,
+    "dry_run": true,
+    "score": 90.909091,
+    "votes": {
+     "mtf": 1,
+     "regime": 1,
+     "candle_pattern": 1,
+     "chart_pattern": 1,
+     "structure": 0,
+     "momentum": 1,
+     "confluence": 1,
+     "other_strategies": 0,
+     "session": 1
+    },
+    "risk_pct": 0.4941,
+    "spread_r": 0.2469
+   }
+  },
+  {
+   "id": 4,
+   "at": 1800000000.0,
+   "level": "info",
+   "kind": "scan",
+   "message": "Tarama: 4 sembol, 2 aday, 0 emir",
+   "data": {
+    "at": 1800000000.0,
+    "scanned": 4,
+    "closed": 0,
+    "candidates": 2,
+    "opened": 0,
+    "blocked": 0,
+    "news_blocked": 0,
+    "observed": 0,
+    "shadowed": 1,
+    "errors": 0,
+    "skipped": null,
+    "quoted": 1,
+    "candle_retries": 0,
+    "would_open": 1,
+    "reasons": {
+     "PROVIDER_UNAVAILABLE": 3
+    },
+    "blocked_reasons": {},
+    "veto_reasons": {
+     "provider unavailable: quote": 3
+    },
+    "data_rejects": {
+     "BTCUSD": "provider unavailable: quote",
+     "EURUSD": "provider unavailable: quote",
+     "GBPUSD": "provider unavailable: quote"
+    }
+   }
+  },
+  {
+   "id": 3,
+   "at": 1800000000.0,
+   "level": "info",
+   "kind": "signal",
+   "message": "[dry-run] XAUUSD BUY 0.61 lot @ 2024.1, SL 2023.29, TP 2026.54 (fx_trend_momentum_v6)",
+   "data": {
+    "symbol": "XAUUSD",
+    "side": "BUY",
+    "entry": 2024.1000000000001,
+    "stop_loss": 2023.29,
+    "take_profit_1": 2025.73,
+    "take_profit_2": 2026.54,
+    "lots": 0.61,
+    "strategy_id": "fx_trend_momentum_v6",
+    "setup_id": "de4974e4389474812fd19f75",
+    "net_rr": 2.012345679011771,
+    "analysis_id": "ae36187295376fe5e85dc8fb0f8a5a42d6303b0110acf73a47f74d070b36230f",
+    "risk_amount": 49.41,
+    "dry_run": true,
+    "score": 90.909091,
+    "votes": {
+     "mtf": 1,
+     "regime": 1,
+     "candle_pattern": 1,
+     "chart_pattern": 1,
+     "structure": 0,
+     "momentum": 1,
+     "confluence": 1,
+     "other_strategies": 0,
+     "session": 1
+    },
+    "risk_pct": 0.4941,
+    "spread_r": 0.2469
+   }
+  },
+  {
+   "id": 2,
+   "at": 1800000000.0,
+   "level": "info",
+   "kind": "bot_started",
+   "message": "Bot başladı (sürüm 0.1.0, deneme modu): 4 sembol izleniyor",
+   "data": {
+    "universe": 4,
+    "catalog_errors": 0,
+    "dry_run": true,
+    "version": "0.1.0"
+   }
+  },
+  {
+   "id": 1,
+   "at": 1800000000.0,
+   "level": "info",
+   "kind": "capital_seen",
+   "message": "Deneme modu: hesapta okunan ilk varlık 10000.00 USD (bakiye 10000.00). Kayıp sınırı tabanı canlıya geçişte o andaki varlıktan alınacak.",
+   "data": {
+    "equity": 10000.0,
+    "balance": 10000.0,
+    "currency": "USD"
+   }
+  }
+ ]
+}

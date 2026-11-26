@@ -1,0 +1,48 @@
+{
+ "risk": {
+  "risk_pct": 0.5,
+  "max_open_bot": 3,
+  "per_symbol": 1,
+  "per_currency_side": 2,
+  "daily_loss_pct": 5.0,
+  "total_loss_pct": 25.0
+ },
+ "manage": {
+  "be_enabled": true,
+  "partial_enabled": true,
+  "trail_enabled": true,
+  "be_at_r": 1.0,
+  "partial_at_r": 2.0,
+  "partial_fraction": 0.5,
+  "trail_atr_mult": 1.0,
+  "tp2_r": 3.0
+ },
+ "news": {
+  "enabled": true,
+  "window_minutes": 30
+ },
+ "fusion": {
+  "enabled": true,
+  "min_score": 40.0,
+  "mid_score": 60.0,
+  "high_score": 80.0,
+  "weights": {
+   "mtf": 2.0,
+   "regime": 2.0,
+   "candle_pattern": 1.0,
+   "chart_pattern": 1.0,
+   "structure": 1.0,
+   "momentum": 1.0,
+   "confluence": 1.0,
+   "other_strategies": 1.0,
+   "session": 1.0
+  },
+  "pause_min_trades": 20,
+  "pause_avg_r": 0.0
+ },
+ "enabled_symbols": null,
+ "enabled_strategies": null,
+ "strategy_modes": {},
+ "dry_run": false,
+ "commission_per_lot": 0.0
+}

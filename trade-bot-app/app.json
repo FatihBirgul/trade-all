@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "Trade Bot",
+    "slug": "trade-bot-app",
+    "version": "1.0.0",
+    "scheme": "tradebot",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
+    "backgroundColor": "#F2F3FA",
+    "web": {
+      "bundler": "metro"
+    },
+    "android": {
+      "package": "com.fatihbirgul.tradeai",
+      "versionCode": 23,
+      "softwareKeyboardLayoutMode": "resize",
+      "allowBackup": false,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-foreground.png",
+        "backgroundImage": "./assets/adaptive-background.png",
+        "monochromeImage": "./assets/adaptive-monochrome.png",
+        "backgroundColor": "#2A2D7C"
+      },
+      "permissions": [
+        "android.permission.POST_NOTIFICATIONS"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-secure-store",
+      "expo-font",
+      "expo-notifications",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#2A2D7C",
+          "image": "./assets/splash-logo.png",
+          "imageWidth": 200,
+          "resizeMode": "contain"
+        }
+      ],
+      [
+        "expo-navigation-bar",
+        {
+          "enforceContrast": false,
+          "style": "dark",
+          "hidden": false
+        }
+      ]
+    ]
+  }
+}

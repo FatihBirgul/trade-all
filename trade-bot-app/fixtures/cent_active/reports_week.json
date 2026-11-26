@@ -1,0 +1,73 @@
+{
+ "period": "week",
+ "totals": {
+  "bot": {
+   "pnl": 3654.0,
+   "trades": 1,
+   "wins": 1,
+   "win_rate": 1.0
+  },
+  "manual": {
+   "pnl": 0,
+   "trades": 0,
+   "wins": 0,
+   "win_rate": null
+  },
+  "all": {
+   "pnl": 3654.0,
+   "trades": 1,
+   "wins": 1,
+   "win_rate": 1.0
+  }
+ },
+ "periods": {
+  "bot": [
+   {
+    "period": "2027-W02",
+    "pnl": 3654.0,
+    "trades": 1
+   }
+  ],
+  "manual": [],
+  "all": [
+   {
+    "period": "2027-W02",
+    "pnl": 3654.0,
+    "trades": 1
+   }
+  ]
+ },
+ "max_drawdown": {
+  "bot": 0.0,
+  "manual": 0.0,
+  "all": 0.0
+ },
+ "by_strategy": {
+  "fx_trend_momentum_v6": {
+   "pnl": 3654.0,
+   "trades": 1,
+   "wins": 1
+  }
+ },
+ "by_symbol": {
+  "XAUUSD": {
+   "pnl": 3654.0,
+   "trades": 1,
+   "wins": 1
+  }
+ },
+ "history": [
+  {
+   "position_id": "1001",
+   "origin": "bot",
+   "symbol": "XAUUSD",
+   "side": "BUY",
+   "entry": 2024.1,
+   "close_price": 2026.54,
+   "opened_at": 1800000000.0,
+   "closed_at": 1800000000.0,
+   "pnl": 3654.0,
+   "strategy_id": "fx_trend_momentum_v6"
+  }
+ ]
+}
