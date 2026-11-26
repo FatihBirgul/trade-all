@@ -10,6 +10,7 @@ import asyncio
 import dataclasses
 from importlib import metadata
 import logging
+import math
 import json
 import os
 import re
@@ -85,6 +86,8 @@ DATA_REJECTS_MAX = 40
 HEAL_PER_SCAN = 4  # tarama basina en cok bu kadar bosluk onarim istegi
 HEAL_RETRY = 6 * 3600.0  # borsanin da vermedigi bosluk icin yeniden deneme araligi
 # Ileri test (yalnizca deneme modunda, ayri dusuk oncelikli surecte): bkz. backtest.py
+HARD_MAX_RISK_PCT = 5.0  # tek emirde stopta olusacak zararin varliga orani icin MUTLAK tavan (ayar degil)
+HARD_MAX_NOTIONAL_X = 50.0  # tek pozisyonun buyuklugu / varlik icin MUTLAK tavan (ayar degil)
 BACKTEST_DELAY = 180.0  # acilistan sonra bekleme (sn)
 BACKTEST_DAYS = 90  # swing stratejileri: ilk 60 gun ic orneklem, son 30 gun dis orneklem
 BACKTEST_V9_DAYS = 60  # V9 pahalidir: son 60 gun (30 gun ic + 30 gun dis orneklem)
@@ -158,7 +161,7 @@ class Bot:
         self.account: Account | None = None
         self.provider = ExnessV9Provider(self.catalog, self.candles, self.quotes, lambda: self.account)
         self.executor = Executor(client, repo, notifier, self.catalog, clock=clock,
-                                 on_auth_error=self._auth_error)
+                                 on_auth_error=self._auth_error, lot_guard=self.lot_guard)
         self.shadow = ShadowBook(repo)
         self.streams: list = []
         self.started = False
@@ -1227,7 +1230,7 @@ class Bot:
                     for r in schema.parse_candles(payload):
                         if r["time"] + duration <= now:
                             rows.append((instrument.symbol, tf, r["time"], r["open"], r["high"], r["low"],
-                                         r["close"]))
+                                         r["close"], float(r.get("volume") or r.get("tick_volume") or 0.0)))
                     cursor += step
                     await self._sleep(BACKTEST_FETCH_PAUSE)
             await asyncio.to_thread(backtest.write_history, path, rows)
@@ -1347,6 +1350,34 @@ class Bot:
     async def _once_after(self, delay: float, action) -> None:
         await self._sleep(delay)
         await action()
+
+    def lot_guard(self, symbol: str, side: str, lots: float, entry: float | None, stop: float | None) -> None:
+        """Mutlak lot tavani: bakiye ve sembole gore. Asilirsa ValueError (emir kurulmaz).
+
+        Ayarlardan BAGIMSIZ, degistirilemeyen son kontrol; bot emirleri ve elle acilan emirler icin aynidir:
+        - stopta olusacak zarar varligin %`HARD_MAX_RISK_PCT`'inden buyuk olamaz,
+        - pozisyonun toplam buyuklugu (hesap para biriminde) varligin `HARD_MAX_NOTIONAL_X` katini asamaz.
+        Varlik ya da kur bilinmiyorsa emir gonderilmez. Normal boyutlandirma (risk %0,25-1) bu tavanin cok
+        altindadir; tavan yalnizca yanlis girilmis/hesaplanmis bir lotu (or. 10 lot) durdurur."""
+        equity = float(self.account.equity) if self.account is not None else 0.0
+        if equity <= 0 or not math.isfinite(equity):
+            raise ValueError("hesap varlığı bilinmiyor; emir gönderilmez")
+        if entry is None:  # fiyat verilmediyse (piyasa emri) anlik fiyat kullanilir
+            quote = self.quotes.quote(symbol)
+            entry = None if quote is None else float(quote["ask" if side == "BUY" else "bid"])
+        if entry is None or stop is None or lots is None or not lots > 0:
+            raise ValueError("lot tavanı denetlenemedi (giriş, stop ya da lot eksik)")
+        try:
+            loss = -self.provider.loss_for(symbol, side, lots, entry, stop)
+            notional = abs(self.provider.loss_for(symbol, "BUY", lots, entry, 0.0))
+        except (LookupError, KeyError):
+            raise ValueError("lot tavanı denetlenemedi (kur yok)") from None
+        if not math.isfinite(loss) or loss <= 0:
+            raise ValueError("lot tavanı denetlenemedi (stop girişin yanlış tarafında)")
+        if loss > equity * HARD_MAX_RISK_PCT / 100.0:
+            raise ValueError(f"lot mutlak üst sınırı aşıyor: stopta zarar varlığın %{HARD_MAX_RISK_PCT:g}'inden fazla")
+        if notional > equity * HARD_MAX_NOTIONAL_X:
+            raise ValueError(f"lot mutlak üst sınırı aşıyor: pozisyon varlığın {HARD_MAX_NOTIONAL_X:g} katından büyük")
 
     def entry_paused(self) -> bool:
         """Surec yeni basladi mi (RESTART_ENTRY_PAUSE dolmadi mi)? Doluncaya kadar yeni islem acilmaz."""

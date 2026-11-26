@@ -369,3 +369,67 @@ async def test_daily_candle_rate_limit_and_auth_errors_are_not_swallowed(tmp_pat
         await app.bot._daily_candles("XAUUSD")
     app.bot.candles.get = down
     await app.bot._daily_candles("XAUUSD")  # gecici hata: sessizce gecilir, tarama surer
+
+
+# ---------------------------------------------------------------- mutlak lot tavani
+async def test_absolute_lot_ceiling_stops_an_oversized_manual_order(tmp_path):
+    """Yanlislikla girilen buyuk lot (or. 10 lot) hicbir yoldan broker'a gitmez: tavan bakiyeye ve sembole baglidir."""
+    import httpx
+    from tests.api.test_manual_preview import client
+    from tradebot import app as app_module
+    app = await started(tmp_path)  # varlik 10.000; XAUUSD'de 5 birim stop = lot basina 500 zarar
+    base = {"symbol": "XAUUSD", "side": "BUY", "sl_distance": 5.0, "tp_distance": 10.0}
+    before = len(app.fake.requests)
+    async with client(app) as http:
+        preview = (await http.post("/trades/preview", json={**base, "lots": 10.0})).json()
+        assert any("GÖNDERİLEMEZ" in text and "mutlak üst sınır" in text for text in preview["warnings"])
+        refused = await http.post("/trades", json={**base, "lots": 10.0, "client_id": "buyuk-lot-0001"})
+        assert refused.status_code == 422 and "mutlak üst sınır" in refused.json()["detail"]
+        # Stopta zarar varligin %5'ini asan her lot reddedilir (1,5 lot = %7,5); sinirin altindaki kabul edilir.
+        assert (await http.post("/trades", json={**base, "lots": 1.5, "client_id": "buyuk-lot-0002"})).status_code == 422
+        assert len(app.fake.requests) == before and app.repo.orders_in(("PENDING", "ACKED", "UNKNOWN")) == []
+        accepted = await http.post("/trades", json={**base, "lots": 0.5, "client_id": "normal-lot-0001"})
+        assert accepted.status_code == 200 and accepted.json()["lots"] == 0.5
+    assert isinstance(httpx.__version__, str) and app_module.HARD_MAX_RISK_PCT == 5.0
+
+
+async def test_lot_ceiling_also_guards_bot_orders_and_scales_with_the_balance(tmp_path):
+    import dataclasses
+    from tradebot import app as app_module
+    app = await started(tmp_path)
+    quote = app.bot.quotes.quote("XAUUSD")
+    entry = quote["ask"]
+    guard = app.bot.lot_guard
+    guard("XAUUSD", "BUY", 0.5, entry, entry - 5.0)  # %2,5: gecer
+    with pytest.raises(ValueError, match="stopta zarar"):
+        guard("XAUUSD", "BUY", 1.01, entry, entry - 5.0)  # %5'in hemen ustu
+    with pytest.raises(ValueError, match="stopta zarar"):
+        guard("XAUUSD", "SELL", 1.01, entry, entry + 5.0)
+    # Cok dar stopla zarar kucuk gorunse de pozisyon buyuklugu varligin 50 katini asamaz.
+    lots = app.bot.account.equity * app_module.HARD_MAX_NOTIONAL_X / (entry * 100.0)
+    guard("XAUUSD", "BUY", lots * 0.99, entry, entry - 0.01)
+    with pytest.raises(ValueError, match="katından büyük"):
+        guard("XAUUSD", "BUY", lots * 1.01, entry, entry - 0.01)
+    with pytest.raises(ValueError, match="yanlış tarafında"):
+        guard("XAUUSD", "BUY", 0.1, entry, entry + 5.0)
+    # Tavan bakiyeyle kuculur: kucuk hesapta ayni lot reddedilir.
+    app.bot.account = dataclasses.replace(app.bot.account, equity=30.0)
+    with pytest.raises(ValueError, match="mutlak üst sınır"):
+        guard("XAUUSD", "BUY", 0.5, entry, entry - 5.0)
+    guard("XAUUSD", "BUY", 0.002, entry, entry - 5.0)
+    app.bot.account = None
+    with pytest.raises(ValueError, match="varlığı bilinmiyor"):
+        guard("XAUUSD", "BUY", 0.01, entry, entry - 5.0)
+
+
+async def test_bot_order_above_the_ceiling_is_not_sent(tmp_path):
+    from tradebot.signals.adapter import Candidate
+    app = await started(tmp_path)
+    entry = app.bot.quotes.quote("XAUUSD")["ask"]
+    huge = Candidate(symbol="XAUUSD", side="BUY", entry=entry, stop_loss=entry - 5.0, take_profit_1=entry + 5.0,
+                     take_profit_2=entry + 10.0, lots=10.0, strategy_id="fx_trend_momentum_v6", setup_id="tavan-testi",
+                     net_rr=2.0, analysis_id="a" * 64, risk_amount=5000.0)
+    before = len(app.fake.requests)
+    with pytest.raises(ValueError, match="mutlak üst sınır"):
+        await app.bot.executor.open(huge, "bot")
+    assert len(app.fake.requests) == before and app.repo.get_order("bot-tavan-testi") is None

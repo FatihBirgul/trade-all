@@ -8,6 +8,8 @@ from .strategies.donchian_breakout import DonchianBreakout
 from .strategies.ema_pullback import EmaPullback
 from .strategies.ema_pullback_h1 import EmaPullbackH1
 from .strategies.smc_sweep import SmcSweep
+from .strategies.v13 import V13
+from .strategies.week_trade import WeekTrade
 from .votes.confluence import Confluence
 from .votes.momentum import Momentum
 from .votes.mtf import Mtf
@@ -34,5 +36,11 @@ register(DonchianBreakout())
 register(SmcSweep())
 register(EmaPullbackH1("20_21"))
 register(EmaPullbackH1("21_50"))
+# Eski masanin GERCEK kodu (`smc.py`, v13) birebir tasindi; WEEK TRADE belgedeki 2 yillik testin kurallaridir.
+register(V13("smc", "H1"))
+register(V13("smc", "H4"))
+register(V13("ema", "H1"))
+register(V13("ema", "H4"))
+register(WeekTrade())
 
 __all__ = ["Context", "Module", "Signal", "Vote", "get", "modules", "register"]

@@ -98,14 +98,39 @@ def simulate_swing(side: str, entry: float, stop: float, target_r: float, at: fl
 
     `bars`: giris anini iceren mumdan baslayan bid mumlari. `spread_at(zaman)`: o andaki spread (SELL ask'tan
     kapanir). Ayni mumda once aleyhte hareket sayilir (kotumser)."""
+    if target_r <= 0:
+        return None
+    return _partial(side, entry, stop, SWING_TP1_R, target_r, SWING_LOCKS, at, bars, spread_at, SWING_MAX_BARS, False)
+
+
+# DAY plani (eski masanin v10 gun ici yonetimi): Hedef 1'de yari kapanir + stop girise; kalan Hedef 2'de kapanir.
+# Hedef 2'ye ilerlemeye gore: %40'ta stop girise, %60'ta yolun %25'i, %80'de %50'si kilitlenir. En cok 5 gun.
+PLAN_LOCKS = ((0.4, 0.0), (0.6, 0.25), (0.8, 0.5))
+PLAN_MAX_BARS = 480
+
+
+def simulate_plan(side: str, entry: float, stop: float, tp1: float, tp2: float, at: float, bars: list[dict], *,
+                  spread_at=None) -> dict | None:
+    """Fiyat olarak verilen iki hedefli plan -> `simulate_swing` ile ayni bicimde sonuc. Sure dolarsa kapanir."""
     risk = abs(entry - stop)
-    if risk <= 0 or target_r <= 0:
+    if risk <= 0:
+        return None
+    sign = 1.0 if side == "BUY" else -1.0
+    tp1_r, target_r = (tp1 - entry) * sign / risk, (tp2 - entry) * sign / risk
+    if tp1_r <= 0 or target_r <= 0:
+        return None
+    return _partial(side, entry, stop, tp1_r, target_r, PLAN_LOCKS, at, bars, spread_at, PLAN_MAX_BARS, True)
+
+
+def _partial(side, entry, stop, tp1_r, target_r, locks, at, bars, spread_at, max_bars, time_exit) -> dict | None:
+    risk = abs(entry - stop)
+    if risk <= 0:
         return None
     sign = 1.0 if side == "BUY" else -1.0
     spread_at = spread_at or (lambda moment: 0.0)
     stop_r, realized, remaining, partial = -1.0, 0.0, 1.0, False
     first, best, worst = None, 0.0, 0.0
-    after = [b for b in bars if b["time"] + BAR_SECONDS > at][:SWING_MAX_BARS]
+    after = [b for b in bars if b["time"] + BAR_SECONDS > at][:max_bars]
     for index, bar in enumerate(after):
         shift = spread_at(bar["time"]) if side == "SELL" else 0.0
         adverse = ((bar["low"] if side == "BUY" else bar["high"] + shift) - entry) * sign / risk
@@ -116,8 +141,8 @@ def simulate_swing(side: str, entry: float, stop: float, target_r: float, at: fl
             return {"first": first, "r": round(realized + remaining * stop_r, 3), "closed_at": closed_at,
                     "bars": index + 1, "mfe_r": round(best, 2), "mae_r": round(worst, 2)}
         best = max(best, favour)
-        if not partial and target_r > SWING_TP1_R and favour >= SWING_TP1_R:
-            realized += SWING_TP1_FRACTION * SWING_TP1_R
+        if not partial and target_r > tp1_r and favour >= tp1_r:
+            realized += SWING_TP1_FRACTION * tp1_r
             remaining -= SWING_TP1_FRACTION
             partial = True
             stop_r = max(stop_r, 0.0)
@@ -126,9 +151,72 @@ def simulate_swing(side: str, entry: float, stop: float, target_r: float, at: fl
             first = first or "TP"
             return {"first": first, "r": round(realized + remaining * target_r, 3), "closed_at": closed_at,
                     "bars": index + 1, "mfe_r": round(best, 2), "mae_r": round(worst, 2)}
-        for progress, locked in SWING_LOCKS:
+        for progress, locked in locks:
             if best >= progress * target_r:
                 stop_r = max(stop_r, locked * target_r)
     last = ((after[-1]["close"] + (spread_at(after[-1]["time"]) if side == "SELL" else 0.0)) - entry) * sign / risk if after else 0.0
+    if time_exit and len(after) >= max_bars:
+        return {"first": first or "TIME", "r": round(realized + remaining * last, 3),
+                "closed_at": after[-1]["time"] + BAR_SECONDS, "bars": len(after), "mfe_r": round(best, 2),
+                "mae_r": round(worst, 2)}
     return {"first": first, "r": None, "open_r": round(realized + remaining * last, 3), "closed_at": None,
             "bars": len(after), "mfe_r": round(best, 2), "mae_r": round(worst, 2)}
+
+
+H4_SECONDS = 14400
+TRAIL_BUFFER_ATR = 0.3  # yapi stopu: donus noktasinin 0,3 x 4H ATR otesi
+
+
+def simulate_trail(side: str, entry: float, stop: float, at: float, bars: list[dict], state, *, spread_at=None,
+                   be_at_r: float = 1.0, lock: tuple[float, float] | None = None, trail_atr: float | None = None,
+                   structure: bool = False, timeout: float | None = None) -> dict | None:
+    """Hedefsiz, iz suren stoplu plan (WEEK). Stop yalnizca ILERI tasinir.
+
+    - `be_at_r`: bu kadar R goruldugunde stop girise cekilir.
+    - `lock` = (esik R, kilit R): esik goruldugunde stop kilit R'ye cekilir; ardindan `trail_atr` verilmisse her 4H
+      kapanisinda stop = en iyi fiyat - trail_atr x 4H ATR.
+    - `structure`: her 4H kapanisinda, giristen SONRA olusmus son onayli donus noktasinin 0,3 x 4H ATR otesine.
+    - `timeout`: bu sure icinde +1R gorulmediyse mum kapanisinda cikilir.
+    `state(an)` -> o anda kapanmis 4H mumlarindan {atr, low: (zaman, fiyat) | None, high: ...} ya da None.
+    Ayni mumda once aleyhte hareket sayilir; stop guncellemeleri bir sonraki mumdan itibaren gecerlidir."""
+    risk = abs(entry - stop)
+    if risk <= 0:
+        return None
+    sign = 1.0 if side == "BUY" else -1.0
+    spread_at = spread_at or (lambda moment: 0.0)
+    stop_r, first, best, worst = -1.0, None, 0.0, 0.0
+    after = [b for b in bars if b["time"] + BAR_SECONDS > at][:SWING_MAX_BARS]
+
+    def done(r, closed_at, count, label):
+        return {"first": label, "r": round(r, 3), "closed_at": closed_at, "bars": count, "mfe_r": round(best, 2),
+                "mae_r": round(worst, 2)}
+
+    for index, bar in enumerate(after):
+        shift = spread_at(bar["time"]) if side == "SELL" else 0.0
+        adverse = ((bar["low"] if side == "BUY" else bar["high"] + shift) - entry) * sign / risk
+        favour = ((bar["high"] if side == "BUY" else bar["low"] + shift) - entry) * sign / risk
+        close_r = (bar["close"] + shift - entry) * sign / risk
+        worst, closed_at = min(worst, adverse), bar["time"] + BAR_SECONDS
+        if adverse <= stop_r:
+            return done(stop_r, closed_at, index + 1, "SL" if stop_r <= -1.0 else "TRAIL")
+        best = max(best, favour)
+        if timeout is not None and best < 1.0 and closed_at - at >= timeout:
+            return done(close_r, closed_at, index + 1, "TIME")
+        if best >= be_at_r:
+            stop_r = max(stop_r, 0.0)
+        if lock is not None and best >= lock[0]:
+            stop_r = max(stop_r, lock[1])
+        if closed_at % H4_SECONDS == 0:
+            now = state(closed_at)
+            if now and now.get("atr"):
+                if trail_atr is not None and lock is not None and best >= lock[0]:
+                    stop_r = max(stop_r, min(best - trail_atr * now["atr"] / risk, close_r))
+                pivot = now.get("low" if side == "BUY" else "high") if structure else None
+                if pivot is not None and pivot[0] > at:
+                    level = pivot[1] - sign * TRAIL_BUFFER_ATR * now["atr"]
+                    level_r = (level - entry) * sign / risk
+                    if level_r < close_r:  # stop fiyatin yanlis tarafina konmaz
+                        stop_r = max(stop_r, level_r)
+    last = ((after[-1]["close"] + (spread_at(after[-1]["time"]) if side == "SELL" else 0.0)) - entry) * sign / risk if after else 0.0
+    return {"first": first, "r": None, "open_r": round(last, 3), "closed_at": None, "bars": len(after),
+            "mfe_r": round(best, 2), "mae_r": round(worst, 2)}

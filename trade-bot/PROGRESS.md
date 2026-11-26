@@ -521,3 +521,55 @@ Bilinen sınırlar (düzeltilmedi, sonuç okunurken dikkate alınmalı):
 - Stoplar tam stop fiyatından dolmuş sayılır (boşluk/kayma yok). İlk çalışmalarda spread profili "bugünkü"
   spreadlerdir; saatlik ölçüm biriktikçe iyileşir.
 - Geçmiş çekimi ~840 istek; bu sırada canlı taramanın mum istekleri aynı sınırlayıcıda sıraya girer.
+
+## Eski masanın gerçek kodu: v13 hizalaması, WEEK TRADE ve mutlak lot tavanı (2026-11-26, kullanıcı onayıyla)
+
+Kullanıcı eski masanın gerçek dosyalarını gönderdi: `smc.py` (v13 SMC/EMA aday motoru), `ta_engine.py` ve tüm
+backtest dökümü. Önceki swing stratejileri (`tb_smc_sweep_v1`, `tb_emapb_h1_*`) bir .docx özetinden YORUMLA
+yazılmıştı; onlar karşılaştırma için duruyor, yanlarına gerçek kodun birebir taşınmış hâli eklendi.
+**Hepsi yalnızca gölge kipinde; canlıya alınmadı, risk ayarları değişmedi.**
+
+### Yeni gölge stratejiler
+| Kimlik | Kaynak | Mum | Çıkış (ileri testte) |
+|---|---|---|---|
+| `tb_smc_day_v13` | `smc.py` Model 1/3/4 | H1 | Hedef 1'de yarı + stop girişe, kalan Hedef 2; ilerleme kilitleri; en çok 5 gün |
+| `tb_emapb_day_v13` | `smc.py` Model 2 | H1 | aynı |
+| `tb_smc_week_v13` | `smc.py` Model 1/3/4 | H4 | hedef yok; +1R'de girişe, sonra 4H dönüş noktalarının 0,3 ATR ötesi |
+| `tb_emapb_week_v13` | `smc.py` Model 2 | H4 | aynı |
+| `tb_week_trade_v1` | belge §2.10 ("yumuşak") | H4 | +1R'de girişe, +2R'de +1R kilit, sonra en iyi − 2 × 4H ATR; 7 günde +1R yoksa çık |
+
+- **Birebirlik kanıtı:** özgün `smc.py` (pandas) ile taşınan kod aynı sentetik veride yan yana çalıştırıldı:
+  1408 karar anında geçen adaylar (yön, model, puan, stop, hedefler) aynı. Özgün kodun çıktısı
+  `tests/signals/v13_golden.json` olarak saklandı; test her çalışmada karşılaştırır (özgün dosya depoya konmadı).
+- **Kaynaktan bilinçli farklar:** veri Exness mumları (256 H1 / 120 H4 / 120 D1); seans saatleri UTC+3 sabit
+  kaydırmayla; sabit kodlu "US PMI −5" yok (canlıda botun haber kapısı; geçmiş oynatmada haber takvimi yok);
+  "önceki gün" = karar anında KAPANMIŞ son günlük mum (özgün kod İstanbul 00–03 arasında oluşmakta olan günü
+  kullanabiliyordu: bakış-öne); Hedef 1 tam 1,5R iken kayan nokta yuvarlamasının işlemi rastgele elemesi
+  engellendi (1e-9 pay).
+- **Çıkış planlarında yorum olan yerler:** `smc.py` DAY için yalnızca Hedef 1/Hedef 2 verir; yönetim v10 gün içi
+  kurallarından alındı (yarı + girişe; %40/%60/%80 ilerlemede girişe / %25 / %50 kilit; 5 gün). v13 WEEK için
+  kaynak "4H yapısının arkasından veya 4H kapanışı EMA20 ötesi" der; yapı sürümü uygulandı (EMA sürümü, EMA'ya
+  geri çekilmede girilen işlemi hemen kapatırdı).
+- **Canlı gölge kaydı** bu stratejileri de botun ortak 2R planıyla izler (kaba ölçüm); kesin ölçüm ileri testtir.
+
+### İleri test ft-4
+- Aynı oynatma: eski yorum stratejileri + 5 yeni strateji + V9 (iki stopla). Yeni stratejilerde seçilecek
+  parametre yok: iç/dış örneklem yalnızca yan yana raporlanır.
+- Strateji başına: işlem, kazanan/kaybeden, net R, **PF**, **en büyük düşüş (R)**, **maliyet/stop** (spread ÷ stop
+  mesafesi, medyan), çıkış türleri. Kırılımlar: model, enstrüman türü, kripto hafta sonu / hafta içi, DAY'de tetik
+  mumu hacmi (≥ 0,7 × 20 mum ortalaması / altı), WEEK TRADE'de aşırı uzama.
+- Geçmiş dosyası artık mum hacmini de saklar. Pencereler canlıyla aynı (256 H1 / 120 H4 / 120 D1).
+- Belgedeki ölçütler (karşılaştırma için): WEEK TRADE 2 yıl 182 işlem +21,8R PF 1,44 (XAU +16,4R, EUR −5,7R);
+  scalp net −145R (maliyet); BTC gün içi +23R PF 1,34; hafta sonu kripto gün içi pozitif; hacim filtresi gün
+  içinde +7R. Bizim test 90 gündür: aynı işaret beklenir, aynı büyüklük beklenmez; 90 günde WEEK işlem sayısı azdır.
+
+### Mutlak lot tavanı (eski masadaki 10 lot kazası için)
+- **Bulgu:** bot emirleri risk bütçesiyle boyutlanıyordu, ama ELLE girilen lot yalnızca enstrümanın en büyük
+  lotuyla sınırlıydı; bakiyeye bağlı mutlak bir tavan YOKTU.
+- **Eklenen:** `Bot.lot_guard` (ayar değil, sabit): tek emirde stopta oluşacak zarar varlığın **%5**'ini,
+  pozisyon büyüklüğü varlığın **50 katını** aşamaz; varlık ya da kur bilinmiyorsa emir gönderilmez. Bot emirleri
+  ve elle emirler aynı iki yürütücü yolundan geçer, ikisi de tavanı denetler. Önizleme "Bu emir GÖNDERİLEMEZ"
+  uyarısı verir. Normal boyutlandırma (risk %0,25–1) bu tavanın çok altındadır.
+- Testler: 10 lot elle emir 422 ve broker'a istek yok; bot adayı tavanı aşarsa gönderilmez; tavan bakiyeyle
+  küçülür; SAT yönü; dar stopta büyüklük tavanı.
+- Eski masa %5 bileşik risk kullanıyordu; bizim risk ayarlarımıza (en çok %1) dokunulmadı.

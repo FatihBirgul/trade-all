@@ -40,13 +40,17 @@ COOLDOWN = 60.0  # reddedilen degisiklik/kapama sonrasi ayni pozisyon icin bekle
 
 class Executor:
     def __init__(self, client, repo: Repo, notifier, catalog, *, clock: Callable[[], float] = time.time,
-                 on_auth_error: Callable[[ExnessError], Awaitable[None]] | None = None):
+                 on_auth_error: Callable[[ExnessError], Awaitable[None]] | None = None,
+                 lot_guard: Callable[[str, str, float, float | None, float | None], None] | None = None):
         self.client = client
         self.repo = repo
         self.notifier = notifier
         self.catalog = catalog
         self._clock = clock
         self._on_auth_error = on_auth_error
+        # Mutlak lot tavani (bkz. Bot.lot_guard): asilirsa ValueError verir ve emir KURULMAZ. Bot ve elle acilan
+        # butun emirler bu iki yoldan gecer; tavani atlayan baska bir acma yolu yoktur.
+        self._lot_guard = lot_guard
         self._cooldown: dict[str, float] = {}
 
     # ------------------------------------------------------------------ yardimcilar
@@ -89,6 +93,8 @@ class Executor:
         """
         key = f"bot-{candidate.setup_id}"
         instrument = self.catalog.get(candidate.symbol)
+        if self._lot_guard is not None:
+            self._lot_guard(candidate.symbol, candidate.side, candidate.lots, candidate.entry, candidate.stop_loss)
         path, body = schema.open_position_request(
             self.client.account_id, instrument, candidate.side, candidate.lots,
             sl=candidate.stop_loss, tp=candidate.take_profit_2, price=candidate.entry)
@@ -112,6 +118,8 @@ class Executor:
         denerse) ikinci bir emir gonderilmez.
         """
         instrument = self.catalog.get(symbol)
+        if self._lot_guard is not None:
+            self._lot_guard(symbol, side, lots, price, sl)
         path, body = schema.open_position_request(self.client.account_id, instrument, side, lots,
                                                   sl=sl, tp=tp, price=price)
         key = f"man-{client_id}" if client_id else f"man-{uuid.uuid4().hex}"

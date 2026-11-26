@@ -1,0 +1,715 @@
+{
+"days": 120,
+"count": {
+"H1": 200,
+"H4": 150
+},
+"seeds": 4,
+"checked": 1408,
+"rows": [
+{
+"seed": 0,
+"tf": "H1",
+"end": 2710,
+"family": "ema",
+"candidates": [
+[
+"L",
+"2",
+70,
+110.426179,
+111.765511,
+112.301243
+]
+]
+},
+{
+"seed": 0,
+"tf": "H1",
+"end": 2713,
+"family": "ema",
+"candidates": [
+[
+"L",
+"2",
+70,
+110.424151,
+111.809826,
+112.364096
+]
+]
+},
+{
+"seed": 0,
+"tf": "H4",
+"end": 655,
+"family": "smc",
+"candidates": [
+[
+"L",
+"3",
+94,
+103.74527,
+null,
+null
+]
+]
+},
+{
+"seed": 0,
+"tf": "H4",
+"end": 685,
+"family": "ema",
+"candidates": [
+[
+"L",
+"2",
+70,
+107.602268,
+null,
+null
+]
+]
+},
+{
+"seed": 0,
+"tf": "H4",
+"end": 691,
+"family": "ema",
+"candidates": [
+[
+"L",
+"2",
+70,
+106.752963,
+null,
+null
+]
+]
+},
+{
+"seed": 1,
+"tf": "H1",
+"end": 2732,
+"family": "smc",
+"candidates": [
+[
+"L",
+"3",
+71,
+100.367237,
+102.925496,
+103.673913
+]
+]
+},
+{
+"seed": 1,
+"tf": "H1",
+"end": 2781,
+"family": "smc",
+"candidates": [
+[
+"L",
+"4",
+76,
+103.457291,
+105.19432,
+105.889132
+]
+]
+},
+{
+"seed": 1,
+"tf": "H1",
+"end": 2822,
+"family": "smc",
+"candidates": [
+[
+"L",
+"4",
+66,
+105.25182,
+107.639461,
+108.594517
+]
+]
+},
+{
+"seed": 1,
+"tf": "H1",
+"end": 2825,
+"family": "smc",
+"candidates": [
+[
+"L",
+"4",
+66,
+105.257637,
+107.845055,
+108.880022
+]
+]
+},
+{
+"seed": 1,
+"tf": "H4",
+"end": 582,
+"family": "smc",
+"candidates": [
+[
+"S",
+"4",
+68,
+116.304127,
+null,
+null
+]
+]
+},
+{
+"seed": 1,
+"tf": "H4",
+"end": 584,
+"family": "smc",
+"candidates": [
+[
+"S",
+"4",
+68,
+116.300373,
+null,
+null
+]
+]
+},
+{
+"seed": 1,
+"tf": "H4",
+"end": 585,
+"family": "smc",
+"candidates": [
+[
+"S",
+"4",
+68,
+116.302841,
+null,
+null
+]
+]
+},
+{
+"seed": 1,
+"tf": "H4",
+"end": 662,
+"family": "ema",
+"candidates": [
+[
+"S",
+"2",
+70,
+100.929981,
+null,
+null
+]
+]
+},
+{
+"seed": 1,
+"tf": "H4",
+"end": 676,
+"family": "ema",
+"candidates": [
+[
+"S",
+"2",
+70,
+101.104726,
+null,
+null
+]
+]
+},
+{
+"seed": 1,
+"tf": "H4",
+"end": 677,
+"family": "ema",
+"candidates": [
+[
+"S",
+"2",
+70,
+100.923771,
+null,
+null
+]
+]
+},
+{
+"seed": 1,
+"tf": "H4",
+"end": 679,
+"family": "ema",
+"candidates": [
+[
+"S",
+"2",
+70,
+101.391477,
+null,
+null
+]
+]
+},
+{
+"seed": 2,
+"tf": "H1",
+"end": 2683,
+"family": "ema",
+"candidates": [
+[
+"L",
+"2",
+64,
+77.823381,
+79.982184,
+80.845705
+]
+]
+},
+{
+"seed": 2,
+"tf": "H4",
+"end": 654,
+"family": "ema",
+"candidates": [
+[
+"L",
+"2",
+70,
+77.013345,
+null,
+null
+]
+]
+},
+{
+"seed": 2,
+"tf": "H4",
+"end": 658,
+"family": "ema",
+"candidates": [
+[
+"L",
+"2",
+70,
+76.532098,
+null,
+null
+]
+]
+},
+{
+"seed": 2,
+"tf": "H4",
+"end": 660,
+"family": "ema",
+"candidates": [
+[
+"L",
+"2",
+64,
+76.349816,
+null,
+null
+]
+]
+},
+{
+"seed": 2,
+"tf": "H4",
+"end": 670,
+"family": "ema",
+"candidates": [
+[
+"L",
+"2",
+70,
+77.67001,
+null,
+null
+]
+]
+},
+{
+"seed": 2,
+"tf": "H4",
+"end": 675,
+"family": "ema",
+"candidates": [
+[
+"L",
+"2",
+70,
+77.837865,
+null,
+null
+]
+]
+},
+{
+"seed": 3,
+"tf": "H1",
+"end": 2705,
+"family": "ema",
+"candidates": [
+[
+"S",
+"2",
+64,
+57.431746,
+56.3544,
+55.923462
+]
+]
+},
+{
+"seed": 3,
+"tf": "H1",
+"end": 2707,
+"family": "ema",
+"candidates": [
+[
+"S",
+"2",
+64,
+57.427574,
+56.350111,
+55.919126
+]
+]
+},
+{
+"seed": 3,
+"tf": "H1",
+"end": 2710,
+"family": "ema",
+"candidates": [
+[
+"S",
+"2",
+64,
+57.664376,
+56.798618,
+56.5045
+]
+]
+},
+{
+"seed": 3,
+"tf": "H1",
+"end": 2713,
+"family": "ema",
+"candidates": [
+[
+"S",
+"2",
+64,
+57.669014,
+55.599152,
+54.771207
+]
+]
+},
+{
+"seed": 3,
+"tf": "H1",
+"end": 2715,
+"family": "smc",
+"candidates": [
+[
+"S",
+"3",
+94,
+57.668001,
+55.875912,
+55.159076
+]
+]
+},
+{
+"seed": 3,
+"tf": "H1",
+"end": 2715,
+"family": "ema",
+"candidates": [
+[
+"S",
+"2",
+64,
+57.668001,
+55.875912,
+55.159076
+]
+]
+},
+{
+"seed": 3,
+"tf": "H1",
+"end": 2726,
+"family": "ema",
+"candidates": [
+[
+"S",
+"2",
+70,
+57.423399,
+55.735335,
+55.060109
+]
+]
+},
+{
+"seed": 3,
+"tf": "H1",
+"end": 2732,
+"family": "ema",
+"candidates": [
+[
+"S",
+"2",
+70,
+57.173312,
+56.376072,
+56.057176
+]
+]
+},
+{
+"seed": 3,
+"tf": "H1",
+"end": 2734,
+"family": "ema",
+"candidates": [
+[
+"S",
+"2",
+64,
+57.186549,
+56.096007,
+55.659791
+]
+]
+},
+{
+"seed": 3,
+"tf": "H1",
+"end": 2870,
+"family": "smc",
+"candidates": [
+[
+"L",
+"4",
+76,
+62.788898,
+64.050556,
+64.555219
+]
+]
+},
+{
+"seed": 3,
+"tf": "H4",
+"end": 573,
+"family": "ema",
+"candidates": [
+[
+"S",
+"2",
+70,
+61.455982,
+null,
+null
+]
+]
+},
+{
+"seed": 3,
+"tf": "H4",
+"end": 650,
+"family": "ema",
+"candidates": [
+[
+"S",
+"2",
+70,
+60.153535,
+null,
+null
+]
+]
+},
+{
+"seed": 3,
+"tf": "H4",
+"end": 651,
+"family": "ema",
+"candidates": [
+[
+"S",
+"2",
+70,
+60.09731,
+null,
+null
+]
+]
+},
+{
+"seed": 3,
+"tf": "H4",
+"end": 653,
+"family": "ema",
+"candidates": [
+[
+"S",
+"2",
+64,
+60.153,
+null,
+null
+]
+]
+},
+{
+"seed": 3,
+"tf": "H4",
+"end": 658,
+"family": "ema",
+"candidates": [
+[
+"S",
+"2",
+64,
+60.14778,
+null,
+null
+]
+]
+},
+{
+"seed": 3,
+"tf": "H4",
+"end": 659,
+"family": "ema",
+"candidates": [
+[
+"S",
+"2",
+64,
+60.147097,
+null,
+null
+]
+]
+},
+{
+"seed": 3,
+"tf": "H4",
+"end": 660,
+"family": "ema",
+"candidates": [
+[
+"S",
+"2",
+70,
+59.964009,
+null,
+null
+]
+]
+},
+{
+"seed": 3,
+"tf": "H4",
+"end": 661,
+"family": "ema",
+"candidates": [
+[
+"S",
+"2",
+70,
+59.962209,
+null,
+null
+]
+]
+},
+{
+"seed": 3,
+"tf": "H4",
+"end": 662,
+"family": "ema",
+"candidates": [
+[
+"S",
+"2",
+70,
+59.963133,
+null,
+null
+]
+]
+},
+{
+"seed": 3,
+"tf": "H4",
+"end": 666,
+"family": "ema",
+"candidates": [
+[
+"S",
+"2",
+70,
+59.962038,
+null,
+null
+]
+]
+},
+{
+"seed": 3,
+"tf": "H4",
+"end": 667,
+"family": "ema",
+"candidates": [
+[
+"S",
+"2",
+70,
+59.961094,
+null,
+null
+]
+]
+},
+{
+"seed": 3,
+"tf": "H4",
+"end": 687,
+"family": "ema",
+"candidates": [
+[
+"S",
+"2",
+70,
+58.073193,
+null,
+null
+]
+]
+}
+]
+}

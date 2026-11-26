@@ -32,6 +32,7 @@ class Signal:
     target: float
     reason: str
     bar_time: int  # sinyali ureten son KAPANMIS M15 mumunun acilis zamani
+    plan: dict | None = None  # istege bagli cikis plani (ileri test icin): tur, model, puan, hedef fiyatlari
 
 
 @dataclass(frozen=True)
