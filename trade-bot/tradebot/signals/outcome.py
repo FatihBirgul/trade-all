@@ -19,8 +19,12 @@ def atr(bars: list[dict], period: int = 14) -> float | None:
 
 def simulate(side: str, entry: float, stop: float, tp1: float, tp2: float, at: float, bars: list[dict], *,
              be_at_r: float | None, partial_at_r: float | None, partial_fraction: float,
-             trail_atr_mult: float | None) -> dict | None:
-    """-> {first, r, closed_at, bars, mfe_r, mae_r}; `first`: ilk degen seviye (SL | TP1 | TP2 | None)."""
+             trail_atr_mult: float | None, spread: float = 0.0) -> dict | None:
+    """-> {first, r, closed_at, bars, mfe_r, mae_r}; `first`: ilk degen seviye (SL | TP1 | TP2 | None).
+
+    Mumlar bid fiyatidir. BUY ask'tan acilir (giris zaten spread kadar yukarida) ve bid'den kapanir; SELL
+    bid'den acilir ve ask'tan kapanir: `spread` verilirse SELL icin mum fiyatlari o kadar yukari kaydirilir.
+    """
     risk = abs(entry - stop)
     if risk <= 0:
         return None
@@ -35,8 +39,8 @@ def simulate(side: str, entry: float, stop: float, tp1: float, tp2: float, at: f
     stop_r, realized, remaining, partial_done = -1.0, 0.0, 1.0, False
     first, best, worst = None, 0.0, 0.0
     for index, bar in enumerate(after):
-        adverse = to_r(bar["low"] if side == "BUY" else bar["high"])
-        favour = to_r(bar["high"] if side == "BUY" else bar["low"])
+        adverse = to_r(bar["low"] if side == "BUY" else bar["high"] + spread)
+        favour = to_r(bar["high"] if side == "BUY" else bar["low"] + spread)
         worst, closed_at = min(worst, adverse), bar["time"] + BAR_SECONDS
         if adverse <= stop_r:
             first = first or ("SL" if stop_r <= -1.0 else None)
@@ -57,6 +61,20 @@ def simulate(side: str, entry: float, stop: float, tp1: float, tp2: float, at: f
             stop_r = max(stop_r, 0.0)
         if trail_atr_mult is not None and partial_done and width:
             stop_r = max(stop_r, best - trail_atr_mult * width / risk)
-    last = to_r(after[-1]["close"]) if after else 0.0
+    last = to_r(after[-1]["close"] + (spread if side == "SELL" else 0.0)) if after else 0.0
     return {"first": first, "r": None, "open_r": round(realized + remaining * last, 3), "closed_at": None,
             "bars": len(after), "mfe_r": round(best, 2), "mae_r": round(worst, 2)}
+
+
+def shape(side: str, entry: float, stop: float, at: float, bars: list[dict]) -> dict:
+    """Islemin kurulusu: stop mesafesi (% ve ATR kati) ve girisin son kapanisa gore yeri.
+
+    `late_r` > 0: fiyat, sinyal mumunun kapanisindan girise kadar islem yonunde ilerlemis (gec giris).
+    """
+    risk = abs(entry - stop)
+    sign = 1.0 if side == "BUY" else -1.0
+    before = [b for b in bars if b["time"] + BAR_SECONDS <= at]
+    width = atr(before)
+    return {"stop_pct": round(risk / entry * 100.0, 4) if entry else None,
+            "stop_atr": round(risk / width, 2) if width else None,
+            "late_r": round((entry - before[-1]["close"]) * sign / risk, 3) if before and risk > 0 else None}

@@ -32,6 +32,8 @@ summary="$(curl -fsS --max-time 10 "${TRADEBOT_SUMMARY_URL:-${URL%/health}/healt
 # Deneme modundaki sinyallerin sonucu (R cinsinden; hesap bilgisi icermez). Eski surumde yoktur.
 outcomes="$(curl -fsS --max-time 20 "${URL%/health}/health/outcomes" 2>/dev/null || true)"
 [ -n "$outcomes" ] && echo "sonuclar: $outcomes"
+backtest="$(curl -fsS --max-time 20 "${URL%/health}/health/backtest" 2>/dev/null || true)"
+[ -n "$backtest" ] && echo "ileri-test: $backtest"
 # Gunluk yedek: 36 saatten eskiyse (ya da hic alinmadiysa) uyar. Servis yeni baslamissa ilk yedek 30 dk icinde alinir.
 backup_at="$(printf '%s' "$body" | sed -n 's/.*"last_backup_at":\([0-9][0-9]*\).*/\1/p')"
 if [ -n "$backup_at" ] && [ $(( $(date +%s) - backup_at )) -gt 129600 ]; then
