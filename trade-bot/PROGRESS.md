@@ -730,3 +730,13 @@ aşaması baştan hesaplanır.
   kullanım şüphesinde geri alabildiği için ölçüm bir uyarıya bağlandı: gece taşınan bir pozisyonda swap ilk kez
   sıfırdan farklı görülürse `swap_charged` olayı ve "Swap uygulanıyor" bildirimi bir kez gönderilir (tutar yazılmaz;
   yalnızca okuma, hiçbir karar değişmez).
+- **DÜZELTME (aynı gün):** "API'de enstrüman bazında swap oranı yok" tespiti YANLIŞTI. Enstrüman koşullarında
+  `swap_long` / `swap_short` (gece başına puan) ve gün çarpanları var; gerçek hesaptan alınmış kayıtlarda değerler
+  sıfır değil (ör. EURUSD alış −16,5; XAUUSD alış −1297,2; USDCHF satış −31,8; GBPAUD alış −6,8; BTCUSD alış
+  −1352,9; karşı taraflar 0; çarşamba 3 kat, hafta sonu 0). Bu, hesabın swap'sız statüsüyle çelişiyor GÖRÜNÜR;
+  liste değerleri swap'sız hesapta uygulanmıyor olabilir. Kesin durum ancak gece taşınan pozisyondaki birikmiş
+  swap'tan anlaşılır (`swap_observed`; sıfırdan farklıysa `swap_charged` bildirimi).
+  - Artık okunuyor: `Instrument.swap_long/swap_short/swap_multipliers`; özet `swap_listed`.
+  - WEEK raporu: ana senaryo swap 0 (kullanıcı teyidi); ek senaryo `swap.listed` = broker'ın listelediği değerler
+    uygulansaydı net R (sembol bazında maliyetle); %3 / %6 varsayımı dipnot.
+  - Pozisyonda swap alanı yoksa ölçüm yapılmaz ("0" sayılmaz); tek pozisyondaki hata diğer ölçümleri düşürmez.

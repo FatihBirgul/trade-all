@@ -550,7 +550,10 @@ def run_job(job_path: Path, pool_factory=None) -> dict:
                 long_bars[symbol] = {"H4": [b for b in history.all(symbol, "H4") if b["time"] + 14400 <= job["end"]],
                                      "D1": history.all(symbol, "D1")}
         try:
-            replica = week_replica.report(long_bars, spreads.at, job["end"])
+            swaps = {row["symbol"]: {"long": row.get("swap_long"), "short": row.get("swap_short"),
+                                     "point": row.get("tick_size"), "multipliers": row.get("swap_multipliers")}
+                     for row in job["instruments"]}
+            replica = week_replica.report(long_bars, spreads.at, job["end"], swaps)
         except Exception as exc:  # noqa: BLE001 - yeniden uretim hatasi ana olcumu dusurmez
             replica = {"error": type(exc).__name__}
         first = {"signature": f"{signature}:{inputs}", "swing": summarize_swing(swing, job["split"]),

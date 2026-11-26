@@ -567,3 +567,20 @@ async def test_owner_is_told_once_when_a_swap_free_account_starts_paying_swap(tm
     event = next(e for e in app.repo.events() if e["kind"] == "swap_charged")
     assert "1.25" not in event["message"] and "1,25" not in event["message"]  # tutar yazilmaz
     assert any(item[0] == "swap_charged" for item in app.notifier.sent)
+
+
+async def test_missing_swap_field_is_not_reported_as_swap_free(tmp_path):
+    """API pozisyonda swap alanini vermezse olcum yapilmaz: "swap 0" diye yanlis teyit uretilmez."""
+    from tradebot.exness.schema import Position
+    app = await started(tmp_path)
+    now = app.clock["now"]
+    entry = app.bot.quotes.quote("XAUUSD")["ask"]
+    unknown = Position(id="p-1", symbol="XAUUSD", side="BUY", volume=0.1, open_price=entry, swap=None,
+                       opened_at=now - 2 * 86400)
+    bad = Position(id="p-2", symbol="YOKUSD", side="BUY", volume=0.1, open_price=1.0, swap=-1.0, opened_at=now - 2 * 86400)
+    good = Position(id="p-3", symbol="XAUUSD", side="SELL", volume=0.1, open_price=entry, swap=0.0,
+                    opened_at=now - 2 * 86400)
+    assert app.bot._observe_swaps([unknown, bad, good]) == []
+    assert list(app.bot.scan_summary()["swap_observed"]) == ["XAUUSD|SELL"]  # bozuk kayit digerini dusurmez
+    listed = app.bot.scan_summary()["swap_listed"]
+    assert isinstance(listed, dict)

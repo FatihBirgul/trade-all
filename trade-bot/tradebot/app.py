@@ -1224,6 +1224,10 @@ class Bot:
         # Olculen gecelik faiz (yillik %, eksi = maliyet; tutar yok). Bos ise henuz gece tasinan pozisyon olmadi.
         observed = self.repo.get_setting("swap_observed", {})
         out["swap_observed"] = observed if isinstance(observed, dict) else {}
+        # Broker'in enstruman kosullarinda bildirdigi swap (gece basina puan; [alis, satis]; eksi = maliyet).
+        # Piyasa bilgisidir. Swap'siz hesapta uygulanmayabilir: gercekte uygulanan `swap_observed`dadir.
+        out["swap_listed"] = {i.symbol: [i.swap_long, i.swap_short] for i in self.catalog.universe()
+                              if i.swap_long is not None or i.swap_short is not None}
         # Kimlik retleri (tanilama): an, tur, kod, kaynak, ardisik ret sayisi / duzelme suresi. Tutar ya da kimlik yok.
         out["auth"] = [
             {"at": round(event["at"]), "kind": event["kind"],
@@ -1430,16 +1434,22 @@ class Bot:
             seen = dict(seen) if isinstance(seen, dict) else {}
             changed = False
             for position in positions:
-                if position.closed or not position.opened_at or not position.open_price or not position.volume:
+                try:  # tek bir pozisyondaki sorun digerlerinin olcumunu dusurmez
+                    if (position.closed or position.swap is None or not position.opened_at
+                            or not position.open_price or not position.volume):
+                        continue  # swap alani yoksa olcum yapilmaz ("0" sayilmaz)
+                    nights = (int((now - SWAP_ROLLOVER) // 86400)
+                              - int((position.opened_at - SWAP_ROLLOVER) // 86400))
+                    if nights < 1:
+                        continue
+                    symbol = canonical(self.catalog, position.symbol)
+                    notional = abs(self.provider.loss_for(symbol, "BUY", position.volume, position.open_price, 0.0))
+                    if notional <= 0:
+                        continue
+                    rate = float(position.swap) / notional / nights * 365.0 * 100.0
+                except Exception as exc:  # noqa: BLE001
+                    log.info("swap olcumu yapilamadi: %s", type(exc).__name__)
                     continue
-                nights = int((now - SWAP_ROLLOVER) // 86400) - int((position.opened_at - SWAP_ROLLOVER) // 86400)
-                if nights < 1:
-                    continue
-                symbol = canonical(self.catalog, position.symbol)
-                notional = abs(self.provider.loss_for(symbol, "BUY", position.volume, position.open_price, 0.0))
-                if notional <= 0:
-                    continue
-                rate = float(position.swap or 0.0) / notional / nights * 365.0 * 100.0
                 key = f"{symbol}|{position.side}"
                 before = seen.get(key) if isinstance(seen.get(key), dict) else None
                 if position.swap and (before is None or before.get("zero", True)):

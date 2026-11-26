@@ -131,6 +131,12 @@ class Instrument:
     commission_type: str | None = None
     commission_value: float | None = None
     commission_currency: str | None = None
+    # Gecelik faiz (swap), enstruman kosullarindan: gece basina PUAN (fiyat adimi) cinsinden, alis ve satis icin
+    # ayri; eksi = maliyet. `swap_multipliers`: gun adi (MON..SUN) -> o gunun devrinde kac kat uygulanir.
+    # Swap'siz hesapta broker bunlari uygulamayabilir: gercek durum pozisyondaki birikmis swap'tan olculur.
+    swap_long: float | None = None
+    swap_short: float | None = None
+    swap_multipliers: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -160,7 +166,7 @@ class Position:
     sltp_order_id: str | None = None
     initial_volume: float | None = None
     commission: float = 0.0
-    swap: float = 0.0
+    swap: float | None = 0.0
     opened_at: float | None = None
     closed: bool = False
     profit: float | None = None  # API vermez; yerelde hesaplanir
@@ -415,6 +421,18 @@ def _kind(category: str, base: str, quote: str) -> Kind:
     return "other"
 
 
+def _swap_multipliers(raw: Any) -> dict | None:
+    if not isinstance(raw, list):
+        return None
+    out = {}
+    for row in raw:
+        if isinstance(row, dict) and isinstance(row.get("day"), str):
+            value = _num(row.get("multiplier"))
+            if value is not None and 0 <= value <= 10:
+                out[row["day"].upper()[:3]] = value
+    return out or None
+
+
 def parse_instrument(raw: Any) -> Instrument:
     if not isinstance(raw, dict) or not isinstance(raw.get("instrument"), str):
         raise ValueError("enstruman kaydi gecersiz")
@@ -442,6 +460,8 @@ def parse_instrument(raw: Any) -> Instrument:
         currency_margin=(_text(raw.get("margin_currency")) or base).upper(),
         calc_mode=_text(raw.get("calc_mode")) or "undefined", exec_mode=_text(raw.get("exec_mode")) or "undefined",
         trading_hours=_trading_hours(raw.get("trade_sessions")),
+        swap_long=_num(raw.get("swap_long")), swap_short=_num(raw.get("swap_short")),
+        swap_multipliers=_swap_multipliers(raw.get("swap_multipliers")),
         tradable=bool(complete) and raw.get("trade_mode", "enabled") == "enabled",
         commission_type=_text(commission.get("commission_type")), commission_value=_num(money.get("amount")),
         commission_currency=_text(money.get("currency")))
@@ -499,7 +519,7 @@ def parse_position(raw: Any, sltp: Order | None = None) -> Position | None:
                     open_price=_num(raw.get("open_price")), sl=sltp.sl if sltp else None,
                     tp=sltp.tp if sltp else None, sltp_order_id=sltp.id if sltp else None,
                     initial_volume=_num(raw.get("initial_volume")), commission=_num(raw.get("commission")) or 0.0,
-                    swap=_num(raw.get("swap")) or 0.0, opened_at=_epoch(raw.get("create_time")),
+                    swap=_num(raw.get("swap")), opened_at=_epoch(raw.get("create_time")),  # swap alani yoksa None
                     closed=raw.get("state") == "closed", comment=_text(raw.get("comment")))
 
 

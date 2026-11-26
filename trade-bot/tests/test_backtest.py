@@ -564,3 +564,35 @@ def test_corrected_week_measurement_takes_the_trail_atr_from_before_the_entry():
     # Ayni girdiyle iki kip yalnizca ATR kaynagi ve dolum kuraliyla ayrisir: en az bir islemin sonucu degisir.
     plain = W.run(bars, soft=True, mode="bt", found=found)
     assert [t["at"] for t in plain][:5] == [t["at"] for t in fixed][:5]
+
+
+def test_listed_swap_cost_counts_each_rollover_with_its_weekday_multiplier():
+    """Broker'in listeledigi swap (gece basina puan) uygulansaydi islemin maliyeti: carsamba 3 kat, hafta sonu 0."""
+    from tradebot import week_replica as W
+    monday = 4 * 86400.0  # 1970-01-05 pazartesi 00:00 UTC
+    swap = {"long": -16.5, "short": 0.0, "point": 0.00001,
+            "multipliers": {"MON": 1, "TUE": 1, "WED": 3, "THU": 1, "FRI": 1, "SAT": 0, "SUN": 0}}
+    week = W.listed_swap_r(swap, 1, monday + 3600, monday + 7 * 86400 + 3600, 0.012)  # bir tam hafta: 1+1+3+1+1 = 7
+    assert week == pytest.approx(-16.5 * 0.00001 * 7 / 0.012)
+    assert W.listed_swap_r(swap, 1, monday + 3600, monday + 20 * 3600, 0.012) == 0.0  # gun devrinden once kapandi
+    assert W.listed_swap_r(swap, 1, monday + 3600, monday + 23 * 3600, 0.012) == pytest.approx(-16.5e-5 / 0.012)
+    assert W.listed_swap_r(swap, -1, monday + 3600, monday + 7 * 86400, 0.012) == 0.0  # satis tarafi 0
+    assert W.listed_swap_r(None, 1, 0, 86400, 1.0) is None and W.listed_swap_r({"long": None, "point": 1e-5}, 1, 0, 1, 1.0) is None
+    rows = [{"at": W.START, "symbol": "EURUSD", "side": "BUY", "stretch": False, "r": 1.0, "exit": 0, "why": "stop",
+             "nights": 7, "cost_r": 0.01, "night_r": 0.02, "listed_swap_r": -0.1},
+            {"at": W.START + 86400, "symbol": "XAUUSD", "side": "SELL", "stretch": False, "r": 2.0, "exit": 0,
+             "why": "stop", "nights": 3, "cost_r": 0.01, "night_r": 0.02, "listed_swap_r": None}]
+    listed = W.summarize(rows, exclude_open=True)["swap"]["listed"]
+    assert listed == {"trades_with_data": 1, "trades": 2, "cost_r": -0.1, "all": 2.9, "ex_xau": 0.9,
+                      "by_symbol": {"BTCUSD": 0, "ETHUSD": 0, "XAUUSD": 0, "EURUSD": -0.1, "USDCHF": 0, "GBPAUD": 0}}
+
+
+def test_listed_swaps_are_read_from_the_real_instrument_conditions():
+    import json as _json
+    from pathlib import Path as _Path
+    from tradebot.exness import schema
+    raw = _json.loads((_Path(__file__).parent / "exness/fixtures/real/conditions/EURUSD.json").read_text())
+    item = schema.parse_instrument(raw)
+    assert item.swap_long == -16.5 and item.swap_short == 0.0
+    assert item.swap_multipliers["WED"] == 3 and item.swap_multipliers["SAT"] == 0
+    assert schema.parse_instrument({**raw, "swap_long": None, "swap_multipliers": "bozuk"}).swap_multipliers is None
