@@ -48,6 +48,24 @@ def load(path: Path, symbol: str, until: int | None) -> tuple[dict, dict, dict]:
     return series, spreads, meta
 
 
+def load_universe(path: Path, until: int | None) -> dict:
+    db = sqlite3.connect(path)
+    try:
+        names = [r[0] for r in db.execute("SELECT DISTINCT symbol FROM bars WHERE tf='D1'")]
+        out = {}
+        for name in names:
+            rows = db.execute("SELECT time, open, high, low, close FROM bars WHERE symbol=? AND tf='D1' ORDER BY time",
+                              (name,)).fetchall()
+            if until is not None:
+                rows = [r for r in rows if r[0] + 86400 <= until]
+            if rows:
+                arr = np.array(rows, dtype=float)
+                out[name] = E.Series(name, "D1", arr[:, 0].astype(np.int64), arr[:, 1], arr[:, 2], arr[:, 3], arr[:, 4])
+        return out
+    finally:
+        db.close()
+
+
 def kind_of(symbol: str, job: dict) -> str:
     if symbol in INDICES:
         return "index"
@@ -112,6 +130,7 @@ def run_symbol(data: Path, job: dict, symbol: str, out: Path, only: list[str] | 
     data_from = int(series["H1"].time[0]) + WARMUP_DAYS * 86400
     result["data_from"] = data_from
     daily = series["D1"]
+    series["universe"] = load_universe(data, plan["holdout"][0])  # capraz kesit: diger sembollerin D1'i (kasa kesik)
     for strategy in STRATEGIES:
         if (only and strategy.id not in only) or kind not in strategy.kinds:
             continue
@@ -186,8 +205,10 @@ def holdout(data: Path, job: dict, wf: dict, out: Path) -> dict:
     by_symbol: dict = {}
     for key in wf["approved_candidates"]:
         by_symbol.setdefault(key["symbol"], []).append(key)
+    universe = load_universe(data, None)
     for symbol, keys in by_symbol.items():
         series, spreads, meta = load(data, symbol, None)
+        series["universe"] = universe
         plan = E.timeline(meta["end"])
         kind, costs = kind_of(symbol, job), None
         costs = costs_for(symbol, job, spreads)

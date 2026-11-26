@@ -160,3 +160,87 @@ def test_holy_grail_and_bollinger_reversion_follow_the_trend_direction():
     assert not hg.short.any() and np.all(hg.stop[np.flatnonzero(hg.long)] > 0)
     br = S.bollinger_revert(s, {})
     assert not br.short[220:].any()
+
+
+def hourly(closes, start=T0, spread=0.2):
+    c = np.array(closes, float)
+    return E.Series("US500", "H1", start + np.arange(len(c)) * 3600, c.copy(), c + spread, c - spread, c)
+
+
+def test_williams_breakout_enters_once_per_day_and_exits_at_the_day_close():
+    from tradebot.research.data import aggregate
+    closes = [100.0] * 24 + [100.0, 100.5, 103.0, 103.5] + [103.0] * 20
+    h1 = hourly(closes, spread=1.0)
+    rows = [{"time": int(h1.time[i]), "open": h1.open[i], "high": h1.high[i], "low": h1.low[i], "close": h1.close[i]}
+            for i in range(len(h1))]
+    bars = aggregate(rows, 86400)
+    d1 = E.Series("US500", "D1", np.array([b["time"] for b in bars]), *(np.array([b[k] for b in bars])
+                                                                       for k in ("open", "high", "low", "close")))
+    spec = S.williams(h1, {"D1": d1})
+    # dunku aralik 2.0 -> seviye 100 + 1.2 = 101.2; ilk asan H1 kapanisi 26. mum
+    assert np.flatnonzero(spec.long).tolist() == [26] and spec.exit_long[47]
+
+
+def test_nr7_and_nr4_inside_break_out_on_the_following_close():
+    highs = [110, 109, 108, 107, 106, 105, 101, 103]
+    lows = [90, 91, 92, 93, 94, 95, 99.5, 98]
+    closes = [100, 100, 100, 100, 100, 100, 100, 102]
+    s = E.Series("X", "D1", T0 + np.arange(8) * 86400, np.array(closes, float), np.array(highs, float),
+                 np.array(lows, float), np.array(closes, float))
+    spec = S.narrow_range(7, False)(s, {})
+    assert spec.long[7] and spec.stop[7] == pytest.approx(102 - 99.5)
+    spec4 = S.narrow_range(4, True)(s, {})
+    assert spec4.long[7]  # 6. gun hem NR4 hem ic gun
+
+
+def test_turn_of_month_and_pre_holiday_use_the_trading_calendar():
+    days = np.arange(np.datetime64("2024-06-20"), np.datetime64("2024-07-10"))
+    times = np.array([int(np.datetime64(d, "s").astype(np.int64)) for d in days])
+    c = np.linspace(100, 101, len(times))
+    s = E.Series("US500", "D1", times, c, c + 1, c - 1, c)
+    dates = [str(d) for d in days]
+    tom = S.turn_of_month(s, {})
+    assert [dates[i] for i in np.flatnonzero(tom.long)] == ["2024-06-27"]  # 28 Haziran Cuma son islem gunu
+    assert "2024-07-03" in [dates[i] for i in np.flatnonzero(tom.exit_long)]  # 1, 2, 3 Temmuz
+    pre = S.pre_holiday(s, {})
+    assert [dates[i] for i in np.flatnonzero(pre.long)] == ["2024-06-18", "2024-07-03"][1:]  # 4 Temmuz oncesi
+    assert date_in(S.us_holidays(2024), "2024-03-29") and date_in(S.us_holidays(2022), "2022-06-20")
+
+
+def date_in(days, text):
+    from datetime import date
+    return date.fromisoformat(text) in days
+
+
+def test_overnight_and_opening_range_follow_new_york_cash_hours():
+    start = 1_704_196_800  # 2024-01-02 12:00 UTC = 07:00 NY (kis)
+    closes = [100.0] * 2 + [100.0, 101.0] + [100.5] * 4 + [102.0] + [101.0] * 20
+    s = hourly(closes, start=start, spread=0.5)
+    on = S.overnight(s, {})
+    from zoneinfo import ZoneInfo
+    ny = [t.hour for t in S._local(s.time, ZoneInfo("America/New_York"))]
+    assert all(ny[i] == 15 for i in np.flatnonzero(on.long)) and all(ny[i] == 9 for i in np.flatnonzero(on.exit_long))
+    orb = S.opening_range(s, {})
+    hits = np.flatnonzero(orb.long)
+    assert len(hits) == 1 and ny[hits[0]] >= 10 and orb.stop[hits[0]] > 0
+
+
+def test_currency_and_cross_asset_momentum_pick_by_past_returns_only():
+    n = 400
+    times = T0 + np.arange(n) * 86400
+    def mk(name, drift):
+        c = 100 * np.exp(np.cumsum(np.full(n, drift)))
+        return E.Series(name, "D1", times, c, c * 1.001, c * 0.999, c)
+    drifts = {"EURUSD": 0.002, "GBPUSD": 0.001, "AUDUSD": 0.0, "NZDUSD": -0.0005, "USDJPY": 0.003,
+              "USDCHF": -0.001, "USDCAD": 0.0002}
+    universe = {k: mk(k, v) for k, v in drifts.items()}
+    universe["EURJPY"] = mk("EURJPY", 0.0)
+    spec = S.currency_momentum(universe["EURJPY"], {"universe": universe})
+    assert spec.long.any() and not spec.short.any()  # EUR en guclu, JPY en zayif
+    assert all(S._utc(universe["EURJPY"].time)[i].weekday() < S._utc(universe["EURJPY"].time)[i - 1].weekday()
+               for i in np.flatnonzero(spec.long))
+    for k, v in {"US500": 0.004, "XAUUSD": 0.0035, "BTCUSD": 0.003, "US30": -0.001}.items():
+        universe[k] = mk(k, v)
+    cam = S.cross_asset_momentum(universe["US500"], {"universe": universe})
+    loser = S.cross_asset_momentum(universe["US30"], {"universe": universe})
+    assert cam.long.any() and not loser.long.any()

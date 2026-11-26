@@ -182,6 +182,317 @@ def holy_grail(s: Series, ctx) -> Spec:
     return Spec(long=long, short=short, stop=stop, trail=3.0 * a)
 
 
+# ---------------------------------------------------------------- yardimcilar (zaman)
+def _utc(times) -> list:
+    from datetime import datetime, timezone
+    return [datetime.fromtimestamp(int(x), timezone.utc) for x in times]
+
+
+def _local(moments, zone) -> list:
+    from datetime import datetime, timezone
+    return [datetime.fromtimestamp(int(x), timezone.utc).astimezone(zone) for x in moments]
+
+
+def _daily_map(s: Series, d: Series) -> np.ndarray:
+    """Her mumun kapanisinda kapanmis son D1 mumu (-1: yok)."""
+    return np.searchsorted(d.time + 86400, s.time + s.seconds, side="right") - 1
+
+
+# ---------------------------------------------------------------- B. kirilim / volatilite
+def williams(s: Series, ctx) -> Spec:
+    """Gun acilisi +/- 0,6 x dunku aralik; seviye H1 KAPANISIYLA asilinca giris, gun sonunda cikis."""
+    d = ctx["D1"]
+    di = _daily_map(s, d)
+    n = len(s)
+    day = (s.time // 86400).astype(np.int64)
+    first = np.concatenate([[True], day[1:] != day[:-1]])
+    day_open = np.zeros(n)
+    current = np.nan
+    for i in range(n):
+        if first[i]:
+            current = s.open[i]
+        day_open[i] = current
+    rng = np.where(di >= 0, (d.high - d.low)[np.clip(di, 0, None)], np.nan)
+    # dunku aralik: kapanmis son D1 bugunun mumu olamaz (bugun kapanmadi) -> di dunu gosterir
+    up, down = day_open + 0.6 * rng, day_open - 0.6 * rng
+    prev = np.concatenate([[np.nan], s.close[:-1]])
+    same_day = np.concatenate([[False], day[1:] == day[:-1]])
+    long = (s.close > up) & ~((prev > up) & same_day)
+    short = (s.close < down) & ~((prev < down) & same_day)
+    day_end = (s.time + s.seconds) % 86400 == 0
+    long &= ~day_end
+    short &= ~day_end
+    return Spec(long=long, short=short, stop=_atr_stop(s), exit_long=day_end, exit_short=day_end)
+
+
+def narrow_range(k: int, inside: bool):
+    def build(s: Series, ctx) -> Spec:
+        span = s.high - s.low
+        narrow = np.zeros(len(s), bool)
+        for i in range(k - 1, len(s)):
+            narrow[i] = span[i] <= span[i - k + 1:i + 1].min()
+        if inside:
+            prev_h, prev_l = np.concatenate([[np.nan], s.high[:-1]]), np.concatenate([[np.nan], s.low[:-1]])
+            narrow &= (s.high < prev_h) & (s.low > prev_l)
+        setup = np.concatenate([[False], narrow[:-1]])
+        hi, lo = np.concatenate([[np.nan], s.high[:-1]]), np.concatenate([[np.nan], s.low[:-1]])
+        long, short = setup & (s.close > hi), setup & (s.close < lo)
+        stop = np.where(long, s.close - lo, np.where(short, hi - s.close, NAN))
+        a = ind.atr(s.high, s.low, s.close, 14)
+        return Spec(long=long, short=short, stop=stop, trail=3.0 * a)
+    return build
+
+
+def opening_range(s: Series, ctx) -> Spec:
+    """ABD nakit acilisinin ilk saati (09:00-10:00 NY H1 mumu) araligi; gun icinde kapanisla kirilim; 16:00 NY'de cikis."""
+    from zoneinfo import ZoneInfo
+    ny = _local(s.time, ZoneInfo("America/New_York"))
+    n = len(s)
+    long, short, stop = _false(n), _false(n), np.full(n, NAN)
+    exit_ = _false(n)
+    hi = lo = None
+    taken = None
+    for i in range(n):
+        t = ny[i]
+        if t.weekday() >= 5:
+            continue
+        if t.hour == 9:
+            hi, lo, taken = s.high[i], s.low[i], t.date()
+            continue
+        if t.hour == 15:
+            exit_[i] = True  # 15:00-16:00 mumunun kapanisi = nakit kapanis
+            continue
+        if hi is None or taken != t.date() or not 10 <= t.hour < 15:
+            continue
+        if s.close[i] > hi:
+            long[i], stop[i], hi = True, s.close[i] - lo, np.inf  # gunde bir giris
+        elif s.close[i] < lo:
+            short[i], stop[i], lo = True, hi - s.close[i], -np.inf
+    return Spec(long=long, short=short, stop=stop, exit_long=exit_, exit_short=exit_)
+
+
+def keltner(s: Series, ctx) -> Spec:
+    mid = ind.ema(s.close, 20)
+    a = ind.atr(s.high, s.low, s.close, 14)
+    upper, lower = mid + 2.0 * a, mid - 2.0 * a
+    return Spec(long=s.close > upper, short=s.close < lower, stop=2.0 * a, exit_long=s.close < mid,
+                exit_short=s.close > mid)
+
+
+def bollinger_squeeze(s: Series, ctx) -> Spec:
+    mid, upper, lower = ind.bollinger(s.close, 20, 2.0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        width = (upper - lower) / mid
+    look = 756  # ~6 ay H4
+    low6 = ind.rolling_min(np.where(np.isnan(width), np.inf, width), look, prior=False)
+    squeezed = ind.rolling_max((width <= low6 + 1e-12).astype(float), 5, prior=False) > 0
+    return Spec(long=squeezed & (s.close > upper), short=squeezed & (s.close < lower), stop=_atr_stop(s),
+                exit_long=s.close < mid, exit_short=s.close > mid)
+
+
+def asia_london_h1(s: Series, ctx) -> Spec:
+    """Mevcut golge stratejinin H1 karsiligi: Londra 00-08 araligi, 08-12 arasinda ilk H1 kapanisi disarida;
+    stop karsi uc, hedef aralik genisligi, 21:00 Londra'da cikis; aralik 0,2-1,0 x D1 ATR(14)."""
+    from zoneinfo import ZoneInfo
+    ld = _local(s.time, ZoneInfo("Europe/London"))
+    d = ctx["D1"]
+    di = _daily_map(s, d)
+    datr = ind.atr(d.high, d.low, d.close, 14)
+    n = len(s)
+    long, short, stop, target, exit_ = _false(n), _false(n), np.full(n, NAN), np.full(n, NAN), _false(n)
+    day, hi, lo, done = None, -np.inf, np.inf, False
+    for i in range(n):
+        t = ld[i]
+        if t.date() != day:
+            day, hi, lo, done = t.date(), -np.inf, np.inf, False
+        if t.hour < 8:
+            hi, lo = max(hi, s.high[i]), min(lo, s.low[i])
+            continue
+        if t.hour == 20:
+            exit_[i] = True  # 20:00-21:00 mumunun kapanisi
+        if done or t.hour >= 12 or not np.isfinite(hi) or di[i] < 0:
+            continue
+        width = hi - lo
+        a = datr[di[i]]
+        if not (a > 0 and 0.2 * a <= width <= 1.0 * a):
+            done = True
+            continue
+        if s.close[i] > hi:
+            long[i], stop[i], target[i], done = True, s.close[i] - lo, hi + width - s.close[i], True
+        elif s.close[i] < lo:
+            short[i], stop[i], target[i], done = True, hi - s.close[i], s.close[i] - (lo - width), True
+        else:
+            continue
+    target = np.where(target > 0, target, NAN)
+    long &= np.isfinite(target)
+    short &= np.isfinite(target)
+    return Spec(long=long, short=short, stop=stop, target=target, exit_long=exit_, exit_short=exit_)
+
+
+# ---------------------------------------------------------------- D. takvim (endeksler)
+def us_holidays(year: int) -> set:
+    """NYSE tatilleri (kural tabanli): yilbasi, MLK, Baskanlar, Kutsal Cuma, Anma, Juneteenth (2022+), 4 Temmuz,
+    Isci, Sukran, Noel; hafta sonuna denk gelen sabit tatil Cuma/Pazartesi'ye kayar."""
+    from datetime import date, timedelta
+
+    def nth(month, weekday, k):
+        d0 = date(year, month, 1)
+        return d0 + timedelta(days=(weekday - d0.weekday()) % 7 + 7 * (k - 1))
+
+    def last(month, weekday):
+        d0 = date(year, month + 1, 1) - timedelta(days=1) if month < 12 else date(year, 12, 31)
+        return d0 - timedelta(days=(d0.weekday() - weekday) % 7)
+
+    def observed(d0):
+        return d0 - timedelta(days=1) if d0.weekday() == 5 else d0 + timedelta(days=1) if d0.weekday() == 6 else d0
+
+    a, b, c = year % 19, year // 100, year % 100
+    d_, e = b // 4, b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d_ - g + 15) % 30
+    i_, k = c // 4, c % 4
+    l_ = (32 + 2 * e + 2 * i_ - h - k) % 7
+    m = (a + 11 * h + 22 * l_) // 451
+    month = (h + l_ - 7 * m + 114) // 31
+    day = (h + l_ - 7 * m + 114) % 31 + 1
+    easter = date(year, month, day)
+    days = {observed(date(year, 1, 1)), nth(1, 0, 3), nth(2, 0, 3), easter - timedelta(days=2), last(5, 0),
+            observed(date(year, 7, 4)), nth(9, 0, 1), nth(11, 3, 4), observed(date(year, 12, 25))}
+    if year >= 2022:
+        days.add(observed(date(year, 6, 19)))
+    return days
+
+
+def _trading_days(s: Series) -> tuple[list, np.ndarray]:
+    """D1 mumlarinin tarihleri ve islem gunu mu (hafta ici, tatil degil)."""
+    dates = [t.date() for t in _utc(s.time)]
+    hol = set()
+    for y in {d.year for d in dates}:
+        hol |= us_holidays(y)
+    trading = np.array([d.weekday() < 5 and d not in hol for d in dates])
+    return dates, trading
+
+
+def turn_of_month(s: Series, ctx) -> Spec:
+    """Ayin son islem gununden bir onceki gunun kapanisinda AL; yeni ayin 3. islem gunu kapanisinda cikis.
+    (Takvim onceden bilinir: 'son islem gunu' tatil takviminden belirlenir.)"""
+    dates, trading = _trading_days(s)
+    n = len(s)
+    long, exit_ = _false(n), _false(n)
+    idx = [i for i in range(n) if trading[i]]
+    for pos, i in enumerate(idx):
+        nxt = idx[pos + 1] if pos + 1 < len(idx) else None
+        after = idx[pos + 2] if pos + 2 < len(idx) else None
+        if nxt is not None and after is not None and dates[nxt].month == dates[i].month and dates[after].month != dates[i].month:
+            long[i] = True
+        count = 0
+        for q in range(pos, -1, -1):
+            if dates[idx[q]].month != dates[i].month:
+                break
+            count += 1
+        if count == 3:
+            exit_[i] = True
+    return Spec(long=long, short=_false(n), stop=_atr_stop(s), exit_long=exit_)
+
+
+def overnight(s: Series, ctx) -> Spec:
+    """ABD nakit kapanisinda (15:00-16:00 NY H1 mumunun kapanisi) AL; ertesi islem gunu 09:00-10:00 NY mumunun
+    kapanisinda cikis (nakit acilistan yarim saat sonra: H1 verisiyle en yakin an)."""
+    from zoneinfo import ZoneInfo
+    ny = _local(s.time, ZoneInfo("America/New_York"))
+    long = np.array([t.weekday() < 5 and t.hour == 15 for t in ny])
+    exit_ = np.array([t.weekday() < 5 and t.hour == 9 for t in ny])
+    return Spec(long=long, short=_false(len(s)), stop=_atr_stop(s), exit_long=exit_)
+
+
+def pre_holiday(s: Series, ctx) -> Spec:
+    dates, trading = _trading_days(s)
+    hol = set()
+    for y in {d.year for d in dates}:
+        hol |= us_holidays(y)
+    from datetime import timedelta
+    n = len(s)
+    long = _false(n)
+    for i in range(n):
+        if not trading[i]:
+            continue
+        nxt = dates[i] + timedelta(days=1)
+        while nxt.weekday() >= 5:
+            nxt += timedelta(days=1)
+        long[i] = nxt in hol
+    return Spec(long=long, short=_false(n), stop=_atr_stop(s), exit_long=trading.copy())
+
+
+# ---------------------------------------------------------------- E. capraz kesit (diger sembollerin D1 kapanislari)
+CURRENCIES = ("USD", "EUR", "GBP", "JPY", "CHF", "CAD", "AUD", "NZD")
+USD_PAIRS = {"EUR": ("EURUSD", 1), "GBP": ("GBPUSD", 1), "AUD": ("AUDUSD", 1), "NZD": ("NZDUSD", 1),
+             "JPY": ("USDJPY", -1), "CHF": ("USDCHF", -1), "CAD": ("USDCAD", -1)}
+
+
+def _closes_at(other: Series, moments: np.ndarray) -> np.ndarray:
+    """Her an icin `other`in o anda kapanmis son D1 kapanisi."""
+    k = np.searchsorted(other.time + 86400, moments, side="right") - 1
+    return np.where(k >= 0, other.close[np.clip(k, 0, None)], np.nan)
+
+
+def currency_momentum(s: Series, ctx) -> Spec:
+    """Haftanin ilk D1 kapanisinda 8 para birimini USD'ye karsi 63 islem gunu getirisine gore sirala; en guclu /
+    en zayif cifti AL (sembol bu ciftse; tersiyse SAT); bir sonraki haftalik dengelemede secili degilse cikis."""
+    base, quote = s.symbol[:3], s.symbol[3:6]
+    n = len(s)
+    long, short, exit_ = _false(n), _false(n), _false(n)
+    universe = ctx.get("universe") or {}
+    if base not in CURRENCIES or quote not in CURRENCIES:
+        return Spec(long=long, short=short, stop=np.full(n, NAN))
+    moments = s.time + s.seconds
+    weekday = np.array([t.weekday() for t in _utc(s.time)])
+    first = np.concatenate([[False], weekday[1:] < weekday[:-1]])  # haftanin ilk D1 mumu
+    strength = {"USD": np.zeros(n)}
+    for cur, (pair, sign) in USD_PAIRS.items():
+        other = universe.get(pair)
+        if other is None:
+            return Spec(long=long, short=short, stop=np.full(n, NAN))
+        now, past = _closes_at(other, moments), _closes_at(other, moments - 91 * 86400)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            strength[cur] = sign * np.log(now / past)
+    table = np.vstack([strength[c] for c in CURRENCIES])
+    ok = np.all(np.isfinite(table), axis=0)
+    best = np.argmax(np.where(ok, table, -np.inf), axis=0)
+    worst = np.argmin(np.where(ok, table, np.inf), axis=0)
+    bi, qi = CURRENCIES.index(base), CURRENCIES.index(quote)
+    pick_long = ok & (best == bi) & (worst == qi)
+    pick_short = ok & (best == qi) & (worst == bi)
+    long, short = first & pick_long, first & pick_short
+    exit_ = first & ~pick_long
+    exit_s = first & ~pick_short
+    return Spec(long=long, short=short, stop=_atr_stop(s), exit_long=exit_, exit_short=exit_s)
+
+
+def cross_asset_momentum(s: Series, ctx) -> Spec:
+    """Ayin ilk D1 kapanisinda butun sepetin (33 sembol) 126 islem gunu getirisine gore ilk 3'u AL; bir sonraki
+    aylik dengelemede ilk 3'te degilse cikis. Yalnizca AL."""
+    universe = ctx.get("universe") or {}
+    n = len(s)
+    moments = s.time + s.seconds
+    month = np.array([t.month for t in _utc(s.time)])
+    first = np.concatenate([[False], month[1:] != month[:-1]])
+    rets = []
+    names = sorted(universe)
+    for name in names:
+        other = universe[name]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            rets.append(np.log(_closes_at(other, moments) / _closes_at(other, moments - 182 * 86400)))
+    if s.symbol not in names or len(names) < 5:
+        return Spec(long=_false(n), short=_false(n), stop=np.full(n, NAN))
+    table = np.vstack(rets)
+    mine = table[names.index(s.symbol)]
+    filled = np.where(np.isfinite(table), table, -np.inf)
+    rank = (filled > mine).sum(axis=0)  # kendisinden iyi olanlarin sayisi
+    top = np.isfinite(mine) & (rank < 3) & (np.isfinite(table).sum(axis=0) >= 10)
+    return Spec(long=first & top, short=_false(n), stop=_atr_stop(s), exit_long=first & ~top)
+
+
 # ---------------------------------------------------------------- mevcut stratejiler (karsilastirma)
 def week_trade(s: Series, ctx) -> Spec:
     """WEEK TRADE (`bt.py`): 4H kapanisinda sinyal; stop 2 x gunluk ATR; cikis: +1R'de stop girise, +2R'de +1R
@@ -301,6 +612,34 @@ STRATEGIES: list[Strategy] = [
              "kapanisla (gun ici stop emri degil); stop gunun dibinin 0,1 ATR alti; iz suren 3 x ATR(14)"),
     Strategy("C25_holy_grail", "C", "D1", "Raschke & Connors, Street Smarts, Holy Grail", holy_grail,
              "ADX(14) > 30, EMA20'ye dokunup trend yonunde kapanis; stop mumun ucu; iz suren 3 x ATR(14)"),
+    Strategy("B12_williams", "B", "H1", "Larry Williams, Long-Term Secrets to Short-Term Trading", williams,
+             "acilis +/- 0,6 x dunku aralik; gun ici stop emri yerine H1 KAPANISIYLA asilinca giris; gun sonunda "
+             "cikis; stop 2 x ATR(14) H1"),
+    Strategy("B13_nr7", "B", "D1", "Toby Crabel (1990), NR7", narrow_range(7, False),
+             "NR7 gununden sonra kapanisla kirilim (stop emri degil); stop NR7 gununun karsi ucu; iz suren 3 x ATR"),
+    Strategy("B14_nr4_inside", "B", "D1", "Crabel (1990); Raschke, NR4 + ic gun", narrow_range(4, True),
+             "NR4 ve ic gun sonrasi kapanisla kirilim; stop karsi uc; iz suren 3 x ATR"),
+    Strategy("B15_orb", "B", "H1", "Crabel (1990), acilis araligi kirilimi", opening_range,
+             "ABD nakit acilisinin ilk saati yerine 09:00-10:00 NY H1 mumu (H1 veri); kapanisla kirilim; "
+             "16:00 NY'de cikis; endeksler", kinds=("index",)),
+    Strategy("B16_keltner", "B", "H4", "Chester Keltner / Linda Raschke, EMA20 +/- 2 x ATR", keltner,
+             "kapanisla kanal disi; EMA20'ye donuste cikis"),
+    Strategy("B17_bollinger_squeeze", "B", "H4", "John Bollinger, Bollinger on Bollinger Bands", bollinger_squeeze,
+             "bant genisligi son 5 mumda 6 ayin en dusugu; kapanisla bant disi; orta bantta cikis"),
+    Strategy("B18_asia_london_h1", "B", "H1", "Asya araligi / Londra kirilimi (golge stratejinin H1 surumu)",
+             asia_london_h1, "M15 yerine H1 kapanisi; diger kurallar golgedeki tanimla ayni"),
+    Strategy("D26_turn_of_month", "D", "D1", "Ariel (1987); McConnell & Xu (2008)", turn_of_month,
+             "son islem gunu oncesi AL, yeni ayin 3. islem gunu cikis; stop 2 x ATR(14)", kinds=("index",)),
+    Strategy("D27_overnight", "D", "H1", "Cliff, Cooper & Gulen (2008), gece getirisi", overnight,
+             "nakit kapanista AL; ertesi gun 09:00-10:00 NY mumunun kapanisinda cikis (H1)", kinds=("index",)),
+    Strategy("D28_pre_holiday", "D", "D1", "Ariel (1990), tatil oncesi", pre_holiday,
+             "NYSE tatilinden onceki islem gunu kapanisinda AL; sonraki islem gunu kapanisinda cikis",
+             kinds=("index",)),
+    Strategy("E29_currency_momentum", "E", "D1", "Menkhoff, Sarno, Schmeling, Schrimpf (2012)", currency_momentum,
+             "8 para birimi USD'ye karsi 63 islem gunu (91 takvim gunu); haftalik; en guclu/en zayif cift "
+             "listede yoksa o hafta islem yok", kinds=("forex",)),
+    Strategy("E30_cross_asset_momentum", "E", "D1", "Asness, Moskowitz, Pedersen (2013)", cross_asset_momentum,
+             "33 sembollu sepette 126 islem gunu (182 takvim gunu) getirisi; aylik; ilk 3 AL"),
     Strategy("X_week_trade", "X", "H4", "Eski masanin bt.py'si (WEEK TRADE, yumusak)", week_trade),
     Strategy("X_ema_h1_20_21", "X", "H1", "Eski masanin EMA pullback H1 (20/21)", ema_h1(20, 21)),
     Strategy("X_ema_h1_21_50", "X", "H1", "Eski masanin EMA pullback H1 (21/50)", ema_h1(21, 50)),
