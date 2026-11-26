@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 
 from ..exness import schema
 
@@ -80,6 +81,12 @@ class InstrumentCatalog:
             # pozisyonun yonetimi ve kapatilmasi bu bilgilere bagli. Guncelleme yok sayilir; tam bilgi
             # bir sonraki katalog yenilemesinde gelir.
             log.warning("katalog: %s icin eksik guncelleme yok sayildi", instrument.symbol)
+            if instrument.trade_mode not in (None, "enabled") and current.broker_symbol == instrument.broker_symbol:
+                # Eksik ileti bir KAPANMA bildiriyorsa o kisim uygulanir (kapali tarafa hata): sozlesme bilgisi
+                # korunur, sembol isleme kapali sayilir; tam kayit bir sonraki yeniden okumada gelir.
+                closed = replace(current, tradable=False, trade_mode=instrument.trade_mode)
+                self._by_symbol[closed.symbol] = closed
+                self._by_broker[closed.broker_symbol] = closed
             return
         self._by_symbol[instrument.symbol] = instrument
         self._by_broker[instrument.broker_symbol] = instrument

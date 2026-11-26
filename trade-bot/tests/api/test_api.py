@@ -37,7 +37,7 @@ async def test_health_is_public_and_minimal(tmp_path):
                                "stream_connected": True, "halted": False, "last_scan": None, "tick_errors": 0,
                                "tick_error": None, "tick_acks": 0, "quoted_now": 1, "last_backup_at": None, "failing_loops": {},
                                "entries_paused": False,
-                               "universe": {"members": 4, "active": 4, "closed": {}, "unreadable": []}}
+                               "universe": {"members": 4, "active": 4, "closed": {}, "unreadable": 0}}
 
 
 async def test_health_reports_last_scan_counts_without_account_data(tmp_path):

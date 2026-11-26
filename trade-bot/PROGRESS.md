@@ -905,7 +905,12 @@ bunu gösterir.
   kipi ya da "katalogda yok/okunamadı"), dönünce `symbols_restored`. Durum yeniden başlatmadan sonra da hatırlanır.
 - Eksik (kısmi) bir olay iletisi bilinen bir sembolü evrenden düşüremez.
 - Sağlık çıktısı: `universe` = üye / taranan sayısı, kapalı semboller ve işlem kipleri (hesap verisi değil).
-- Testler: `tests/test_universe_watch.py` (5 test).
+- Bağımsız inceleme (PR #31) bulguları düzeltildi: (1) eksik bir olay iletisi KAPANMA bildiriyorsa artık
+  uygulanır (önceki hâli iletiyi tümden yok sayıp sembolü açık bırakabiliyordu: kapalı tarafa hata ilkesi);
+  (2) hiç taranmamış kapalı üye "düştü" diye bildirilmez, okunamayan enstrüman en çok 3 tur yeniden denenir, tur
+  başına en çok 40 istek, sağlık çıktısında okunamayanların yalnızca sayısı; (3) backtest dışa aktarımında spread
+  için 30 dakikadan eski fiyat kullanılmaz.
+- Testler: `tests/test_universe_watch.py` (7 test).
 
 ## Backtest sonrası kararlar (2026-11-26 gece, kontrolcü: kullanıcının yetkisiyle; hepsi sıkılaştırma)
 

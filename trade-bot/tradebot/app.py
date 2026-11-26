@@ -108,6 +108,9 @@ POLICY_OFF = ("tb_ema_pullback_v1", "tb_donchian_breakout_v1", "tb_silver_bullet
 POLICY_SHADOW = ("fx_failed_breakout_v6", "fx_confirmed_breakout_v6", "fx_range_reversion_v6",
                  "fx_trend_momentum_v6")  # V9: 1 yilda zararda / kenari olcutun altinda -> canlidan golgeye
 UNIVERSE_INTERVAL = 600.0  # isleme kapali / okunamamis evren sembollerine yeniden bakma araligi (sn)
+UNIVERSE_RECHECK_MAX = 40  # bir turda yeniden okunacak en cok enstruman
+UNIVERSE_ERROR_TRIES = 3  # okunamayan enstruman en cok bu kadar tur yeniden denenir (sonra yeniden baslatmayi bekler)
+UNIVERSE_QUOTE_MAX_AGE = 1800.0  # disa aktarimda spread icin kullanilacak fiyatin en buyuk yasi (sn)
 UNIVERSE_WATCH = "universe_watch"  # ayar: {"seen": [...], "missing": {sembol: neden}}
 RESULTS_INTERVAL = 60.0  # yuklenen sonuc dosyalarina bakma araligi (sn)
 RESULTS_MAX_BYTES = 8_000_000
@@ -194,6 +197,7 @@ class Bot:
         self._details: dict | None = None
         self._tick_stream = None
         self._subscribed: set[str] = set()
+        self._universe_tries: dict[str, int] = {}
         self._connection_alerted = False
         self._daily_blocked = False
         self._account_alerted = False
@@ -300,29 +304,36 @@ class Bot:
         active = {i.symbol for i in self.catalog.universe()}
         closed = {i.symbol: (i.trade_mode or "bilinmiyor") for i in self.catalog.members() if i.symbol not in active}
         return {"members": len(active) + len(closed), "active": len(active), "closed": closed,
-                "unreadable": sorted(self.catalog.errors)}
+                "unreadable": len(self.catalog.errors)}
 
     async def watch_universe(self, recheck: bool = True) -> dict:
         """Evrenden sembol dusmesini yakalar ve gecici kapanmayi kendiliginden toparlar -> eksikler {sembol: neden}.
 
         Evrenin uyesi olup su an taranamayan (broker'da islem kipi kapali) ya da okunamamis enstrumanlar broker'dan
-        yeniden okunur; acildiysa tarama listesine geri doner. Daha once taranmis bir sembol listeden dusunce bir
-        kez UYARI, geri gelince bir kez bilgi bildirimi gonderilir. Yalnizca okuma yapar; emir yolu degismez."""
+        yeniden okunur; acildiysa tarama listesine geri doner. Daha once TARANMIS bir sembol listeden dusunce bir
+        kez UYARI, geri gelince bir kez bilgi bildirimi gonderilir (hic taranmamis kapali uye bildirim uretmez;
+        saglik ciktisinda gorunur). Yalnizca okuma yapar; emir yolu degismez. Bir turda en cok
+        `UNIVERSE_RECHECK_MAX` istek; okunamayan enstruman `UNIVERSE_ERROR_TRIES` turdan sonra denenmez."""
         def snapshot():
             active = {i.symbol for i in self.catalog.universe()}
             return active, {i.symbol: i for i in self.catalog.members() if i.symbol not in active}
 
         active, closed = snapshot()
-        suspects = sorted({i.broker_symbol for i in closed.values()} | set(self.catalog.errors))
-        if recheck and suspects:
-            await self.catalog.recheck(suspects)
-            active, closed = snapshot()
+        if recheck:
+            failing = [name for name in sorted(self.catalog.errors)
+                       if self._universe_tries.get(name, 0) < UNIVERSE_ERROR_TRIES]
+            for name in failing:
+                self._universe_tries[name] = self._universe_tries.get(name, 0) + 1
+            suspects = (sorted(i.broker_symbol for i in closed.values()) + failing)[:UNIVERSE_RECHECK_MAX]
+            if suspects:
+                await self.catalog.recheck(suspects)
+                active, closed = snapshot()
         state = self.repo.get_setting(UNIVERSE_WATCH)
         state = state if isinstance(state, dict) else {}
         seen = {str(s) for s in state.get("seen") or []}
         previous = state.get("missing") if isinstance(state.get("missing"), dict) else {}
         missing = {}
-        for symbol in sorted((seen | set(closed)) - active):
+        for symbol in sorted(seen - active):  # yalnizca daha once taranmis semboller "dustu" sayilir
             instrument = closed.get(symbol)
             missing[symbol] = (f"broker işlem kipi: {instrument.trade_mode or 'bilinmiyor'}" if instrument is not None
                                else "broker kataloğunda yok ya da okunamadı")
@@ -1454,7 +1465,9 @@ class Bot:
             for instrument in self.catalog.members():
                 symbol = instrument.symbol
                 if symbol not in profile:
-                    limit, quote = self.quotes.max_spread(symbol), self.quotes.quote(symbol)
+                    age = self.quotes.age(symbol)  # eski (kapanis oncesi, genislemis) fiyat spread olcusu olamaz
+                    fresh = age is not None and age <= UNIVERSE_QUOTE_MAX_AGE
+                    limit, quote = self.quotes.max_spread(symbol), (self.quotes.quote(symbol) if fresh else None)
                     if limit is None and quote is None:
                         continue
                     profile[symbol] = {"hours": {}, "all": limit / 3.0 if limit is not None else float(quote["spread"])}

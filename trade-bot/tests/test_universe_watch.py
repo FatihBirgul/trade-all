@@ -23,11 +23,10 @@ async def test_symbol_closed_at_startup_stays_a_member_and_returns_when_the_brok
     assert "XAUUSD" not in universe(app)  # kapaliyken taranmaz, emir acilmaz (degismedi)
     assert "XAUUSD" in {i.symbol for i in app.bot.catalog.members()}
     assert app.bot.universe_status()["closed"] == {"XAUUSD": "close_only"}
-    assert "symbols_dropped" in app.notifier.kinds()  # acilista kapali sembol sessiz kalmaz
+    assert "symbols_dropped" not in app.notifier.kinds()  # hic taranmamis sembol "dustu" diye bildirilmez
     close(app.fake, "XAUUSD", "enabled")
     await app.bot.watch_universe()
     assert "XAUUSD" in universe(app)
-    assert app.notifier.kinds().count("symbols_restored") == 1
     assert app.bot.universe_status()["closed"] == {}
     await app.bot.heartbeat()
     assert "XAUUSD" in app.bot._subscribed  # fiyat aboneligi de tamamlanir
@@ -76,3 +75,28 @@ async def test_symbol_list_and_health_keep_a_closed_member_visible(tmp_path):
     assert rows["XAUUSD"]["open"] is False and "EURUSD" in rows
     assert health["universe"]["closed"] == {"XAUUSD": "close_only"}
     assert health["universe"]["members"] == health["universe"]["active"] + 1
+
+
+async def test_partial_event_that_reports_a_close_still_closes_the_symbol(tmp_path):
+    """Eksik ileti sozlesme bilgisini silemez, ama bildirdigi KAPANMA uygulanir (kapali tarafa hata)."""
+    app = await started(tmp_path)
+    partial = {k: v for k, v in app.fake.instruments["XAUUSD"].items() if k != "volume_max"} | {"trade_mode": "close_only"}
+    app.bot.catalog.update(schema.parse_instrument(partial))
+    kept = app.bot.catalog.get("XAUUSD")
+    assert kept.tradable is False and kept.trade_mode == "close_only" and kept.volume_max > 0
+    assert "XAUUSD" not in universe(app)
+    await app.bot.watch_universe()  # broker'da hala acik: tam kayit geri getirir
+    assert "XAUUSD" in universe(app)
+
+
+async def test_recheck_is_bounded_and_unreadable_instruments_are_not_retried_forever(tmp_path):
+    app = build(tmp_path)
+    app.fake.instruments["BROKEN"] = {"instrument": 5}  # ayristirilamayan kayit (evren disi olabilir)
+    await app.bot.start()
+    assert app.bot.universe_status()["unreadable"] == 1 and "symbols_dropped" not in app.notifier.kinds()
+    counts = []
+    for _ in range(5):
+        before = len(app.fake.requests)
+        await app.bot.watch_universe()
+        counts.append(len(app.fake.requests) - before)
+    assert counts == [1, 1, 1, 0, 0]
