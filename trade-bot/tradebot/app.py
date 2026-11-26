@@ -90,6 +90,11 @@ BACKTEST_BUDGET = 7200.0  # oynatma icin en uzun sure (sn)
 BACKTEST_MAX_AGE = 20 * 3600.0  # bundan yeni bir sonuc varsa yeniden calismaz
 BACKTEST_FETCH_PAUSE = 0.3  # gecmis mum istekleri arasinda bekleme (sn)
 BACKTEST_MAJORS = ("EURUSD", "GBPUSD", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD")
+# Surec her basladiginda (dagitim, cokme, sunucu yeniden acilisi) bu sure boyunca bot YENI islem acmaz; analiz,
+# golge kayitlari ve acik pozisyonlarin yonetimi surer. Neden: spread siniri (son 30 dk'nin ornekleri) ve diger
+# kisa pencereli olcumler yeniden baslatmadan sonra eksiktir. Kullanici karari (2026-11-26, PR #16 B secenegi).
+RESTART_ENTRY_PAUSE = 1800.0
+RESTART_PAUSE_REASON = "yeniden başlatmadan sonra 30 dk yeni giriş yok"
 PUBLIC_NUMBER = re.compile(r"\d+[.,]\d+|\d{3,}")  # ondalikli ya da 3+ haneli sayilar
 SUMMARY_SAMPLES = 5
 RATE_PAUSE_LIMIT = 2  # bir taramada 429 sonrasi en cok bu kadar kisa bekleme; sonra tarama birakilir
@@ -126,7 +131,8 @@ def _default_stream_factory(client, path, on_message, name):
 
 class Bot:
     def __init__(self, settings: Settings, client, repo: Repo, notifier, clock: Callable[[], float] = time.time,
-                 *, stream_factory=None, sleep=asyncio.sleep, news=None):
+                 *, stream_factory=None, sleep=asyncio.sleep, news=None,
+                 restart_pause: float = RESTART_ENTRY_PAUSE):
         self.settings = settings
         self.client = client
         self.repo = repo
@@ -136,6 +142,8 @@ class Bot:
         self.news = news  # NewsCalendar | None (None: haber filtresi yok)
         self._stream_factory = stream_factory or _default_stream_factory
         self.backtest_state = "idle"
+        self._restart_pause = float(restart_pause)
+        self.entries_from: float | None = None  # bu andan once yeni islem acilmaz (start() belirler)
         self.catalog = InstrumentCatalog(client)
         self.quotes = QuoteBook(clock=clock)
         self.candles = CandleStore(repo.conn, client, self.catalog, clock=clock, sleep=sleep)
@@ -212,11 +220,14 @@ class Bot:
         self._open_streams()
         await self._refresh_news()
         self.started = True
+        self.entries_from = self._clock() + self._restart_pause
         universe = self.catalog.universe(self.repo.get_bot_settings().enabled_symbols)
         dry_run = self.repo.get_bot_settings().dry_run
+        pause = (f". İlk {self._restart_pause / 60:.0f} dakika yeni işlem açılmaz (açık pozisyonlar yönetilir)"
+                 if self._restart_pause > 0 else "")
         await self._record("info", "bot_started",
                            f"Bot başladı (sürüm {_version()}, {'deneme' if dry_run else 'CANLI'} modu): "
-                           f"{len(universe)} sembol izleniyor",
+                           f"{len(universe)} sembol izleniyor" + pause,
                            {"universe": len(universe), "catalog_errors": len(catalog_errors), "dry_run": dry_run,
                             "version": _version()})
 
@@ -815,6 +826,11 @@ class Bot:
                 return
             candidate = dataclasses.replace(candidate, lots=lots,
                                             risk_amount=candidate.risk_amount * lots / candidate.lots)
+        if self.entry_paused():
+            summary.blocked += 1
+            summary.blocked_reasons[RESTART_PAUSE_REASON] = summary.blocked_reasons.get(RESTART_PAUSE_REASON, 0) + 1
+            log.info("aday engellendi %s %s: %s", candidate.symbol, candidate.side, RESTART_PAUSE_REASON)
+            return
         state = self.repo.bot_state()
         today, total = self.bot_pnl(state)
         # Islem satiri ancak dolum olayiyla olusur. Ayni taramada gonderilmis ama henuz dolmamis
@@ -1277,6 +1293,12 @@ class Bot:
     async def _once_after(self, delay: float, action) -> None:
         await self._sleep(delay)
         await action()
+
+    def entry_paused(self) -> bool:
+        """Surec yeni basladi mi (RESTART_ENTRY_PAUSE dolmadi mi)? Doluncaya kadar yeni islem acilmaz."""
+        if self._restart_pause <= 0:
+            return False
+        return self.entries_from is None or self._clock() < self.entries_from
 
     def _spread_r(self, candidate: Candidate) -> float | None:
         spread, risk = self._spread(candidate.symbol), abs(candidate.entry - candidate.stop_loss)
