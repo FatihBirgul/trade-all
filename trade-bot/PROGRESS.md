@@ -165,6 +165,7 @@ Kritik bulgu yok; "deneme modunda dağıtılabilir". İkinci tur düzeltmeleri (
 2. Kapanan elle işlemde `trade_closed` K/Z'sinin terminaldekiyle (USC, komisyon işareti) aynı olduğunu doğrula.
 3. İlk bot emrinde: PATCH verilmeyen TP'yi koruyor mu (I7), dolum olayı sltp emrini taşıyor mu, ACK/operasyon biçimleri, yeniden bağlanmada snapshot, `client_request_id` yankısı.
 4. Cuma 21:45 UTC girişleri (kapanıştan 13 dk önce) isteniyor mu: kullanıcı kararı.
+5. Yeniden başlatmadan sonraki 30 dakikada `max_spread` sınırının, saklanamayan örnekler yüzünden hiç durmamış bottan geniş çıkabilmesi (bkz. "Yeniden başlatmada spread ısınması", kalan sınır) kabul ediliyor mu: kullanıcı kararı. Kabul edilmezse seçenek: yeniden başlatmadan sonra 30 dakika yeni giriş açmamak.
 - Ertelenen (Minor): WS yönlendirmesinde imzalı başlıklar, hız sınırında pay, seansların yalnızca açılışta okunması (yaz saati), tick aboneliklerinde tek hatalı sembolün grubunu düşürmesi, N5 testlerinin eksikleri.
 
 ## Faz 3 (plan: `docs/superpowers/plans/2026-11-25-trade-bot-faz3.md`)
@@ -343,3 +344,40 @@ bilgisini içermiyor; kısmi dolumda `risk_amount` planlanan tutarda kalıyor (R
   (ilk sürümde "iki gece" doğrulaması boşa çalışıyordu).
 - Sonuç: devirden etkilenen sembol devirden sonraki 4 saat analiz dışı kalır, sonra geri döner (önceden 64 saat).
 - Testler: `tests/signals/test_weekend_gap.py` (gerçek Exness saatleriyle uçtan uca ve sınır değerleriyle).
+
+### Yeniden başlatmada spread ısınması (2026-11-26)
+
+Canlıda görüldü: her dağıtımdan sonra sessiz semboller bir süre `max_spread missing or invalid` ile eleniyordu,
+çünkü spread örnekleri süreç belleğindeydi ve sıfırdan birikiyordu (gece devrine denk gelen dağıtımda 6 sembol).
+
+Karar: son 30 dakikanın spread örnekleri **özetlenmeden, tick tick** SQLite'a yazılır (`spread_ticks`; 10 saniyede bir
+yalnızca yeni örnekler eklenir, pencereden eskiler silinir) ve açılışta geri yüklenir. **Kural değişmedi:**
+`max_spread` yine yalnızca son 30 dakikanın örneklerine bakar ve en az 100 örnek ister; pencereden eski ya da
+gelecekten görünen örnek yüklenmez; son fiyat geri yüklenmez (taze tick gelmeden değerlendirme yok). 30 dakikadan
+uzun kesintide ısınma yine gerekir.
+
+İki tasarım denendi ve bağımsız incelemelerde reddedildi (ders: bir kapıyı besleyen veriyi özetlemek kapıyı
+gevşetebilir):
+1. Sembol başına eşit aralıklı 200 örnek: yoğun sembolde geçmişin ağırlığı kayboluyor, yeniden başlatmadan sonra
+   genişleyen spread sınırı hiç durmamış bottan çok daha hızlı yükseltiyordu.
+2. Kova başına ağırlıklı medyan: "medyanların medyanı" yukarı kayabiliyor; rejim değiştiren spread'lerde
+   yeniden başlatılmış botun sınırı 4 kata kadar daha geniş çıktı (sentetik veriyle).
+Tick tick saklamada yeniden başlatılmış bot ile hiç durmamış bot her an **aynı** sınırı verir; rastgele rejimler,
+farklı tick hızları, art arda yeniden başlatmalar ve 8000 örnek sınırıyla testte doğrulanır.
+
+**Kalan sınır (dördüncü inceleme, simülasyonla doğrulandı; kullanıcıya açıkça bildirilecek):** "aynı sınır"
+yalnızca bütün örnekler saklanmışsa geçerlidir. Kesinti süresince ve son kayıttan sonra gelen örnekler eksiktir ve
+bu delik 30 dakika pencerede kalır. Örnek **sayısı** hiçbir zaman hiç durmamış bottan fazla olmaz (sıralı
+zaman damgalarıyla); ama eksik dilimdeki spread'ler geri kalandan darsa medyan, dolayısıyla sınır, hiç durmamış
+bottan **yüksek** çıkabilir. Olağan durumda etkisi yok sayılır (eksik pay ~%1-4 → en çok ~52. yüzdelik). Spread iki
+rejim arasında gidip gelirken ve medyan tam sınırdayken fark rejim oranı kadar olabilir (4 kat ayrık iki rejimli
+simülasyonda yeniden başlatma sonrası saniyelerin ~%3'ünde 2 kata, 5 dakikalık kesintide 2,7 kata kadar; benzer
+oranda saniyede ise daha sıkı). main'deki eski davranış da hiç durmamış botla aynı değildi (ısınma bitince yalnızca
+yeni örneklerden hesaplıyordu). Azaltmak için kayıt aralığı 60 sn'den **10 sn**'ye indirildi (ölçülen kayıt süresi
+1-12 ms); kesintinin kendisindeki eksik giderilemez. `systemctl stop` sırasında son kayıt yapılmıyor (uvicorn
+SIGTERM'i yeniden yükseltiyor); istenirse FastAPI kapanış kancasına eklenebilir.
+Küçük, iki yönlü sapmalar (olağan dışı koşul ister): sembol içinde saniyelerce sırasız tick, kesintiden uzun
+broker saat ilerisi, bot saatinin geri adım atması.
+Ayrıca: kayıt kendi zamanlayıcısında, hatası yutulur (kalp atışının sınır denetimini atlatamaz); geri yükleme iki
+kez çağrılsa da örnek çoğaltamaz; başka bir hesap için saklanmış örnekler kullanılmaz.
+Maliyet: tablo en çok ~240 bin satır (30 sembol × 8000); yedekler bu kadar büyür.

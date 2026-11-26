@@ -185,3 +185,67 @@ async def test_a_task_that_keeps_failing_is_reported_once(tmp_path):
         await app.bot._every(1.0, action, "yonetim")
     assert app.kinds().count("loop_failing") == 1 and "loop_failing" in app.notifier.kinds()
     assert app.bot._loop_failures == {}
+
+
+async def test_restart_does_not_wait_for_spread_samples_again(tmp_path):
+    """Canlida goruldu: her dagitim/yeniden baslatmadan sonra sessiz semboller "max_spread missing" ile
+    eleniyordu, cunku spread ornekleri sifirdan birikiyordu. Ornekler saklanir; kural degismez."""
+    from tests.app_helpers import restart
+
+    app = await started(tmp_path, dry_run=True)
+    limit = app.bot.quotes.max_spread("XAUUSD")
+    assert limit is not None
+    held = len(app.bot.quotes._spreads["XAUUSD"])
+    await app.bot.save_spreads()  # dakikada bir calisan kayit
+    await app.bot.save_spreads()  # ikinci kayit yalnizca YENI ornekleri ekler: ornekler cogalmaz
+    saved = app.repo.conn.execute("SELECT COUNT(*) FROM spread_ticks WHERE symbol = 'XAUUSD'").fetchone()[0]
+    assert saved == held
+    app.advance(20)  # dagitim: servis 20 sn kapali
+
+    again = restart(app)
+    await again.bot.start()
+    assert again.bot.quotes.max_spread("XAUUSD") == pytest.approx(limit)
+    assert again.bot.quotes.quote("XAUUSD") is None  # fiyat geri yuklenmez; taze tick beklenir
+
+    # Eski satirlar her kayitta silinir: tablo son 30 dakikayla sinirli kalir.
+    again.advance(1800 + 60)
+    await again.bot.save_spreads()
+    assert again.repo.conn.execute("SELECT COUNT(*) FROM spread_ticks").fetchone()[0] == 0
+    again.advance(-(1800 + 60))
+    # Uzun kesintiden sonra eski ornekler kullanilmaz: isinma yeniden gerekir.
+    again.advance(1800 + 60)
+    later = restart(again)
+    await later.bot.start()
+    assert later.bot.quotes.max_spread("XAUUSD") is None
+
+
+async def test_spread_samples_survive_only_for_the_same_account_and_a_failed_save_is_harmless(tmp_path, monkeypatch):
+    from tests.app_helpers import restart
+
+    app = await started(tmp_path, dry_run=True)
+    await app.bot.save_spreads()
+    # Baska bir hesap icin saklanmis ornekler (farkli spread profili) kullanilmaz.
+    assert app.repo.load_spreads(app.clock["now"] - 1800, "999999") == {}
+    assert "XAUUSD" in app.repo.load_spreads(app.clock["now"] - 1800, app.fake.account_id)
+
+    def full(*args, **kwargs):
+        raise sqlite3.OperationalError("database or disk is full")
+
+    monkeypatch.setattr(app.repo, "append_spreads", full)
+    await app.bot.save_spreads()  # hata yutulur; kalp atisi ve tarama etkilenmez
+    await app.bot.heartbeat()
+    assert (await app.bot.on_bar_close()).would_open == 1
+    monkeypatch.undo()
+    again = restart(app)
+    await again.bot.start()
+    assert again.bot.quotes.max_spread("XAUUSD") is not None
+
+
+async def test_another_accounts_spread_samples_are_wiped_on_the_first_save(tmp_path):
+    """Hesap degisince eski hesabin ornekleri yeni hesabin etiketi altinda karismaz: ilk kayitta silinir."""
+    app = await started(tmp_path, dry_run=True)
+    now = app.clock["now"]
+    app.repo.append_spreads({"XAUUSD": [(now - 5, 9.0), (now - 4, 9.0)]}, now - 1800, "A")
+    app.repo.append_spreads({"XAUUSD": [(now - 3, 0.2)]}, now - 1800, "B")
+    assert app.repo.load_spreads(now - 1800, "A") == {}
+    assert app.repo.load_spreads(now - 1800, "B") == {"XAUUSD": [(now - 3, 0.2)]}

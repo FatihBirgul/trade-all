@@ -59,6 +59,8 @@ CAPITAL_SEEN = "capital_seen"  # ayar anahtari: deneme modunda ilk okunan varlik
 BASE_LIVE = "capital_base_live"  # ayar anahtari: sermaye tabani canli moda geciste alindi mi
 LOOP_ALERT_AFTER = 5  # bir gorev art arda bu kadar hata verirse kullaniciya haber verilir
 LOOP_LOG_EVERY = 100
+SPREAD_SAVE_INTERVAL = 10.0  # spread ornekleri bu aralikla saklanir; kisa tutulur ki yeniden baslatmada kaybolan dilim kucuk olsun
+SPREAD_RESTORE_WINDOW = 1800.0  # QuoteBook penceresiyle ayni: bundan eski ornek geri yuklenmez
 CLOCK_SKEW_LIMIT = 5.0  # V9 fiyat saati "simdi"den bu kadar ilerideyse veriyi reddeder
 MAINTENANCE_INTERVAL = 1800.0  # gunluk yedek ve temizlik denetimi (is gunde bir kez yapilir)
 RECONCILE_INTERVAL = 300.0  # olay kacirilmis olabilir: broker durumu duzenli olarak yeniden okunur
@@ -193,6 +195,9 @@ class Bot:
         await self._ensure_base(self.repo.get_bot_settings())
         report = await reconcile(self.client, self.repo, self.catalog, clock=self._clock, snapshot=snapshot)
         await self.executor.publish(report)
+        restored = self.quotes.restore(self.repo.load_spreads(now - SPREAD_RESTORE_WINDOW, account_id))
+        if restored:
+            log.info("spread ornekleri geri yuklendi: %d ornek", restored)
         self._open_streams()
         await self._refresh_news()
         self.started = True
@@ -1087,6 +1092,16 @@ class Bot:
                 self._subscribed.update(missing)
                 await self._tick_stream.subscribe(schema.subscribe_ticks(f"ticks-extra-{int(now)}", missing))
 
+    async def save_spreads(self) -> None:
+        """Yeni spread orneklerini saklar (yeniden baslatmada isinma beklenmesin). Kendi zamanlayicisinda calisir:
+        kayit yazilamazsa kalp atisinin diger isleri (sinir denetimi, baglanti uyarisi) etkilenmez. Yazilamayan
+        ornekler kaybolur; bu yalnizca bir sonraki yeniden baslatmada daha uzun isinma demektir."""
+        fresh = self.quotes.drain_new()
+        try:
+            self.repo.append_spreads(fresh, self._clock() - SPREAD_RESTORE_WINDOW, self.client.account_id)
+        except sqlite3.Error as exc:
+            log.warning("spread ornekleri saklanamadi: %s", type(exc).__name__)
+
     def scan_summary(self, hours: float = 24.0) -> dict:
         """Son `hours` saatin taramalarinin ozeti: yalnizca sayilar ve nedenler.
 
@@ -1279,6 +1294,7 @@ class Bot:
             self._every(RESOLVE_INTERVAL, self.resolve_orders, "emir cozumleme"),
             self._every(RECONCILE_INTERVAL, self.reconcile_now, "mutabakat"),
             self._every(MAINTENANCE_INTERVAL, self.maintenance, "bakim"),
+            self._every(SPREAD_SAVE_INTERVAL, self.save_spreads, "spread kaydi"),
         )
 
 

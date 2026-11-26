@@ -326,6 +326,27 @@ class Repo:
             "INSERT INTO settings (key, value_json) VALUES (?, ?) "
             "ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json", (key, json.dumps(value)))
 
+    def append_spreads(self, samples: dict[str, list[tuple[float, float]]], cutoff: float,
+                       account_id: str = "") -> None:
+        """Yeni spread orneklerini ekler, `cutoff`tan eskileri siler (tek islem)."""
+        rows = [(symbol, float(at), float(spread)) for symbol, items in samples.items() for at, spread in items]
+        with transaction(self.conn):
+            if self.get_setting("spread_ticks_account", "") != account_id:
+                self.conn.execute("DELETE FROM spread_ticks")  # baska hesabin spread profili kullanilmaz
+                self.set_setting("spread_ticks_account", account_id)
+            self.conn.executemany("INSERT INTO spread_ticks (symbol, at, spread) VALUES (?, ?, ?)", rows)
+            self.conn.execute("DELETE FROM spread_ticks WHERE at < ?", (float(cutoff),))
+
+    def load_spreads(self, since: float, account_id: str = "") -> dict[str, list[tuple[float, float]]]:
+        """`since`ten yeni ornekler. Baska bir hesap icin saklanmissa hic yuklenmez."""
+        if self.get_setting("spread_ticks_account", "") != account_id:
+            return {}
+        out: dict[str, list[tuple[float, float]]] = {}
+        for symbol, at, spread in self.conn.execute(
+                "SELECT symbol, at, spread FROM spread_ticks WHERE at >= ? ORDER BY at", (float(since),)):
+            out.setdefault(symbol, []).append((at, spread))
+        return out
+
     def get_bot_settings(self) -> BotSettings:
         raw = self.get_setting("bot_settings")
         if raw is None:
