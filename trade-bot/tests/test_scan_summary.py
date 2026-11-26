@@ -214,3 +214,22 @@ async def test_a_hole_is_healed_even_when_v9_does_not_complain_and_a_failed_requ
     monkey["fail"] = False
     await app.bot.on_bar_close()  # basarisiz istek yeniden denendi
     assert list(app.bot._heal_tried) == [("XAUUSD", "M15", (int(NOW) - 40 * 900) // 900)]
+
+
+async def test_outcomes_report_r_results_without_account_data(tmp_path):
+    app = await started(tmp_path, dry_run=True)
+    assert (await app.bot.on_bar_close()).would_open == 1
+    for _ in range(3):
+        await next_bar(app)
+    response = await public_get(app, "/health/outcomes")
+    assert response.status_code == 200
+    body = response.json()
+    signal = body["signals"][0]
+    assert signal["symbol"] == "XAUUSD" and signal["side"] == "BUY" and signal["dry_run"] is True
+    assert signal["result"] is not None and signal["result"]["bars"] >= 1
+    assert set(signal) == {"at", "symbol", "side", "strategy_id", "score", "dry_run", "result"}
+    assert sum(row[1] for row in body["hourly"]) == 4  # dort tarama
+    text = response.text
+    for secret in ("123456", "10000", "lots", "risk_amount", "entry", "equity", "balance"):
+        assert secret not in text
+    assert (await public_get(app, "/health/outcomes", hours=1000)).status_code == 422
