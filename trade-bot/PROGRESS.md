@@ -433,6 +433,39 @@ Yalnızca sayılar ve nedenler; hesap bilgisi yok.
   gerçek mumlarıyla V9 oynatması; yalnızca deneme modunda, ayrı düşük öncelikli süreç; eşikler sonuca göre
   ayarlanmaz). Sınırlar: sabit spread varsayımı, mum içi sıra kötümser, haber/puan/portföy kapıları yok.
 
+### İleri test sonucu (26 Kasım 10:37–12:39 UTC; `/health/backtest`, sürüm bt-1)
+
+Son 30 günün gerçek Exness M15/H1/H4 mumları (113 322 mum), canlıdaki V9 değerlendirmesi, kademeli stop kuralları,
+sembol başına sabit spread. İki saatlik süre sınırı 30 sembolün 11'ine yetti (7 majör + AUDCAD, AUDCHF, AUDJPY,
+kısmen AUDNZD): 22 946 değerlendirme, 0 hata, **171 işlem**.
+
+| | İşlem | Kazanç / başa baş / zarar | Net R | Brüt R (spread'siz) |
+|---|---|---|---|---|
+| **Toplam** | 171 | 42 / 32 / 97 | **−7,68** (işlem başı −0,045) | **+14,76** (işlem başı +0,086) |
+| trend_momentum | 109 | 25 / 18 / 66 | −11,51 | +7,07 |
+| failed_breakout | 33 | 8 / 6 / 19 | −2,62 | −2,71 |
+| confirmed_breakout | 15 | 5 / 6 / 4 | +7,19 | +8,96 |
+| range_reversion | 14 | 4 / 2 / 8 | −0,74 | +1,45 |
+| Asya / Londra / New York | 66 / 42 / 63 | | −4,84 / −4,46 / +1,62 | +2,29 / +6,34 / +6,13 |
+| AL / SAT | 36 / 135 | | −11,14 / +3,46 | +2,54 / +12,22 |
+
+- Spread/stop ortanca **0,123**; spread'in toplam maliyeti ~22R (işlem başı ~0,13R): brüt küçük artıyı eksiye çeviriyor.
+- En iyi an (MFE): 51 işlem 0,25R'ye bile ulaşmadı; 20'si 0,25–0,5R; 26'sı 0,5–1R; 31'i 1–2R; 43'ü ≥2R.
+- Stoptan sonraki 2 saat içinde aynı sembole yeniden giriş: 23 işlem, +1,97R (işlem başı +0,086); diğerleri 148
+  işlem, −9,65R. Bu veride yeniden girişler daha kötü değil: **bekleme (cooldown) kuralını bu veri desteklemiyor.**
+- **Yorum:** 171 işlemde işlem başı ±0,1R dolayında belirsizlik var; net −0,045R da brüt +0,086R da sıfırdan
+  ayırt edilemez. Kanıtlanmış bir kenar yok; sistematik bir yön/fiyat hatası da görünmüyor (gece 8/8 stop,
+  bu dağılımın kötü ve birbirine bağlı bir kuyruğu). Maliyet kapısının spread'i saymaması gerçek ve ölçülebilir.
+- **Sınırlar:** spread sabit (testin başladığı Londra saatindeki değer; Asya ve gece devrinde gerçekte daha geniş
+  → maliyet olduğundan az); mum içi sıra kötümser; haber, güven puanı ve portföy kapıları yok; 30 sembolün 11'i;
+  tek bir 30 günlük dönem. Hiçbir eşik sonuca göre ayarlanmadı.
+- **Öneriler (karar kullanıcıda):** (1) maliyet kapısı spread'i saysın: spread/stop oranına üst sınır ya da net
+  R/R'nin spread dahil hesabı (sıkılaştırma; eşik seçimi bir parametre olduğundan onaysız yapılmadı);
+  (2) canlıya geçilmesin; (3) ileri test bütün sembollerle ve seansa göre spread'le yinelensin; deneme modundaki
+  sinyallerde artık giriş anındaki spread/stop kaydediliyor.
+- **İşletme notu:** 13:00:50 UTC'de (tarama sırasında) `/health` 5 saniyede yanıt vermedi; 13:01:56'da normaldi.
+  Tarama sırasında olay döngüsünün ne kadar meşgul kaldığı ölçülmeli (stop yönetimi 2 saniyede bir çalışır).
+
 ### Yeniden başlatma beklemesi (2026-11-26, kullanıcı kararı)
 
 PR #16 (spread örneklerini saklama) yerine B seçeneği: süreç her başladığında 30 dakika yeni bot işlemi açılmaz;
