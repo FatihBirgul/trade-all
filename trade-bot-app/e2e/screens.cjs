@@ -263,7 +263,7 @@ run([
     assert.equal(await page.getByLabel("İşlem başı risk").inputValue(), String(settings.risk.risk_pct).replace(".", ","));
     assert.match(await text(page, "settings-symbols"), /4 \/ 4/);
     assert.match(await text(page, "settings-strategies"), /Sahte kırılım/);
-    assert.match(await text(page, "settings-app"), /Trade Bot 1\.0\.2/);
+    assert.match(await text(page, "settings-app"), /Trade Bot 1\.0\.3/);
     // Maliyet kapısı: sunucudaki gerçek değer (%15) görünür; yükseltmek risk artışıdır.
     assert.equal(await page.getByLabel("En çok maliyet (alış-satış farkı ÷ stop)").inputValue(), String(settings.risk.max_spread_stop_pct));
     assert.equal(settings.risk.max_spread_stop_pct, 15);
@@ -319,8 +319,8 @@ run([
     await page.getByTestId("backtest-summary").waitFor();
     const all = Object.values(data.strategies);
     const passed = all.filter((row) => row.verdict.passed === true).length;
-    assert.ok(all.length === 14 && passed > 0 && passed < all.length);
-    assert.match(await text(page, "backtest-summary"), new RegExp(passed + " / 14 strateji geçti"));
+    assert.ok(all.length === 17 && passed > 0 && passed < all.length);
+    assert.match(await text(page, "backtest-summary"), new RegExp(passed + " / 17 strateji geçti"));
     assert.match(await text(page, "backtest-summary"), /Tamamlandı/);
     assert.match(await text(page, "backtest-summary"), /2000 USC/);
     assert.match(await text(page, "backtest-summary"), /haber penceresi geçmişe uygulanamadı/);
@@ -371,7 +371,7 @@ run([
     reply = { status: 200, body: partial };
     await page.getByRole("button", { name: "Yenile" }).click();
     await page.getByTestId("backtest-summary").waitFor();
-    assert.match(await text(page, "backtest-summary"), /0 \/ 14 strateji geçti/);
+    assert.match(await text(page, "backtest-summary"), /0 \/ 17 strateji geçti/);
     assert.match(await text(page, "backtest-summary"), /Sürüyor · V9: son 30 gün hazır/);
     assert.match(await text(page, "backtest-fx_trend_momentum_v6"), /Bekliyor/);
     assert.match(await text(page, "backtest-fx_trend_momentum_v6"), /verisi henüz tam değil/);

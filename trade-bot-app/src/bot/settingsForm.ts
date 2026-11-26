@@ -222,6 +222,9 @@ export function strategyName(id: string): string {
     tb_emapb_day_v13: "EMA geri çekilme gün içi (v13)",
     tb_emapb_week_v13: "EMA geri çekilme haftalık (v13)",
     tb_week_trade_v1: "Week trade",
+    tb_silver_bullet_v1: "ICT Silver Bullet",
+    tb_asia_london_v1: "Asya aralığı / Londra kırılımı",
+    tb_turtle55_v1: "Günlük trend takibi (55/20)",
   };
   return names[id] ?? id;
 }

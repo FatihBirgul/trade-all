@@ -414,7 +414,10 @@ def test_replay_runs_the_ported_strategies_with_their_own_exit_plans_and_without
         day = trade_["strategy_id"] in ("tb_smc_day_v13", "tb_emapb_day_v13")
         assert (trade_["volume_ratio"] is not None) == trade_["strategy_id"].endswith("_v13")
         assert (trade_["stretch"] is not None) == (trade_["strategy_id"] == "tb_week_trade_v1")
-        assert trade_["exit"] in ((None, "SL", "TP1", "TP", "TIME") if day else (None, "SL", "TRAIL", "TIME"))
+        allowed = {"tb_silver_bullet_v1": (None, "SL", "TP", "TIME"), "tb_asia_london_v1": (None, "SL", "TP", "TIME"),
+                   "tb_turtle55_v1": (None, "SL", "CHANNEL")}.get(
+            trade_["strategy_id"], (None, "SL", "TP1", "TP", "TIME") if day else (None, "SL", "TRAIL", "TIME"))
+        assert trade_["exit"] in allowed
     assert any(t["weekend"] for t in trades) and any(not t["weekend"] for t in trades)
     # Gelecek kesilince: her stratejinin kesim anina kadarki ILK sinyali ayni (sonrakiler acik islemden etkilenir).
     cut = T0 + 215 * 86400 + 5 * 3600

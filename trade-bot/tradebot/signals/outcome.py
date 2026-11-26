@@ -223,6 +223,38 @@ def simulate_trail(side: str, entry: float, stop: float, at: float, bars: list[d
 
 
 FIXED_MAX_BARS = 96
+CHANNEL_MAX_BARS = 96 * 400  # trend takibi islemleri aylarca surebilir
+
+
+def simulate_channel(side: str, entry: float, stop: float, at: float, bars: list[dict], channel, *,
+                     spread_at=None) -> dict | None:
+    """Sabit stop + kanal cikisi (Kaplumbaga): gun kapanisinda fiyat `channel(an)` seviyesinin otesindeyse o
+    kapanistan cikilir. `channel(an)` -> o gunun kapanisinda gecerli cikis seviyesi (onceki gunlerin dibi/tepesi) ya
+    da None. Ayni mumda once stop sayilir."""
+    risk = abs(entry - stop)
+    if risk <= 0:
+        return None
+    sign = 1.0 if side == "BUY" else -1.0
+    spread_at = spread_at or (lambda moment: 0.0)
+    after = [b for b in bars if b["time"] + BAR_SECONDS > at][:CHANNEL_MAX_BARS]
+    best = worst = 0.0
+    for index, bar in enumerate(after):
+        shift = spread_at(bar["time"]) if side == "SELL" else 0.0
+        adverse = ((bar["low"] if side == "BUY" else bar["high"] + shift) - entry) * sign / risk
+        favour = ((bar["high"] if side == "BUY" else bar["low"] + shift) - entry) * sign / risk
+        closed_at = bar["time"] + BAR_SECONDS
+        worst, best = min(worst, adverse), max(best, favour)
+        if adverse <= -1.0:
+            return {"first": "SL", "r": -1.0, "closed_at": closed_at, "bars": index + 1, "mfe_r": round(best, 2),
+                    "mae_r": round(worst, 2)}
+        if closed_at % 86400 == 0:
+            level = channel(closed_at)
+            if level is not None and (bar["close"] - level) * sign < 0:
+                return {"first": "CHANNEL", "r": round((bar["close"] + shift - entry) * sign / risk, 3),
+                        "closed_at": closed_at, "bars": index + 1, "mfe_r": round(best, 2), "mae_r": round(worst, 2)}
+    last = ((after[-1]["close"] + (spread_at(after[-1]["time"]) if side == "SELL" else 0.0)) - entry) * sign / risk if after else 0.0
+    return {"first": None, "r": None, "open_r": round(last, 3), "closed_at": None, "bars": len(after),
+            "mfe_r": round(best, 2), "mae_r": round(worst, 2)}
 
 
 def simulate_fixed(side: str, entry: float, stop: float, target: float, at: float, bars: list[dict], *,

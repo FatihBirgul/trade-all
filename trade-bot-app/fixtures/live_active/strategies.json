@@ -61,6 +61,21 @@
    "backtest_passed": false
   },
   {
+   "strategy_id": "tb_asia_london_v1",
+   "source": "custom",
+   "mode": "shadow",
+   "paused": false,
+   "shadow": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null
+   },
+   "can_go_live": false,
+   "live_blocker": "yeni strateji canlıya alınamaz: en az 20 sonuçlanmış gölge işlem gerekli (şu an 0)",
+   "backtest_passed": false
+  },
+  {
    "strategy_id": "tb_donchian_breakout_v1",
    "source": "custom",
    "mode": "shadow",
@@ -151,6 +166,21 @@
    "backtest_passed": false
   },
   {
+   "strategy_id": "tb_silver_bullet_v1",
+   "source": "custom",
+   "mode": "shadow",
+   "paused": false,
+   "shadow": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null
+   },
+   "can_go_live": false,
+   "live_blocker": "yeni strateji canlıya alınamaz: en az 20 sonuçlanmış gölge işlem gerekli (şu an 0)",
+   "backtest_passed": false
+  },
+  {
    "strategy_id": "tb_smc_day_v13",
    "source": "custom",
    "mode": "shadow",
@@ -182,6 +212,21 @@
   },
   {
    "strategy_id": "tb_smc_week_v13",
+   "source": "custom",
+   "mode": "shadow",
+   "paused": false,
+   "shadow": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": null,
+    "avg_r": null
+   },
+   "can_go_live": false,
+   "live_blocker": "yeni strateji canlıya alınamaz: en az 20 sonuçlanmış gölge işlem gerekli (şu an 0)",
+   "backtest_passed": false
+  },
+  {
+   "strategy_id": "tb_turtle55_v1",
    "source": "custom",
    "mode": "shadow",
    "paused": false,
