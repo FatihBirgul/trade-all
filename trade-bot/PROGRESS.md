@@ -740,3 +740,40 @@ aşaması baştan hesaplanır.
   - WEEK raporu: ana senaryo swap 0 (kullanıcı teyidi); ek senaryo `swap.listed` = broker'ın listelediği değerler
     uygulansaydı net R (sembol bazında maliyetle); %3 / %6 varsayımı dipnot.
   - Pozisyonda swap alanı yoksa ölçüm yapılmaz ("0" sayılmaz); tek pozisyondaki hata diğer ölçümleri düşürmez.
+
+## Yıllık backtest (yt-1) ve canlıya alma kapısına alternatif şart (2026-11-26, kullanıcı kararı)
+
+Kullanıcı gölgede 1–2 hafta beklemek istemiyor: 14 stratejinin hepsi sunucuda Exness mumlarıyla, 30 sembolde,
+üç pencerede (1 ay / 6 ay / 1 yıl) ölçülür. `tradebot/yeartest.py`.
+
+- **Stratejiler:** V9'un 4 stratejisi + `tb_smc_sweep_v1`, `tb_emapb_h1_20_21_v1`, `tb_emapb_h1_21_50_v1` (kendi
+  planlarıyla, 2R hedef), `tb_smc_day_v13`, `tb_emapb_day_v13`, `tb_smc_week_v13`, `tb_emapb_week_v13`,
+  `tb_week_trade_v1`, `tb_ema_pullback_v1`, `tb_donchian_breakout_v1`.
+- **Kurallar:** karar yalnızca kapanmış mumla (ileri testle aynı oynatma); her strateji kendi çıkış planıyla;
+  saatlik spread profili + maliyet kapısı (ayardaki sınır, şu an %15); swap 0; portföy kuralları (en çok 3 açık,
+  sembol başına 1, aynı para biriminde aynı yönde en çok 2); bakiye eğrisi 2000 USC başlangıç, işlem başına bakiyenin
+  %0,5'i (bileşik). Pencereler tek bir 1 yıllık oynatmadan türetilir (pencere = o tarihten sonra açılan işlemler;
+  bakiye 2000'den yeniden başlar).
+- **Çıktı (strateji × pencere):** işlem, kazanma %, net R, net USC, PF, en büyük düşüş (R ve %), maliyet/stop,
+  sembol kırılımı, bakiye eğrisi; 1 yılda ilk / son 6 ay; kapıya ve portföy sınırına takılan sayılar; geçen
+  stratejilerin birleşik portföy satırı; veri kapsamı (sembol başına kaç gün M15 verildi).
+- **Geçme ölçütü:** 1 yılda ≥ 50 işlem, PF ≥ 1,2, iki yarıyılın ikisi de artı, en büyük düşüş ≤ %15, 6 ay da artı.
+  Verisi 1 yılı kapsamayan strateji "bekliyor"dur.
+- **Uygulanamayan / yaklaşık olan:** haber penceresi geçmişe uygulanamıyor (takvim kaynağı yalnızca içinde bulunulan
+  haftayı veriyor); spread bugünkü saatlik profildir; portföy sınırına takılan işlemin yerine aynı sembolde hemen
+  sonraki sinyal alınmaz; en küçük lot denetimi yok; stoplar tam fiyatından dolmuş sayılır.
+- **V9 süresi:** değerlendirme başına ~0,3 sn, tek çekirdek: 30 sembol × 1 ay ≈ 7–8 saat, 6 ay ≈ 2 gün, 1 yıl ≈ 4
+  gün. Bu yüzden V9 en yeni aydan geriye 30 günlük parçalarla hesaplanır; biten parçalar saklanır, her tur (6 saat)
+  sonunda ara sonuç yayınlanır ve hangi pencerenin tamamlandığı belirtilir. V9 dışı 10 strateji için yıllık sonuç
+  ilk turda gelir.
+- **Çalışma düzeni:** önce ileri testin A aşaması (90 gün + WEEK yeniden üretimi) yayınlanır, sonra yıllık test
+  turları. Bir yıllık geçmiş (~3000 istek) aynı pencere için bir kez çekilir ve iş bitene kadar saklanır; pencere 7
+  güne kadar sabit kalır. İleri testin eski 60 günlük V9 aşaması artık çalışmaz (V9 yıllık testin içinde).
+- **API:** `GET /backtest` (yetkili, tam sonuç: sembol tabloları ve eğriler), `GET /health/yeartest` (herkese açık
+  özet; benzetim sonucu, hesap verisi yok). Sonuç `yeartest_result` ayarında kalıcıdır. Durum çıktısında
+  `yillik-test:` satırı.
+- **Canlıya alma kapısı:** yeni (V9 dışı) strateji için "en az 20 sonuçlanmış ve olumlu gölge işlem" şartına
+  ALTERNATİF olarak yıllık backtestin geçme ölçütü kabul edilir (`routes._live_blocker`). Yalnızca engeli kaldırır:
+  canlıya alma yine `confirm=true` ile kullanıcının açık onayını ister; risk ayarlarına dokunulmadı. Botun kötü
+  sonuç nedeniyle duraklattığı strateji için alternatif geçerli değildir. `/strategies` satırlarında
+  `backtest_passed`.

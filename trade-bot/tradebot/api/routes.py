@@ -9,6 +9,7 @@ from decimal import ROUND_FLOOR, Decimal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 
+from .. import yeartest
 from ..app import QUOTE_MAX_AGE, Bot
 from ..config import BotSettings, strategy_mode
 from ..signals import custom, scorecard, v9
@@ -77,6 +78,12 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
     async def health_backtest():
         """Son ileri testin ozeti (V9 stratejileri, gecmis gercek mumlar). Herkese acik: yalnizca sayilar ve R."""
         return bot.backtest_report()
+
+    @public.get("/health/yeartest")
+    async def health_yeartest():
+        """Yillik backtestin ozeti (strateji basina pencere olculeri; sembol tablosu ve egri yok). Benzetim
+        sonucudur: hesap verisi icermez."""
+        return bot.yeartest_report()
 
     @public.post("/pair")
     async def pair(body: PairRequest):
@@ -451,11 +458,21 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
     def _strategy_ids() -> frozenset[str]:
         return v9.builtin_strategy_ids() | custom.strategy_ids()
 
+    def _backtest_passed(strategy_id: str) -> bool:
+        return yeartest.passed(repo.get_setting("yeartest_result"), strategy_id)
+
     def _live_blocker(strategy_id: str, settings: BotSettings) -> str | None:
-        """Yeni (V9 disi) strateji ancak golge karnesi olumluysa canliya alinabilir (spec §6.2)."""
+        """Yeni (V9 disi) strateji ancak golge karnesi olumluysa canliya alinabilir (spec §6.2).
+
+        Alternatif sart (kullanici karari 2026-11-26): strateji yillik backtestin gecme olcutunu sagliyorsa golge
+        islem sayisi beklenmez. Bu yalnizca ENGELI kaldirir; canliya alma yine kullanicinin acik onayini
+        (`confirm=true`) ister. Botun kotu sonuc nedeniyle DURAKLATTIGI strateji icin alternatif gecerli degildir:
+        duraklatmadan sonraki golge sonuclari olumlu olmalidir."""
         if strategy_id not in custom.strategy_ids():
             return None
         held = scorecard.paused(repo).get(strategy_id)
+        if held is None and _backtest_passed(strategy_id):
+            return None
         if held is not None:
             # Bot bu stratejiyi kotu sonuc nedeniyle duraklatti: eski karne degil, duraklatmadan SONRAKI
             # golge sonuclari olumlu olmali.
@@ -471,6 +488,11 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
             return f"yeni strateji canlıya alınamaz: gölge karnesi olumlu değil (ortalama R {stats['avg_r']:.2f})"
         return None
 
+    @private.get("/backtest")
+    async def backtest_results():
+        """Yillik backtestin tam sonucu: pencereler, sembol tablolari, bakiye egrileri (uygulamanin Backtest ekrani)."""
+        return bot.yeartest_report(full=True)
+
     @private.get("/strategies")
     async def strategies():
         """Tum stratejiler: kaynak, kip, golge karnesi ve canliya alinabilirlik."""
@@ -483,7 +505,8 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
             rows.append({"strategy_id": strategy_id,
                          "source": "custom" if strategy_id in custom.strategy_ids() else "v9", "mode": mode,
                          "paused": strategy_id in held, "shadow": book.stats(strategy_id, "shadow"),
-                         "can_go_live": mode != "live" and blocker is None, "live_blocker": blocker})
+                         "can_go_live": mode != "live" and blocker is None, "live_blocker": blocker,
+                         "backtest_passed": _backtest_passed(strategy_id)})
         return {"strategies": rows}
 
     @private.post("/strategies/{strategy_id}/mode")

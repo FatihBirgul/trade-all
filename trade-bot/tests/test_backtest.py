@@ -8,7 +8,7 @@ import pytest
 from tests.app_helpers import started
 from tests.test_scan_summary import public_get
 from tradebot import app as app_module
-from tradebot import backtest, forward
+from tradebot import backtest, forward, yeartest
 from tradebot.exness.schema import Account, Instrument
 from tradebot.signals.adapter import Candidate
 
@@ -113,16 +113,21 @@ class InlinePool:
     def imap_unordered(self, function, items):
         return (function(item) for item in items)
 
+    def imap(self, function, items):
+        return (function(item) for item in items)
+
 
 def short_job(monkeypatch, app):
-    """~1 gunluk pencere: gercek V9 motoru ve swing stratejileri, kisa sure."""
+    """Kisa pencereler: gercek V9 motoru ve stratejiler, kisa sure. Alt surec yerine ayni surecte calisir."""
     monkeypatch.setattr(app_module, "BACKTEST_DAYS", 1)
     monkeypatch.setattr(app_module, "BACKTEST_V9_DAYS", 0.05)
+    monkeypatch.setattr(app_module, "YEAR_DAYS", 0.1)
+    monkeypatch.setattr(app_module, "YEAR_CHUNK_DAYS", 0.05)
     monkeypatch.setattr(app_module, "BACKTEST_FETCH_PAUSE", 0.0)
     jobs = []
 
-    async def in_process(job):
-        jobs.append(json.loads(job.read_text()))
+    async def in_process(job, module="tradebot.forward"):
+        jobs.append({**json.loads(job.read_text()), "module": module})
         import sqlite3
         db = sqlite3.connect(jobs[-1]["history"])
         try:  # gecmis dosyasinda olusmakta olan mum bulunmaz
@@ -130,64 +135,96 @@ def short_job(monkeypatch, app):
                 assert at + forward.DURATIONS[tf] <= jobs[-1]["end"], (tf, at)
         finally:
             db.close()
-        await asyncio.to_thread(forward.run_job, job, InlinePool)
+        runner = yeartest.run_job if module.endswith("yeartest") else forward.run_job
+        await asyncio.to_thread(runner, job, InlinePool)
         return 0
 
     monkeypatch.setattr(app.bot, "_backtest_spawn", in_process)
     return jobs
 
 
-async def test_bot_runs_the_forward_test_once_in_dry_run_and_publishes_only_numbers(tmp_path, monkeypatch):
+async def test_bot_runs_forward_then_year_test_in_dry_run_and_publishes_only_numbers(tmp_path, monkeypatch):
     app = await started(tmp_path, dry_run=True)
     await app.bot.record_spreads()  # olculmus saatlik spread profili
     jobs = short_job(monkeypatch, app)
     assert (await public_get(app, "/health/backtest")).json() == {"state": "idle", "result": None}
+    assert (await public_get(app, "/health/yeartest")).json() == {"state": "idle", "result": None}
     summary = await app.bot.backtest_once()
     assert summary["version"] == forward.VERSION and summary["symbols"] == 1
-    assert summary["v9_coverage"] == {"symbols_done": 1, "symbols_total": 1, "workers": 1,
-                                      "evaluations": summary["v9_coverage"]["evaluations"], "errors": 0,
-                                      "complete": True}
-    assert summary["v9_coverage"]["evaluations"] >= 4
     assert set(summary["swing"]["strategies"]) == set(forward.SWING_IDS)
-    assert summary["spread_profile"] == {"symbols": 1, "hours_measured_median": 1}
-    job = jobs[0]
+    assert [job["module"] for job in jobs] == ["tradebot.forward", "tradebot.yeartest"] and jobs[0]["skip_v9"] is True
+    job = jobs[1]
     assert job["account"]["equity"] == 10_000.0  # gercek varlik dosyaya yazilmaz (sahte hesap da 10000)
-    assert job["end"] % 86400 == 0 and job["split"] == job["start"] + (job["end"] - job["start"]) * 2 / 3
-    assert list(job["bounds"]) == ["XAUUSD"] and {row[0] for row in [("D1",)]} <= set(forward.DURATIONS)
+    assert job["end"] % 86400 == 0 and job["year_start"] == job["end"] - 0.1 * 86400 and len(job["v9_ids"]) == 4
+    year = app.bot.yeartest_report(full=True)["result"]
+    assert year["version"] == yeartest.VERSION and year["complete"] is True and app.bot.backtest_state == "done"
+    assert set(year["strategies"]) == set(yeartest.TB_IDS) | set(job["v9_ids"])  # 14 strateji
+    assert year["progress"]["v9_chunks_done"] == year["progress"]["v9_chunks_total"] == 2
+    assert year["progress"]["v9_evaluations"] >= 8 and year["rules"]["swap"] == 0
+    for row in year["strategies"].values():
+        assert set(row["windows"]) == {"1m", "6m", "1y"} and "curve" in row["windows"]["1y"]
+        assert row["verdict"]["passed"] in (None, False)  # bu kadar kisa veriyle hicbir strateji "gecti" olamaz
     folder = tmp_path / "backtest"
     assert not (folder / "history.db").exists() and not (folder / "job.json").exists()  # is bitince silinir
-    assert (folder / "v9-XAUUSD.json").exists()  # biten sembol saklanir: yarim kalan is kaldigi yerden surer
-    response = await public_get(app, "/health/backtest")
-    assert response.json()["state"] == "done" and response.json()["result"]["v9"] == summary["v9"]
-    for secret in ("123456", "balance", "equity", "lots", "risk_amount"):
-        assert secret not in response.text
+    public = await public_get(app, "/health/yeartest")
+    assert public.json()["state"] == "done" and "by_symbol" not in public.text and "curve" not in public.text
+    assert public.json()["result"]["strategies"].keys() == year["strategies"].keys()
+    for secret in ("123456", "\"balance\"", "equity", "lots", "risk_amount"):
+        assert secret not in public.text and secret not in (await public_get(app, "/health/backtest")).text
     assert await app.bot.backtest_once() is None  # tam ve taze sonuc varken yeniden calismaz
 
 
-async def test_unfinished_v9_phase_is_resumed_without_redoing_finished_symbols(tmp_path, monkeypatch):
+async def test_unfinished_year_test_resumes_with_the_same_window_history_and_finished_parts(tmp_path, monkeypatch):
+    app = await started(tmp_path, dry_run=True)
+    jobs = short_job(monkeypatch, app)
+    fetches = []
+    real = app.bot._backtest_history
+
+    async def counted(*args, **kwargs):
+        fetches.append(1)
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(app.bot, "_backtest_history", counted)
+    monkeypatch.setattr(app_module, "BACKTEST_BUDGET", -1.0)  # sure hemen doluyor: yillik test hic ilerlemez
+    monkeypatch.setattr(app_module, "YEAR_ROUNDS", 2)
+    await app.bot.backtest_once()
+    assert [job["module"][-8:] for job in jobs] == [".forward", "yeartest", "yeartest"]  # bitmeyen is bir tur daha
+    partial = app.bot.yeartest_report(full=True)["result"]
+    assert partial["complete"] is False and app.bot.backtest_state == "partial"
+    assert partial["progress"]["tb_symbols_done"] == 0 and (tmp_path / "backtest" / "history.db").exists()
+    assert all(row["verdict"]["passed"] is None for row in partial["strategies"].values())
+    app.clock["now"] += 86400.0  # ertesi gun yeniden baslayan surec ayni pencere ve ayni gecmisle surer
+    monkeypatch.setattr(app_module, "BACKTEST_BUDGET", 3600.0)
+    await app.bot.backtest_once()
+    done = app.bot.yeartest_report(full=True)["result"]
+    assert done["complete"] is True and len(fetches) == 1 and jobs[-1]["end"] == jobs[0]["end"]
+    # Biten parcalar dosyada durur: yeniden calistirilirsa V9 hic degerlendirilmez.
+    job = tmp_path / "backtest" / "job.json"
+    job.write_text(json.dumps({k: v for k, v in jobs[-1].items() if k != "module"} | {"deadline": 4e9}))
+    backtest.write_history(Path(jobs[-1]["history"]), [("XAUUSD", "M15", 0, 1.0, 1.0, 1.0, 1.0)])
+    monkeypatch.setattr(forward, "v9_symbol", lambda args: (_ for _ in ()).throw(AssertionError("yeniden calisti")))
+    monkeypatch.setattr(forward, "swing_trades", lambda *a, **k: (_ for _ in ()).throw(AssertionError("yeniden calisti")))
+    again = yeartest.run_job(job, InlinePool)
+    assert again["complete"] is True and again["strategies"].keys() == done["strategies"].keys()
+    app.clock["now"] += 8 * 86400.0  # tamamlanan sonuc eskiyince yeni pencere acilir
+    monkeypatch.undo()
+    short = short_job(monkeypatch, app)
+    await app.bot.backtest_once()
+    assert short[0]["end"] == jobs[0]["end"] + 9 * 86400.0
+
+
+async def test_forward_result_is_published_before_the_year_test_and_includes_the_week_reproduction(tmp_path, monkeypatch):
     app = await started(tmp_path, dry_run=True)
     short_job(monkeypatch, app)
-    monkeypatch.setattr(app_module, "BACKTEST_BUDGET", -1.0)  # sure hemen doluyor: V9 hic bitmez
-    first = await app.bot.backtest_once()
-    assert first["v9_coverage"]["complete"] is False and app.bot.backtest_state == "partial"
-    assert not (tmp_path / "backtest" / "v9-XAUUSD.json").exists()
-    monkeypatch.setattr(app_module, "BACKTEST_BUDGET", 3600.0)
-    second = await app.bot.backtest_once()  # tamamlanmamis sonuc "taze" sayilmaz: is yeniden calisir
-    assert second["v9_coverage"]["complete"] is True and app.bot.backtest_state == "done"
-    # Biten sembolun dosyasi durdukca V9 o sembolde yeniden calistirilmaz.
-    job = tmp_path / "backtest" / "job.json"
-    saved = json.loads((tmp_path / "backtest" / "v9-XAUUSD.json").read_text())
-    signature = saved["signature"].split(":")
-    history = tmp_path / "backtest" / "h.db"
-    backtest.write_history(history, [("XAUUSD", "M15", 0, 1.0, 1.0, 1.0, 1.0)])
-    job.write_text(json.dumps({"instruments": [{"symbol": "XAUUSD", "kind": "metal"}], "spreads": {"XAUUSD": {"hours": {}, "all": 0.2}},
-                               "start": float(signature[1]), "end": float(signature[2]), "split": float(signature[1]),
-                               "v9_start": float(signature[1]), "history": str(history),
-                               "result": str(tmp_path / "backtest" / "again.json"), "workers": 1,
-                               "max_spread_stop_pct": float(signature[3])}))
-    monkeypatch.setattr(forward, "v9_symbol", lambda args: (_ for _ in ()).throw(AssertionError("yeniden calisti")))
-    again = forward.run_job(job, InlinePool)
-    assert again["v9_coverage"]["complete"] is True and again["v9"] == second["v9"]
+    published = []
+    real = app.bot.repo.set_setting
+    monkeypatch.setattr(app.bot.repo, "set_setting", lambda key, value: (published.append(key), real(key, value))[1])
+    summary = await app.bot.backtest_once()
+    keys = [key for key in published if key in ("backtest_result", "yeartest_result")]
+    assert keys == ["backtest_result", "yeartest_result"]  # ileri test once yayinlanir
+    replica = summary["week_replica"]
+    assert "error" not in replica and set(replica["missing"]) | set(replica["coverage"]) == set(forward.week_replica.SYMBOLS)
+    assert replica["soft"]["match"]["reference"] == 182 and replica["strict"]["match"]["reference"] == 184
 
 
 async def test_backtest_never_runs_live_and_a_failure_is_harmless(tmp_path, monkeypatch):
@@ -342,23 +379,6 @@ def test_replay_shows_strategies_only_closed_and_current_bars_and_simulates_from
     assert all(first == at - 5 for _, _, at, first in simulated)  # benzetim giris mumundan SONRAKI mumla baslar
     side, entry = next((side, entry) for side, entry, at, _ in simulated if at == END + 5)
     assert side == "BUY" and entry == 100.5 + 0.02  # AL: kapanis + spread (ask)
-
-
-async def test_unfinished_job_keeps_its_window_across_days(tmp_path, monkeypatch):
-    app = await started(tmp_path, dry_run=True)
-    jobs = short_job(monkeypatch, app)
-    monkeypatch.setattr(app_module, "BACKTEST_BUDGET", -1.0)
-    monkeypatch.setattr(app_module, "BACKTEST_ROUNDS", 2)
-    assert (await app.bot.backtest_once())["v9_coverage"]["complete"] is False
-    # Ilk alt surec yalnizca A asamasidir (erken sonuc); bitmeyen V9 ayni gecmisle iki tur denenir.
-    assert [job["skip_v9"] for job in jobs] == [True, False, False]
-    app.clock["now"] += 86400.0  # ertesi gun yeniden baslayan surec ayni pencereyle surer
-    monkeypatch.setattr(app_module, "BACKTEST_BUDGET", 3600.0)
-    done = await app.bot.backtest_once()
-    assert done["v9_coverage"]["complete"] is True and len(jobs) == 5 and jobs[4]["end"] == jobs[0]["end"]
-    app.clock["now"] += 86400.0  # tamamlanan isten sonra (sonuc eskiyince) yeni pencere acilir
-    await app.bot.backtest_once()
-    assert jobs[5]["end"] == jobs[0]["end"] + 2 * 86400.0
 
 
 async def test_history_never_stores_a_bar_that_is_still_forming(tmp_path, monkeypatch):
@@ -526,22 +546,6 @@ def test_week_trade_corrected_measurement_differs_only_where_the_source_was_opti
     assert W.summarize(cross, exclude_open=True)["swap"]["crosses"]["0.06"]["all"] == pytest.approx(1.0 - 10 * 0.02 * 0.06, abs=0.01)
     assert W.SWAP_FREE == {"BTCUSD", "ETHUSD", "XAUUSD", "EURUSD", "USDCHF"}
     assert fixed["all"]["max_dd"] == -1.0 and fixed["by_symbol"]["XAUUSD"]["trades"] == 1
-
-
-async def test_first_result_is_published_before_the_long_v9_phase_and_includes_the_week_reproduction(tmp_path, monkeypatch):
-    app = await started(tmp_path, dry_run=True)
-    jobs = short_job(monkeypatch, app)
-    published = []
-    real = app.bot.repo.set_setting
-    monkeypatch.setattr(app.bot.repo, "set_setting", lambda key, value: (published.append((key, value)), real(key, value))[1])
-    summary = await app.bot.backtest_once()
-    results = [value for key, value in published if key == "backtest_result"]
-    assert len(results) == 2 and results[0]["v9_coverage"]["complete"] is False and jobs[0]["skip_v9"] is True
-    assert results[0]["swing"] == summary["swing"] and summary["v9_coverage"]["complete"] is True
-    replica = summary["week_replica"]
-    assert "error" not in replica and set(replica["missing"]) | set(replica["coverage"]) == set(forward.week_replica.SYMBOLS)
-    assert replica["soft"]["match"]["reference"] == 182 and replica["strict"]["match"]["reference"] == 184
-    assert (tmp_path / "backtest" / "swing.json").exists()  # A asamasi V9 turlarinda yeniden hesaplanmaz
 
 
 def test_corrected_week_measurement_takes_the_trail_atr_from_before_the_entry():
