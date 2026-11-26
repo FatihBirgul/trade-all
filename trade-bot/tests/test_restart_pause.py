@@ -3,7 +3,7 @@ import inspect
 
 from tests.app_helpers import feed_ticks, load_market, restart, started
 from tests.test_scan_summary import public_get
-from tradebot import app as app_module
+from tradebot import runtime
 from tradebot.app import RESTART_ENTRY_PAUSE, RESTART_PAUSE_REASON, Bot
 
 M15 = 900
@@ -29,7 +29,7 @@ async def next_bar(app):
 def test_production_default_is_thirty_minutes():
     assert RESTART_ENTRY_PAUSE == 1800.0
     assert inspect.signature(Bot.__init__).parameters["restart_pause"].default == RESTART_ENTRY_PAUSE
-    assert "restart_pause" not in inspect.getsource(app_module.sys.modules["tradebot.runtime"].build_runtime)
+    assert "restart_pause" not in inspect.getsource(runtime.build_runtime)
 
 
 async def test_no_order_for_thirty_minutes_after_a_restart_then_entries_resume(tmp_path):
