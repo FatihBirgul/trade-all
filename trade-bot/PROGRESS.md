@@ -874,6 +874,7 @@ Okuma:
 - Silver Bullet M15'te açıkça zararda (özgün tanım 1–5 dk grafikte; M15 uyarlaması tutmadı).
 - Kaplumbağa 23 işlemle yargı için az (ölçüt 50); bir yıl bu sistem için kısa.
 - Eski masanın WEEK TRADE'i 2 yıllık kendi testinde artıydı (ağırlıkla XAU); burada 28 sembolde PF 0,73.
-- XAUUSD ve bir sembol daha listede yok: iş akışı, saatlik spread profili olmayan sembolleri atlıyor (30 → 28).
+- Backtest 28 sembolde çalıştı: botun şu anki tarama listesi 28 sembol (son taramada 28/28 fiyatlı) ve XAUUSD
+  bu listede yok. Eski masanın altın ağırlıklı sonuçları bu yüzden burada sınanamadı (açık konu).
 - Sonuç sunucuya yüklendi; uygulamadaki Backtest ekranı bu tabloyu gösterir. Canlıya alma kapısı açılmadı
   (hiçbir strateji geçmedi); bot dry-run'da.
