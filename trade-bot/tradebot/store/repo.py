@@ -326,6 +326,23 @@ class Repo:
             "INSERT INTO settings (key, value_json) VALUES (?, ?) "
             "ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json", (key, json.dumps(value)))
 
+    def add_spread_stats(self, rows: list[tuple[str, float, float, int]], keep_since: float) -> None:
+        """(sembol, an, medyan, ornek sayisi) satirlarini ekler; `keep_since`ten eskileri siler."""
+        with transaction(self.conn):
+            self.conn.executemany("INSERT OR REPLACE INTO spread_stats VALUES (?, ?, ?, ?)", rows)
+            self.conn.execute("DELETE FROM spread_stats WHERE at < ?", (float(keep_since),))
+
+    def spread_profile(self, min_samples: int = 5) -> dict[str, dict]:
+        """Sembol -> {"hours": {UTC saati: medyan spread}, "all": genel medyan}. Olcum yoksa sembol yer almaz."""
+        import statistics
+        by_hour: dict[str, dict[int, list[float]]] = {}
+        for symbol, at, median, samples in self.conn.execute("SELECT symbol, at, median, samples FROM spread_stats"):
+            if samples >= min_samples:
+                by_hour.setdefault(symbol, {}).setdefault(int(at // 3600) % 24, []).append(median)
+        return {symbol: {"hours": {hour: statistics.median(values) for hour, values in hours.items()},
+                         "all": statistics.median(v for values in hours.values() for v in values)}
+                for symbol, hours in by_hour.items()}
+
     def get_bot_settings(self) -> BotSettings:
         raw = self.get_setting("bot_settings")
         if raw is None:

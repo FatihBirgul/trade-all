@@ -53,3 +53,9 @@ class QuoteBook:
             return None
         median = statistics.median(spread for _, spread in samples)
         return median * self._factor if median > 0 else None
+
+    def recent_median(self, symbol: str, seconds: float) -> tuple[float, int] | None:
+        """Son `seconds` saniyenin spread medyani ve ornek sayisi (saatlik spread profili icin). Ornek yoksa None."""
+        cutoff = self._clock() - seconds
+        values = [spread for at, spread in self._spreads.get(symbol, ()) if at >= cutoff]
+        return (statistics.median(values), len(values)) if values else None

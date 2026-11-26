@@ -95,6 +95,8 @@ BACKTEST_MAJORS = ("EURUSD", "GBPUSD", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "
 # kisa pencereli olcumler yeniden baslatmadan sonra eksiktir. Kullanici karari (2026-11-26, PR #16 B secenegi).
 RESTART_ENTRY_PAUSE = 1800.0
 RESTART_PAUSE_REASON = "yeniden başlatmadan sonra 30 dk yeni giriş yok"
+SPREAD_STATS_INTERVAL = 300.0  # spread medyani bu aralikla kaydedilir (ileri testin saatlik spread profili)
+SPREAD_STATS_KEEP = 30 * 86400.0
 PUBLIC_NUMBER = re.compile(r"\d+[.,]\d+|\d{3,}")  # ondalikli ya da 3+ haneli sayilar
 SUMMARY_SAMPLES = 5
 RATE_PAUSE_LIMIT = 2  # bir taramada 429 sonrasi en cok bu kadar kisa bekleme; sonra tarama birakilir
@@ -1310,6 +1312,23 @@ class Bot:
         except ExnessError as exc:
             log.info("gunluk mumlar alinamadi %s: %s", symbol, type(exc).__name__)
 
+    async def record_spreads(self) -> int:
+        """Her sembolun son 5 dakikalik spread medyanini kaydeder -> yazilan satir sayisi. Yalnizca olcumdur:
+        hicbir kapiyi etkilemez; yazilamazsa sessizce gecer."""
+        now = self._clock()
+        slot = int(now // SPREAD_STATS_INTERVAL) * SPREAD_STATS_INTERVAL
+        rows = []
+        for instrument in self.catalog.universe():
+            found = self.quotes.recent_median(instrument.symbol, SPREAD_STATS_INTERVAL)
+            if found is not None:
+                rows.append((instrument.symbol, slot, found[0], found[1]))
+        try:
+            self.repo.add_spread_stats(rows, now - SPREAD_STATS_KEEP)
+        except sqlite3.Error as exc:
+            log.warning("spread olcumu yazilamadi: %s", type(exc).__name__)
+            return 0
+        return len(rows)
+
     def _spread_r(self, candidate: Candidate) -> float | None:
         spread, risk = self._spread(candidate.symbol), abs(candidate.entry - candidate.stop_loss)
         return round(spread / risk, 4) if spread is not None and risk > 0 else None
@@ -1528,6 +1547,7 @@ class Bot:
             self._every(RESOLVE_INTERVAL, self.resolve_orders, "emir cozumleme"),
             self._every(RECONCILE_INTERVAL, self.reconcile_now, "mutabakat"),
             self._every(MAINTENANCE_INTERVAL, self.maintenance, "bakim"),
+            self._every(SPREAD_STATS_INTERVAL, self.record_spreads, "spread olcumu"),
             self._once_after(BACKTEST_DELAY, self.backtest_once),
         )
 
