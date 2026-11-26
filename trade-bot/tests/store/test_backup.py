@@ -154,3 +154,27 @@ async def test_backup_event_and_logs_do_not_reveal_the_backup_path(tmp_path, cap
     await app.bot.maintenance()
     written = caplog.text + json.dumps(app.repo.events(limit=500), default=str)
     assert "backup_failed" in written and str(tmp_path) not in written and ".partial" not in written
+
+
+def test_backup_survives_odd_characters_in_the_path_and_rejects_an_empty_copy(tmp_path, monkeypatch):
+    """Inceleme: yolda `#` ya da `?` varsa URI kesiliyor, bos bir dosya "yedek" diye basarili sayiliyordu."""
+    folder = tmp_path / "veri #1 ?x"
+    folder.mkdir()
+    repo = Repo(folder / "bot.db", clock=lambda: NOW)
+    repo.add_event("warning", "bot_stopped", "durduruldu")
+    result = backup.backup_database(repo.db_path, NOW)
+    copy = sqlite3.connect(result["path"])
+    assert copy.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 1
+
+    empty = sqlite3.connect(":memory:")
+    with pytest.raises(sqlite3.DatabaseError):
+        backup._verify(empty)  # butunlugu "ok" ama botun tablolari yok
+
+
+def test_stale_partial_files_from_an_earlier_day_are_removed(tmp_path):
+    repo = Repo(tmp_path / "bot.db", clock=lambda: NOW)
+    (tmp_path / "backups").mkdir()
+    stale = tmp_path / "backups" / "tradebot-20260101.db.partial"
+    stale.write_bytes(b"yarim")
+    backup.backup_database(repo.db_path, NOW)
+    assert not stale.exists()

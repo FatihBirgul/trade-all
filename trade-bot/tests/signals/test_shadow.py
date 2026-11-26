@@ -190,3 +190,27 @@ def test_sell_shadow_is_resolved_on_the_ask_side(tmp_path):
     buy = ShadowBook(Repo(tmp_path / "buy.db"))
     buy.open(candidate(), "shadow", None, NOW, spread)  # BUY bid ile kapanir: kaydirma yok
     assert buy.resolve("EURUSD", [bar(0, 1.0990, 1.1062)], NOW + M15)[0]["result_r"] == pytest.approx(2.0)
+
+
+def test_bars_needed_covers_everything_since_the_oldest_open_shadow(tmp_path):
+    shadow = book(tmp_path)
+    assert shadow.bars_needed("EURUSD", NOW) == 128
+    shadow.open(candidate(), "shadow", None, NOW)
+    assert shadow.bars_needed("EURUSD", NOW + 3600) == 128
+    assert shadow.bars_needed("EURUSD", NOW + 48 * 3600) == 48 * 4 + 3
+    assert shadow.bars_needed("EURUSD", NOW + 90 * 86400) == 1500  # onbellegin tuttugundan fazlasi istenmez
+
+
+def test_shadow_is_dropped_rather_than_guessed_when_its_first_bars_are_missing(tmp_path):
+    """Inceleme C-I1: acilistan sonraki mumlar verilmezse stopa degip degmedigi bilinemez. Yanlis sonuc
+    (0R ya da kazanc) karneyi bozar; islem sonucsuz silinir."""
+    shadow = book(tmp_path)
+    shadow.open(candidate(), "shadow", None, NOW)  # giris 1.1002, SL 1.0972, TP1 1.1062
+    late = [bar(n, 1.1000, 1.1070) for n in range(200, 330)]  # yalnizca cok sonraki mumlar: hedefe degiyor gibi
+    assert shadow.resolve("EURUSD", late, NOW + 330 * M15) == []
+    assert shadow.open_symbols() == set() and shadow.stats("fx_trend_momentum_v6", "shadow")["trades"] == 0
+    # Acilis mumundan itibaren verilirse normal sonuclanir.
+    shadow.open(candidate(setup="setup000000000000000002"), "shadow", None, NOW)
+    full = [bar(0, 1.0990, 1.1010), bar(1, 1.0960, 1.1000)] + [bar(n, 1.1000, 1.1070) for n in range(2, 330)]
+    closed = shadow.resolve("EURUSD", full, NOW + 330 * M15)
+    assert len(closed) == 1 and closed[0]["result_r"] == pytest.approx(-1.0)

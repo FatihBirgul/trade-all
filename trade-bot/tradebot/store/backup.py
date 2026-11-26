@@ -15,6 +15,7 @@ import sqlite3
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 KEEP_BACKUPS = 14
 MIN_FREE_FACTOR = 2  # yedekten once en az veritabaninin bu kati kadar bos alan olmali
@@ -32,6 +33,10 @@ def _verify(copy: sqlite3.Connection) -> None:
     verdict = copy.execute("PRAGMA quick_check").fetchone()
     if not verdict or verdict[0] != "ok":
         raise sqlite3.DatabaseError(f"yedek butunluk denetiminden gecmedi: {verdict}")
+    # Bos bir dosya da butunluk denetiminden gecer: kopyada botun tablolari gercekten olmali.
+    tables = {row[0] for row in copy.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    if not {"settings", "trades", "orders", "events"} <= tables:
+        raise sqlite3.DatabaseError("yedekte botun tablolari yok")
 
 
 def backup_database(db_path: Path | str, now: float, *, keep: int = KEEP_BACKUPS) -> dict:
@@ -42,7 +47,8 @@ def backup_database(db_path: Path | str, now: float, *, keep: int = KEEP_BACKUPS
     source_path = Path(db_path)
     folder = source_path.parent / "backups"
     folder.mkdir(mode=0o700, parents=True, exist_ok=True)
-    size = source_path.stat().st_size
+    wal = source_path.with_name(source_path.name + "-wal")
+    size = source_path.stat().st_size + (wal.stat().st_size if wal.exists() else 0)
     free = shutil.disk_usage(folder).free
     if free < MIN_FREE_FACTOR * size + MIN_FREE_BYTES:
         # Dolmak uzere olan diske tam boy bir kopya yazmak asil veritabanini da yazilamaz hale getirebilir.
@@ -50,8 +56,10 @@ def backup_database(db_path: Path | str, now: float, *, keep: int = KEEP_BACKUPS
     target = folder / f"{BACKUP_PREFIX}{backup_day(now)}.db"
     partial = target.with_suffix(".db.partial")
     started = time.monotonic()
-    partial.unlink(missing_ok=True)
-    source = sqlite3.connect(f"file:{source_path}?mode=ro", uri=True, timeout=10)
+    for leftover in folder.glob("*.partial"):  # onceki gunden yarim kalmis dosyalar (surec oldurulduyse)
+        leftover.unlink(missing_ok=True)
+    # Yoldaki `#`, `?`, `%` gibi karakterler URI'yi bozmasin (bozulursa bos bir "yedek" basarili gorunurdu).
+    source = sqlite3.connect(f"file:{quote(str(source_path.resolve()))}?mode=ro", uri=True, timeout=10)
     try:
         # Dosya, icine veri yazilmadan once yalnizca sahibine acik olusturulur.
         os.close(os.open(partial, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))

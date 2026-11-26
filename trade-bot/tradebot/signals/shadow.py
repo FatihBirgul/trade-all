@@ -8,8 +8,12 @@ once stop (ayni mumda ikisi de gorulurse temkinli olarak stop sayilir), sonra he
 
 from __future__ import annotations
 
+import logging
+
 from ..store.repo import Repo
 from .adapter import Candidate
+
+log = logging.getLogger(__name__)
 
 MAX_BARS = 96
 BAR_SECONDS = 900
@@ -44,6 +48,14 @@ class ShadowBook:
     def open_symbols(self) -> set[str]:
         return {row[0] for row in self._db.execute("SELECT DISTINCT symbol FROM shadow_trades WHERE closed_at IS NULL")}
 
+    def bars_needed(self, symbol: str, now: float, minimum: int = 128, maximum: int = 1500) -> int:
+        """En eski acik sanal islemin acilisindan bugune kadar gereken M15 mum sayisi (onbellek en cok 1500 tutar)."""
+        row = self._db.execute(
+            "SELECT MIN(opened_at) FROM shadow_trades WHERE symbol = ? AND closed_at IS NULL", (symbol,)).fetchone()
+        if not row or row[0] is None:
+            return minimum
+        return max(minimum, min(maximum, int((now - row[0]) // BAR_SECONDS) + 3))
+
     def resolve(self, symbol: str, bars: list[dict], now: float) -> list[dict]:
         """Acik sanal islemleri `bars` (kapanmis M15 mumlari, eskiden yeniye) ile sonuclandirir."""
         closed: list[dict] = []
@@ -60,6 +72,12 @@ class ShadowBook:
             # Islem, mum kapanisindan birkac saniye sonra (yeni mumun icinde) acilir; o mum da sayilir.
             # Yalnizca acilistan once kapanmis mumlar disarida kalir.
             after = [b for b in bars if b["time"] + BAR_SECONDS > opened_at]
+            if bars and bars[0]["time"] > opened_at + BAR_SECONDS:
+                # Verilen mumlar acilistan SONRA basliyor: aradaki mumlar gorulmeden karar verilemez (stopa degip
+                # degmedigi bilinmez). Yanlis bir sonuc karneyi bozar; islem sonucsuz olarak silinir.
+                self._db.execute("DELETE FROM shadow_trades WHERE id = ?", (trade_id,))
+                log.warning("sanal islem sonuclandirilamadi (mum gecmisi yetersiz), silindi: %s %s", symbol, strategy_id)
+                continue
             result = closed_at = None
             for bar in after[:MAX_BARS]:
                 stop_hit = bar["low"] <= stop if side == "BUY" else bar["high"] + ask_shift >= stop

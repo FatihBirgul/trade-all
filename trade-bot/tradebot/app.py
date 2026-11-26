@@ -59,6 +59,7 @@ CAPITAL_SEEN = "capital_seen"  # ayar anahtari: deneme modunda ilk okunan varlik
 BASE_LIVE = "capital_base_live"  # ayar anahtari: sermaye tabani canli moda geciste alindi mi
 LOOP_ALERT_AFTER = 5  # bir gorev art arda bu kadar hata verirse kullaniciya haber verilir
 LOOP_LOG_EVERY = 100
+LOOP_REALERT = 86400.0  # hata surdukce uyari gunde bir yinelenir
 CLOCK_SKEW_LIMIT = 5.0  # V9 fiyat saati "simdi"den bu kadar ilerideyse veriyi reddeder
 MAINTENANCE_INTERVAL = 1800.0  # gunluk yedek ve temizlik denetimi (is gunde bir kez yapilir)
 RECONCILE_INTERVAL = 300.0  # olay kacirilmis olabilir: broker durumu duzenli olarak yeniden okunur
@@ -142,6 +143,7 @@ class Bot:
         self._clock_alerted = False
         self._skew_beats = 0
         self._loop_failures: dict[str, int] = {}
+        self._loop_alerted: dict[str, float] = {}
         self._heal_tried: dict[tuple[str, str, int], float] = {}
         self._last_equity_sample = 0.0
         self._balance_synced_at = 0.0
@@ -521,7 +523,7 @@ class Bot:
                      if now - self._heal_tried.get((symbol, frame, minute // FRAME_SECONDS[frame]), float("-inf"))
                      >= HEAL_RETRY]
             if not fresh:
-                if gaps and note is not None:
+                if gaps and note is not None and "missing candle" in note:
                     summary.data_rejects[symbol] = note + " (onarım denendi: borsada da yok)"
                 continue
             frame, minute = fresh[0]
@@ -533,7 +535,7 @@ class Bot:
                 log.warning("mum onarimi basarisiz %s %s: %s", symbol, frame, exc)
                 continue
             self._heal_tried[key] = now  # yalnizca kesin yanittan sonra: basarisiz istek yeniden denenir
-            if note is not None:
+            if note is not None and "missing candle" in note:
                 summary.data_rejects[symbol] = note + (" (onarıldı: mum geldi)" if filled
                                                        else " (onarım denendi: borsada da yok)")
             log.info("mum onarimi %s %s: %s", symbol, frame, "geldi" if filled else "borsada da yok")
@@ -727,7 +729,10 @@ class Bot:
                 if symbol not in scanned:
                     await self.candles.get(symbol, "M15", 128)
                     scanned.add(symbol)
-                self.shadow.resolve(symbol, self.candles.cached(symbol, "M15", 128), now)
+                # Acilisindan bu yana kapanan BUTUN mumlar gerekir: uzun kesintiden sonra yalnizca son 128 muma
+                # bakilirsa stopa/hedefe degen mum pencerenin disinda kalir ve sonuc yanlis kaydedilir.
+                self.shadow.resolve(symbol, self.candles.cached(symbol, "M15", self.shadow.bars_needed(symbol, now)),
+                                    now)
             except (ExnessError, ValueError, KeyError):
                 continue
         await self._refresh_open_candles(scanned)
@@ -933,46 +938,58 @@ class Bot:
         await self._auth_ok()
         if self._auth_blocked():
             return  # kimlik reddi suruyor: reddedilecek istekleri gonderme
+        failed: Exception | None = None
         for listed in self.repo.open_trades():
-            # Onceki pozisyonun istegi beklenirken bu islem bir olayla degismis ya da kapanmis olabilir.
-            trade = self.repo.get_trade(listed.position_id)
-            if trade is None or not trade.is_open:
-                continue
             try:
-                instrument = self.catalog.get(trade.symbol)
-            except KeyError:
+                await self._manage_one(listed, settings, now)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - bir islemdeki hata digerlerinin stop yonetimini durdurmamali
+                failed = exc
+                log.exception("stop yonetimi hatasi: pozisyon %s", listed.position_id)
+        if failed is not None:
+            raise failed  # dongu sayaci ve "gorev hata veriyor" uyarisi icin (diger islemler yonetildikten SONRA)
+
+    async def _manage_one(self, listed: Trade, settings: BotSettings, now: float) -> None:
+        # Onceki pozisyonun istegi beklenirken bu islem bir olayla degismis ya da kapanmis olabilir.
+        trade = self.repo.get_trade(listed.position_id)
+        if trade is None or not trade.is_open:
+            return
+        try:
+            instrument = self.catalog.get(trade.symbol)
+        except KeyError:
+            return
+        quote = self.quotes.quote(trade.symbol)
+        if quote is None or now - quote["time"] > QUOTE_MAX_AGE:
+            return  # bayat fiyatla stop tasima
+        if (trade.origin == "bot" or trade.manage) and await self._guard_stop(trade, quote, now):
+            return
+        if not trade.manage:
+            return
+        if not trade.partial_done and trade.initial_volume and trade.volume < trade.initial_volume - 1e-9:
+            trade.partial_done = True  # kismi kapama gerceklesmis (olay ya da mutabakat hacmi guncelledi)
+            self.repo.update_trade(trade.position_id, partial_done=True)
+        actions = decide(trade, bid=quote["bid"], ask=quote["ask"], atr_m15=self._atr(trade.symbol),
+                         cost_per_unit=self._cost_per_unit(instrument, settings), instrument=instrument,
+                         settings=settings.manage)
+        if settings.dry_run:
+            # Dry-run: bot hicbir emir gondermez; ne yapacagi yalnizca loglanir.
+            described = repr(actions)
+            if actions and self._dry_logged.get(trade.position_id) != described:
+                self._dry_logged[trade.position_id] = described
+                log.info("[dry-run] %s %s icin gonderilmeyen yonetim adimi: %s", trade.symbol, trade.side, described)
+            return
+        for action in actions:
+            if isinstance(action, NoOp):
+                if action.reason == "partial_skipped":
+                    self.repo.update_trade(trade.position_id, partial_done=True)
                 continue
-            quote = self.quotes.quote(trade.symbol)
-            if quote is None or now - quote["time"] > QUOTE_MAX_AGE:
-                continue  # bayat fiyatla stop tasima
-            if (trade.origin == "bot" or trade.manage) and await self._guard_stop(trade, quote, now):
-                continue
-            if not trade.manage:
-                continue
-            if not trade.partial_done and trade.initial_volume and trade.volume < trade.initial_volume - 1e-9:
-                trade.partial_done = True  # kismi kapama gerceklesmis (olay ya da mutabakat hacmi guncelledi)
-                self.repo.update_trade(trade.position_id, partial_done=True)
-            actions = decide(trade, bid=quote["bid"], ask=quote["ask"], atr_m15=self._atr(trade.symbol),
-                             cost_per_unit=self._cost_per_unit(instrument, settings), instrument=instrument,
-                             settings=settings.manage)
-            if settings.dry_run:
-                # Dry-run: bot hicbir emir gondermez; ne yapacagi yalnizca loglanir.
-                described = repr(actions)
-                if actions and self._dry_logged.get(trade.position_id) != described:
-                    self._dry_logged[trade.position_id] = described
-                    log.info("[dry-run] %s %s icin gonderilmeyen yonetim adimi: %s", trade.symbol, trade.side, described)
-                continue
-            for action in actions:
-                if isinstance(action, NoOp):
-                    if action.reason == "partial_skipped":
-                        self.repo.update_trade(trade.position_id, partial_done=True)
-                    continue
-                if isinstance(action, MoveSL):
-                    # Basa bas isareti ve bildirimi, broker degisikligi onaylayinca yurutucu tarafindan yapilir.
-                    await self.executor.modify(trade.position_id, sl=action.price, stage=action.stage)
-                elif isinstance(action, PartialClose):
-                    await self.executor.close(trade.position_id, volume=action.volume)
-                break  # pozisyon basina bir seferde tek istek; sonucu gelince devam edilir
+            if isinstance(action, MoveSL):
+                # Basa bas isareti ve bildirimi, broker degisikligi onaylayinca yurutucu tarafindan yapilir.
+                await self.executor.modify(trade.position_id, sl=action.price, stage=action.stage)
+            elif isinstance(action, PartialClose):
+                await self.executor.close(trade.position_id, volume=action.volume)
+            break  # pozisyon basina bir seferde tek istek; sonucu gelince devam edilir
 
     async def reconcile_now(self) -> bool:
         """Broker durumunu REST ile yeniden okur (kacirilan olaylar icin). Basariliysa True."""
@@ -1241,21 +1258,31 @@ class Bot:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # tek bir turun hatasi donguyu durdurmamali
-                failures = self._loop_failures.get(name, 0) + 1
-                self._loop_failures[name] = failures
-                if failures <= 3 or failures % LOOP_LOG_EVERY == 0:  # surekli hata gunlugu doldurmasin
-                    log.exception("%s dongusunde hata (%d. kez art arda)", name, failures)
-                if failures == LOOP_ALERT_AFTER:
-                    try:
-                        await self._record("error", "loop_failing",
-                                           f"Botun '{name}' görevi art arda {failures} kez hata verdi "
-                                           f"({type(exc).__name__}). Sunucu günlüğüne bakın.",
-                                           {"task": name, "failures": failures}, notify=True,
-                                           title="Bot görevi hata veriyor")
-                    except Exception:  # kayit da yazilamiyorsa (disk dolu) dongu yine de surer
-                        log.exception("dongu hatasi kaydedilemedi: %s", name)
+                await self._loop_failed(name, exc)
             else:
                 self._loop_failures.pop(name, None)
+
+    async def _loop_failed(self, name: str, exc: Exception) -> None:
+        """Bir zamanlayici gorevinin art arda hatalarini sayar; surerse kullaniciya haber verir (gunde bir yineler)."""
+        failures = self._loop_failures.get(name, 0) + 1
+        self._loop_failures[name] = failures
+        if failures <= 3 or failures % LOOP_LOG_EVERY == 0:  # surekli hata gunlugu doldurmasin
+            log.error("%s dongusunde hata (%d. kez art arda): %s", name, failures, type(exc).__name__, exc_info=exc)
+        now = self._clock()
+        if failures >= LOOP_ALERT_AFTER and now - self._loop_alerted.get(name, float("-inf")) >= LOOP_REALERT:
+            self._loop_alerted[name] = now
+            try:
+                await self._record("error", "loop_failing",
+                                   f"Botun '{name}' görevi art arda {failures} kez hata verdi "
+                                   f"({type(exc).__name__}). Sunucu günlüğüne bakın.",
+                                   {"task": name, "failures": failures}, notify=True,
+                                   title="Bot görevi hata veriyor")
+            except Exception:  # kayit da yazilamiyorsa (disk dolu) dongu yine de surer
+                log.exception("dongu hatasi kaydedilemedi: %s", name)
+
+    def failing_loops(self) -> dict[str, int]:
+        """Su an art arda hata veren gorevler -> hata sayisi (/health icin; hesap bilgisi icermez)."""
+        return {name: count for name, count in self._loop_failures.items() if count >= LOOP_ALERT_AFTER}
 
     async def _bar_loop(self) -> None:
         while True:
@@ -1266,8 +1293,10 @@ class Bot:
                 await self.on_bar_close()
             except asyncio.CancelledError:
                 raise
-            except Exception:
-                log.exception("tarama dongusunde hata")
+            except Exception as exc:  # noqa: BLE001
+                await self._loop_failed("tarama", exc)
+            else:
+                self._loop_failures.pop("tarama", None)
 
     async def run(self) -> None:
         await self._start_with_backoff()

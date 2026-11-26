@@ -20,7 +20,8 @@ işlem açmaz.
 | | Deneme modu | Canlı mod |
 |---|---|---|
 | Tarama ve analiz | Yapar | Yapar |
-| Emir gönderme | **Göndermez**; "açardım" diye kaydeder | Gerçek parayla gönderir |
+| Yeni işlem açma | **Açmaz**; "açardım" diye kaydeder | Gerçek parayla açar |
+| Stopsuz kalmış bir bot pozisyonunu koruma | **Yapar**: stopu yeniden kurar, kuramazsa kapatır | Yapar |
 | Sizin uygulamadan verdiğiniz emirler | **Her zaman gerçektir** | Gerçektir |
 | Açık bot işlemlerinde kademeli stop (başa baş, kısmi kâr, iz süren) | **Yapmaz**; yalnızca Exness'teki SL korur | Yapar |
 
@@ -142,7 +143,16 @@ kaybolsa da onlar kaybolmaz. Veritabanı silinirse bot açık pozisyonları Exne
 açılmış" sayar; geçmiş raporlar, ayarlarınız ve telefon eşleştirmesi sıfırlanır (bot deneme modunda, varsayılan
 ayarlarla başlar ve telefonu yeniden eşleştirmeniz gerekir).
 
-Geri yükleme **yalnızca gerekirse** yapılır ve işlem geçmişini o günün haline döndürür. Dört komut, sırayla:
+Geri yükleme **yalnızca gerekirse** yapılır. Her yedek o günün **başındaki** durumu tutar (gece yarısından kısa
+süre sonra, UTC saatiyle alınır): `tradebot-20261126.db`, 26 Kasım sabahına kadar olanları içerir.
+
+Önce hangi yedeklerin olduğuna bakın:
+
+```bash
+sudo ls -l /var/lib/tradebot/backups
+```
+
+Sonra beş komut, sırayla:
 
 ```bash
 sudo systemctl stop tradebot
@@ -166,16 +176,23 @@ sudo systemctl start tradebot
 
 `YYYYAAGG` yerine geri dönmek istediğiniz günün dosya adındaki tarihi yazın. İkinci ve üçüncü komutu atlamayın:
 eski veritabanının yanındaki `-wal` dosyası yerinde kalırsa, kopyalanan yedeğin üstüne eski kayıtlar yeniden
-yazılır ve geri yükleme sessizce işe yaramaz.
+yazılır ve geri yükleme sessizce işe yaramaz. `tradebot.db.eski` eski veritabanınızdır; her şeyin yolunda olduğundan
+emin olunca silebilirsiniz (ikinci bir geri yüklemede üstüne yazılır).
 
-Geri yüklemeden sonra bilmeniz gerekenler:
+**Başlattıktan hemen sonra uygulamada Panel'i açıp Durdur'a basın**, sonra aşağıdakileri kontrol edin. Geri yükleme
+botun hafızasını o güne döndürür, hesabınızı değil:
 
-- Bot, yedeğin alındığı gündeki **kipe** döner. Yedek canlı moddayken alındıysa bot canlı başlar; önce
-  **Panel**'den kipi ve Durdur/Devam durumunu kontrol edin.
-- Yedekten sonra açılmış bot işlemleri "elle açılmış" sayılır: SL'leri Exness'te durur ama bot onlara kademeli stop
-  uygulamaz. Bu işlemleri kendiniz izleyin.
-- Yedekten sonra iptal ettiğiniz telefon bağlantıları geri gelir. Telefon kaybı nedeniyle iptal yaptıysanız
-  iptali yeniden çalıştırın (komut [`deploy/README.md`](deploy/README.md) içinde) ve yeniden eşleştirin.
+- **Kip:** bot, yedeğin alındığı andaki kipe döner. Yedek canlı moddayken alındıysa bot canlı başlar.
+- **Kilit ve kayıp sayaçları:** toplam kayıp kilidi ve günlük kayıp sayacı da o güne döner. Yedekten sonra açılıp
+  kapanmış işlemlerin zararı botun hesabında **görünmez**; bot kilitliyken geri yükleme yaptıysanız kilit açılmış
+  olur. Kayıp nedeniyle durmuş bir botu geri yüklemeyle "açmayın".
+- **Sonradan açılan işlemler:** yedekten sonra açılmış ve hâlâ açık olan bot işlemleri "elle açılmış" sayılır:
+  SL'leri Exness'te durur ama bot onlara kademeli stop uygulamaz. Bu işlemleri kendiniz izleyin.
+- **Telefon bağlantıları:** yedekten sonra eşleştirdiğiniz telefonun bağlantısı kaybolur (yeniden eşleştirin);
+  yedekten sonra iptal ettiğiniz bağlantılar ise geri gelir. Telefon kaybı nedeniyle iptal yaptıysanız iptali
+  yeniden çalıştırın (komut [`deploy/README.md`](deploy/README.md) içinde).
+- **Bugünün yedeği:** bot yeniden başladıktan yaklaşık yarım saat sonra bugünün yedeğini, geri yüklenmiş durumla
+  yeniden yazar.
 
 ## Sık görülen uyarılar
 

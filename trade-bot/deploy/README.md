@@ -151,7 +151,7 @@ görebilirsiniz). Eşleştirme kodu için sunucuda:
 tradebot-pair
 ```
 
-Kod 10 dakika geçerlidir ve bir kez kullanılır. Uygulamada **Bağlantı** sekmesine adresi ve kodu girin.
+Kod 10 dakika geçerlidir ve bir kez kullanılır. Uygulamada **Ayarlar → Bağlantı ayarları** ekranına adresi ve kodu girin.
 API internete açıktır ama `/health` dışındaki her istek telefonunuza verilen gizli anahtarı (token) ister;
 eşleştirme kodu 5 hatalı denemede iptal olur.
 
