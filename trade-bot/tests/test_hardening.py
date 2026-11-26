@@ -433,3 +433,48 @@ async def test_bot_order_above_the_ceiling_is_not_sent(tmp_path):
     with pytest.raises(ValueError, match="mutlak üst sınır"):
         await app.bot.executor.open(huge, "bot")
     assert len(app.fake.requests) == before and app.repo.get_order("bot-tavan-testi") is None
+
+
+async def test_auth_rejections_are_recorded_with_their_source_for_diagnosis(tmp_path):
+    """Her kimlik reddi kaynagiyla ve ardisik sayisiyla kaydedilir; ozet yalnizca kod/kaynak/sure verir."""
+    from tradebot.exness.errors import ExnessAuthError
+    app = await started(tmp_path)
+    first = ExnessAuthError("AUTH_INVALID_API_KEY", code=1000, status=401)
+    await app.bot._auth_error(first)
+    order = ExnessAuthError("AUTH_INVALID_API_KEY", code=1000, status=401)
+    order.source = "emir"
+    await app.bot._auth_error(order)
+    auth = app.bot.scan_summary()["auth"]
+    rejects = [row for row in auth if row["kind"] == "auth_reject"]
+    assert [(row["code"], row["source"], row["streak"]) for row in rejects] == [(1000, "okuma", 1), (1000, "emir", 2)]
+    assert sum(1 for row in auth if row["kind"] == "auth_error") == 1  # bildirim bir kez
+    app.clock["now"] += 45.0
+    app.bot.client.last_ok_at = app.clock["now"]
+    await app.bot._auth_ok()
+    restored = [row for row in app.bot.scan_summary()["auth"] if row["kind"] == "auth_restored"]
+    assert restored and restored[0]["after_seconds"] == 45.0 and app.bot._auth_streak == 0
+    assert "message" not in str(app.bot.scan_summary()["auth"])
+
+
+async def test_outcomes_cross_check_every_shadow_trade_with_an_independent_calculation(tmp_path):
+    from tradebot.signals.adapter import Candidate
+    app = await started(tmp_path)
+    now = app.clock["now"]
+    opened = int(now // 900) * 900 - 20 * 900 + 10.0
+    bars = [{"time": int(opened // 900) * 900 + i * 900, "open": 2000.0, "high": 2000.5, "low": 1999.5, "close": 2000.0,
+             "volume": 10} for i in range(-5, 19)]
+    bars[8] = dict(bars[8], low=1994.0)  # stop goruldu
+    app.fake.set_candles("XAUUSD", "M15", bars)
+    await app.bot.candles.get("XAUUSD", "M15", 64)
+    trade = Candidate(symbol="XAUUSD", side="BUY", entry=2000.0, stop_loss=1995.0, take_profit_1=2010.0,
+                      take_profit_2=2010.0, lots=0.01, strategy_id="tb_ema_pullback_v1", setup_id="capraz-1", net_rr=2.0,
+                      analysis_id="a" * 64, risk_amount=1.0)
+    assert app.bot.shadow.open(trade, "shadow", 60.0, opened, 0.2)
+    app.bot.shadow.resolve("XAUUSD", app.bot.candles.cached("XAUUSD", "M15", 64), now)
+    report = app.bot.dryrun_outcomes()
+    row = report["shadows"][-1]
+    assert row["result_r"] == -1.0 == row["check_r"] and row["mae_r"] <= -1.0 and row["bars"] == 4
+    assert report["shadow_check"]["agree"] == 1 and report["shadow_check"]["differ"] == 0
+    # Kayit bozulursa (sonuc yanlissa) capraz denetim bunu gosterir.
+    app.repo.conn.execute("UPDATE shadow_trades SET result_r = 2.0")
+    assert app.bot.dryrun_outcomes()["shadow_check"]["differ"] == 1

@@ -191,6 +191,7 @@ class Bot:
         self._auth_alerted_at = 0.0
         self._auth_error_at = 0.0
         self._auth_backoff = AUTH_BACKOFF_START
+        self._auth_streak = 0  # basarili istek gorulmeden art arda gelen kimlik retleri
         self._auth_blocked_until = 0.0
         self._stop_checked: dict[str, float] = {}
         self._stop_alerted: set[str] = set()
@@ -616,8 +617,14 @@ class Bot:
 
         Bekleme 30 sn'den baslar ve art arda retlerde 5 dakikaya kadar katlanir: tek seferlik bir 401
         stop yonetimini dakikalarca durdurmaz. Basarili herhangi bir istek kilidi hemen acar.
+        Her ret, kaynagiyla (hangi tur istek) ve o ana kadarki ardisik ret sayisiyla `auth_reject` olarak
+        kaydedilir (bildirimsiz): tek seferlik mi, surekli mi sonradan gorulebilsin.
         """
         now = self._clock()
+        self._auth_streak += 1
+        self.repo.add_event("warning", "auth_reject", "Exness bir isteği kimlik hatasıyla reddetti",
+                            {"code": exc.code, "status": exc.status, "source": getattr(exc, "source", None) or "okuma",
+                             "streak": self._auth_streak})
         self._auth_error_at = now
         self._auth_blocked_until = now + self._auth_backoff
         self._auth_backoff = min(self._auth_backoff * 2, AUTH_BACKOFF_MAX)
@@ -638,10 +645,12 @@ class Bot:
             return
         was_alerted = self._auth_alerted
         self._auth_alerted = False
+        self._auth_streak = 0
         self._auth_blocked_until = 0.0
         self._auth_backoff = AUTH_BACKOFF_START
         if was_alerted:
-            await self._record("info", "auth_restored", "Exness kimlik doğrulaması yeniden çalışıyor.")
+            await self._record("info", "auth_restored", "Exness kimlik doğrulaması yeniden çalışıyor.",
+                               {"after_seconds": round(self._clock() - self._auth_error_at, 1)})
 
     def _auth_blocked(self) -> bool:
         return self._clock() < self._auth_blocked_until
@@ -1175,6 +1184,13 @@ class Bot:
                     text = PUBLIC_NUMBER.sub("#", str(key))[:VETO_REASON_CHARS]
                     target[text] = target.get(text, 0) + count
 
+        # Kimlik retleri (tanilama): an, tur, kod, kaynak, ardisik ret sayisi / duzelme suresi. Tutar ya da kimlik yok.
+        out["auth"] = [
+            {"at": round(event["at"]), "kind": event["kind"],
+             **{key: (event["data"] or {}).get(key) for key in ("code", "status", "source", "streak", "after_seconds")
+                if isinstance(event["data"], dict) and event["data"].get(key) is not None}}
+            for event in self.repo.events_since(since, ("auth_error", "auth_reject", "auth_restored",
+                                                        "market_data_rejected"))][-40:]
         for event in self.repo.events_since(since, ("scan", "scan_skipped", "signal", "signal_observed")):
             data = event["data"] if isinstance(event["data"], dict) else {}
             if event["kind"] == "scan":
@@ -1463,16 +1479,37 @@ class Bot:
             except (KeyError, TypeError, ValueError):
                 pass
             signals.append(item)
-        shadows = [{"symbol": r[0], "side": r[1], "strategy_id": r[2], "reason": r[3],
+        shadows, check = [], {"agree": 0, "differ": 0, "unknown": 0, "sl_first_bar": 0, "mfe_ge_1r": 0}
+        for r in self.repo.conn.execute(
+                "SELECT symbol, side, strategy_id, reason, score, opened_at, closed_at, result_r, "
+                "entry, sl, tp, spread FROM shadow_trades WHERE opened_at >= ? ORDER BY opened_at", (since,)):
+            item = {"symbol": r[0], "side": r[1], "strategy_id": r[2], "reason": r[3],
                     "score": round(r[4], 1) if r[4] is not None else None, "opened_at": r[5], "closed_at": r[6],
                     "result_r": round(r[7], 3) if r[7] is not None else None,
                     "stop_pct": round(abs(r[8] - r[9]) / r[8] * 100.0, 4) if r[8] else None,
                     "target_r": round(abs(r[10] - r[8]) / abs(r[8] - r[9]), 2) if r[8] != r[9] else None,
                     "spread_r": round(r[11] / abs(r[8] - r[9]), 3) if r[11] is not None and r[8] != r[9] else None}
-                   for r in self.repo.conn.execute(
-                       "SELECT symbol, side, strategy_id, reason, score, opened_at, closed_at, result_r, "
-                       "entry, sl, tp, spread FROM shadow_trades WHERE opened_at >= ? ORDER BY opened_at", (since,))]
+            # Capraz denetim: ayni islem, golge izleyiciden BAGIMSIZ ikinci hesapla ve onbellekteki gercek mumlarla
+            # yeniden sonuclandirilir. Iki sonuc ayni olmali; MFE/MAE islemin nasil gittigini gosterir.
+            try:
+                count = min(1500, int((now - r[5]) // 900) + 40)
+                bars = self.candles.cached(str(r[0]), "M15", count)
+                if not bars or bars[0]["time"] > r[5] + 900:
+                    raise ValueError("mum gecmisi yetersiz")
+                again = outcome.simulate_fixed(str(r[1]), float(r[8]), float(r[9]), float(r[10]), float(r[5]), bars,
+                                               spread_at=lambda moment, fixed=float(r[11] or 0.0): fixed)
+                item.update({"check_r": again["r"], "mfe_r": again["mfe_r"], "mae_r": again["mae_r"],
+                             "bars": again["bars"]})
+                if r[7] is not None:
+                    same = again["r"] is not None and abs(again["r"] - r[7]) < 0.01
+                    check["agree" if same else "differ"] += 1
+                    check["sl_first_bar"] += int(again["first"] == "SL" and again["bars"] == 1)
+                    check["mfe_ge_1r"] += int(again["mfe_r"] >= 1.0)
+            except (TypeError, ValueError):
+                check["unknown"] += int(r[7] is not None)
+            shadows.append(item)
         return {"hours": round((now - since) / 3600.0, 2), "rules": rules, "signals": signals, "shadows": shadows,
+                "shadow_check": check,
                 "hourly": [[hour, *row.values()] for hour, row in sorted(hourly.items())]}
 
     def quoted_now(self) -> int:

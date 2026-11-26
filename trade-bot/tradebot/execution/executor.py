@@ -192,6 +192,7 @@ class Executor:
             return
         except ExnessAuthError as exc:
             # ACK'ten once reddedildi: islenmedi. Kimlik sorunu tek yerden (servis dongusu) bildirilir.
+            exc.source = "emir"  # tanilama: ret bir emir isteginde geldi (okuma isteginde degil)
             await self._order_failed(self.repo.get_order(key), exc.code, exc.message, notify=self._on_auth_error is None)
             if self._on_auth_error is not None:
                 await self._on_auth_error(exc)

@@ -439,7 +439,7 @@ def test_planned_summary_reports_profit_factor_drawdown_cost_and_the_requested_s
     assert summary["stretch"] == {}  # yalnizca WEEK TRADE'de dolar
     assert forward.stats([1.0, 1.0])["pf"] is None  # kayip yoksa PF tanimsiz
     full = forward.summarize_swing(rows, split)
-    assert set(full["planned"]) == set(forward.PLAN_IDS) and full["planned"]["tb_week_trade_v1"]["raw"]["all"]["trades"] == 0
+    assert set(full["planned"]) == set(forward.PLAN_IDS + forward.FIXED_IDS) and full["planned"]["tb_week_trade_v1"]["raw"]["all"]["trades"] == 0
     # Portfoy kurallari bu stratejilere de uygulanir (ayni gun art arda 3 kayiptan sonra giris yok).
     day = 50 * 86400.0
     streak = [planned(day + i * 7200, -1.0) for i in range(3)] + [planned(day + 30_000, 5.0)]

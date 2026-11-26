@@ -45,6 +45,9 @@ SWING_IDS = ("tb_smc_sweep_v1", "tb_emapb_h1_20_21_v1", "tb_emapb_h1_21_50_v1")
 EMA_IDS = SWING_IDS[1:]
 PLAN_IDS = ("tb_smc_day_v13", "tb_emapb_day_v13", "tb_smc_week_v13", "tb_emapb_week_v13", "tb_week_trade_v1")
 PLAN_KEY = "plan"
+# Canlida golgede izlenen M15 stratejileri: ayni kuralla (sabit stop, 2R hedef, en cok 96 mum) 90 gunde olculur.
+FIXED_IDS = ("tb_ema_pullback_v1", "tb_donchian_breakout_v1")
+FIXED_TARGET_R = 2.0
 VOLUME_OK = 0.7  # eski masanin hacim kurali: tetik mumu / 20 mum ortalamasi bunun altindaysa zayif
 WEEK_TIMEOUT = 7 * 86400.0
 MAX_PER_DAY = 5
@@ -139,7 +142,7 @@ def _simulate_planned(signal, entry: float, now: float, after: list[dict], state
 
 def swing_trades(symbol: str, kind: str, history: History, spreads: Spreads, start: float, end: float) -> list[dict]:
     """Bir sembolde swing stratejilerinin butun sinyalleri; her biri kendi cikis planiyla benzetilmis."""
-    active = [m for m in modules("strategy") if m.id in SWING_IDS + PLAN_IDS]
+    active = [m for m in modules("strategy") if m.id in SWING_IDS + PLAN_IDS + FIXED_IDS]
     state = h4_state(history, symbol)
     m15_all = history.all(symbol, "M15")
     trades: list[dict] = []
@@ -153,11 +156,19 @@ def swing_trades(symbol: str, kind: str, history: History, spreads: Spreads, sta
         if closed_at % 3600 == 0 or not upper:  # ust zaman dilimleri yalnizca saat basinda degisir
             upper = {"H1": _closed(history, symbol, "H1", now, 256), "H4": _closed(history, symbol, "H4", now, 120),
                      "D1": _closed(history, symbol, "D1", now, 120)}
-        context = Context(symbol=symbol, now=now, kind=kind, bars={"M15": m15_all[index - 3:index + 1], **upper})
+        context = Context(symbol=symbol, now=now, kind=kind,
+                          bars={"M15": m15_all[index - 3:index + 1], **upper})
+        wide = None  # M15 stratejileri icin genis pencere (yalnizca gerektiginde kurulur)
         for module in active:
             if now < open_until[module.id]:
                 continue  # ayni stratejinin bu semboldeki islemi hala acik
-            signal = module.evaluate(context)
+            if module.id in FIXED_IDS:
+                if wide is None:
+                    wide = Context(symbol=symbol, now=now, kind=kind,
+                                   bars={**upper, "M15": m15_all[max(0, index - 255):index + 1]})
+                signal = module.evaluate(wide)
+            else:
+                signal = module.evaluate(context)
             if signal is None:
                 continue
             sign = 1.0 if signal.side == "BUY" else -1.0
@@ -169,7 +180,15 @@ def swing_trades(symbol: str, kind: str, history: History, spreads: Spreads, sta
             after = m15_all[index + 1:index + 1 + outcome.SWING_MAX_BARS]
             spread_at = lambda moment: spreads.at(symbol, moment)  # noqa: E731
             results, extra = {}, {}
-            if signal.plan is None:
+            if module.id in FIXED_IDS:
+                target = entry + sign * FIXED_TARGET_R * risk
+                result = outcome.simulate_fixed(signal.side, entry, signal.stop, target, now, after,
+                                                spread_at=spread_at)
+                results[PLAN_KEY] = [result["r"], result["closed_at"], None]
+                reference = result["closed_at"]
+                extra = {"kind": kind, "model": "sabit 2R", "exit": result["first"], "mfe_r": result["mfe_r"],
+                         "weekend": (int(now // DAY) + 3) % 7 >= 5}
+            elif signal.plan is None:
                 for target in TARGETS:
                     result = outcome.simulate_swing(signal.side, entry, signal.stop, target, now, after,
                                                     spread_at=spread_at)
@@ -283,7 +302,7 @@ def summarize_swing(trades: list[dict], split: float) -> dict:
 
     out["selected"] = {"smc": best(SWING_IDS[:1]), "ema_pullback": best(EMA_IDS)}
     out["planned"] = {strategy_id: summarize_planned([t for t in trades if t["strategy_id"] == strategy_id], split)
-                      for strategy_id in PLAN_IDS}
+                      for strategy_id in PLAN_IDS + FIXED_IDS}
     # Hesap geneli: secilen stratejiler tek portfoy; gunluk sinir ve kayip serisi hepsine birlikte uygulanir.
     chosen = {pick["strategy_id"]: str(pick["target_r"]) for pick in out["selected"].values() if pick}
     together = [t for t in trades if t["strategy_id"] in chosen]

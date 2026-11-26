@@ -220,3 +220,45 @@ def simulate_trail(side: str, entry: float, stop: float, at: float, bars: list[d
     last = ((after[-1]["close"] + (spread_at(after[-1]["time"]) if side == "SELL" else 0.0)) - entry) * sign / risk if after else 0.0
     return {"first": first, "r": None, "open_r": round(last, 3), "closed_at": None, "bars": len(after),
             "mfe_r": round(best, 2), "mae_r": round(worst, 2)}
+
+
+FIXED_MAX_BARS = 96
+
+
+def simulate_fixed(side: str, entry: float, stop: float, target: float, at: float, bars: list[dict], *,
+                   spread_at=None, max_bars: int = FIXED_MAX_BARS) -> dict | None:
+    """Sabit stop + sabit hedef (golge izleyicinin kurali), ondan BAGIMSIZ yazilmis ikinci hesap.
+
+    Fiyatlar acikca alis/satis olarak izlenir: AL pozisyonu satis fiyatindan (bid) kapanir, SAT pozisyonu alis
+    fiyatindan (ask = bid + spread). `entry`, pozisyonun acildigi gercek fiyattir (AL icin ask, SAT icin bid).
+    Ayni mumda stop ve hedef birlikte gorulurse stop sayilir. `max_bars` mum icinde ikisi de olmazsa o mumun
+    kapanisindan cikilir; daha az mum varsa islem aciktir (r None)."""
+    risk = abs(entry - stop)
+    if risk <= 0:
+        return None
+    spread_at = spread_at or (lambda moment: 0.0)
+    after = [b for b in bars if b["time"] + BAR_SECONDS > at][:max_bars]
+    best = worst = 0.0
+    for index, bar in enumerate(after):
+        spread = spread_at(bar["time"])
+        if side == "BUY":  # cikis fiyati: bid
+            worst_exit, best_exit = bar["low"], bar["high"]
+            lost, won = worst_exit <= stop, best_exit >= target
+            adverse, favour = (worst_exit - entry) / risk, (best_exit - entry) / risk
+        else:  # cikis fiyati: ask
+            worst_exit, best_exit = bar["high"] + spread, bar["low"] + spread
+            lost, won = worst_exit >= stop, best_exit <= target
+            adverse, favour = (entry - worst_exit) / risk, (entry - best_exit) / risk
+        worst, best = min(worst, adverse), max(best, favour)
+        if lost or won:
+            return {"first": "SL" if lost else "TP", "r": -1.0 if lost else round(abs(target - entry) / risk, 3),
+                    "closed_at": bar["time"] + BAR_SECONDS, "bars": index + 1, "mfe_r": round(best, 2),
+                    "mae_r": round(worst, 2)}
+    if len(after) >= max_bars:
+        last = after[-1]
+        exit_price = last["close"] + (spread_at(last["time"]) if side == "SELL" else 0.0)
+        r = (exit_price - entry) / risk if side == "BUY" else (entry - exit_price) / risk
+        return {"first": "TIME", "r": round(r, 3), "closed_at": last["time"] + BAR_SECONDS, "bars": len(after),
+                "mfe_r": round(best, 2), "mae_r": round(worst, 2)}
+    return {"first": None, "r": None, "closed_at": None, "bars": len(after), "mfe_r": round(best, 2),
+            "mae_r": round(worst, 2)}
