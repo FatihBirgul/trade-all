@@ -47,7 +47,9 @@ VERSION = "ft-6"
 TARGETS = (1.5, 2.0, 2.5)
 SWING_IDS = ("tb_smc_sweep_v1", "tb_emapb_h1_20_21_v1", "tb_emapb_h1_21_50_v1")
 EMA_IDS = SWING_IDS[1:]
-PLAN_IDS = ("tb_smc_day_v13", "tb_emapb_day_v13", "tb_smc_week_v13", "tb_emapb_week_v13", "tb_week_trade_v1")
+PLAN_IDS = ("tb_smc_day_v13", "tb_emapb_day_v13", "tb_smc_week_v13", "tb_emapb_week_v13", "tb_week_trade_v1",
+            "tb_silver_bullet_v1", "tb_asia_london_v1", "tb_turtle55_v1")
+WIDE_M15_IDS = ("tb_silver_bullet_v1", "tb_asia_london_v1")  # M15 gecmisine (seans araligi, FVG) bakan stratejiler
 PLAN_KEY = "plan"
 # Canlida golgede izlenen M15 stratejileri: ayni kuralla (sabit stop, 2R hedef, en cok 96 mum) 90 gunde olculur.
 FIXED_IDS = ("tb_ema_pullback_v1", "tb_donchian_breakout_v1")
@@ -158,8 +160,32 @@ def h4_state(history: History, symbol: str):
     return state
 
 
-def _simulate_planned(signal, entry: float, now: float, after: list[dict], state, spread_at) -> dict | None:
+def d1_channel(history: History, symbol: str):
+    """(an, yon, gun) -> o gun kapanisinda gecerli kanal cikis seviyesi: ONCEKI `gun` gunluk mumun dibi (AL) ya da
+    tepesi (SAT). Kapanan gunun kendisi dahil degildir."""
+    bars = history.all(symbol, "D1")
+    closes = [bar["time"] + DURATIONS["D1"] for bar in bars]
+
+    def level(moment: float, side: str, days: int) -> float | None:
+        last = bisect.bisect_right(closes, moment) - 1  # o anda kapanmis son gunluk mum
+        if last < days:
+            return None
+        window = bars[last - days:last]
+        return min(b["low"] for b in window) if side == "BUY" else max(b["high"] for b in window)
+
+    return level
+
+
+def _simulate_planned(signal, entry: float, now: float, after: list[dict], state, spread_at, channel=None) -> dict | None:
     kind = signal.plan["type"]
+    if kind == "FIXED":  # sabit stop + sabit hedef; sure dolunca kapanistan cikis
+        return outcome.simulate_fixed(signal.side, entry, signal.stop, signal.plan["target"], now, after,
+                                      spread_at=spread_at, max_bars=int(signal.plan["max_bars"]),
+                                      deadline=signal.plan.get("exit_at"))
+    if kind == "CHANNEL":
+        return outcome.simulate_channel(signal.side, entry, signal.stop, now, after,
+                                        lambda moment: channel(moment, signal.side, int(signal.plan["exit_days"])),
+                                        spread_at=spread_at)
     if kind == "DAY":
         return outcome.simulate_plan(signal.side, entry, signal.stop, signal.plan["tp1"], signal.plan["tp2"], now,
                                      after, spread_at=spread_at)
@@ -179,6 +205,7 @@ def swing_trades(symbol: str, kind: str, history: History, spreads: Spreads, sta
     ayni stratejinin sonraki sinyalini engellemez (gercekte acilmayacagi icin)."""
     active = [m for m in modules("strategy") if m.id in SWING_IDS + PLAN_IDS + FIXED_IDS]
     state = h4_state(history, symbol)
+    channel = d1_channel(history, symbol)
     gate = CostGate(max_cost)
     m15_all = history.all(symbol, "M15")
     trades: list[dict] = []
@@ -198,7 +225,7 @@ def swing_trades(symbol: str, kind: str, history: History, spreads: Spreads, sta
         for module in active:
             if now < open_until[module.id]:
                 continue  # ayni stratejinin bu semboldeki islemi hala acik
-            if module.id in FIXED_IDS:
+            if module.id in FIXED_IDS + WIDE_M15_IDS:
                 if wide is None:
                     wide = Context(symbol=symbol, now=now, kind=kind,
                                    bars={**upper, "M15": m15_all[max(0, index - 255):index + 1]})
@@ -234,7 +261,9 @@ def swing_trades(symbol: str, kind: str, history: History, spreads: Spreads, sta
                     results[str(target)] = [result["r"], result["closed_at"], result.get("open_r")]
                 reference = results["2.0"][1]
             else:
-                result = _simulate_planned(signal, entry, now, after, state, spread_at)
+                if signal.plan["type"] == "CHANNEL":  # trend takibi: tutma suresi siniri yok
+                    after = m15_all[index + 1:]
+                result = _simulate_planned(signal, entry, now, after, state, spread_at, channel)
                 if result is None:
                     continue
                 results[PLAN_KEY] = [result["r"], result["closed_at"], result.get("open_r")]

@@ -815,3 +815,26 @@ Bot yavaşlamasın diye sunucu artık hiçbir backtest hesabı yapmaz (`BACKTEST
   sonradan toplamak tek seferde koşmakla aynı sonucu verir (test).
 - V9 değerlendirmesinin kendisi hızlandırılmadı (artımlı gösterge hesabı): Actions paralelliği süre sorununu
   çözdüğü için ertelendi; sonuçların birebir aynı kaldığını kanıtlayan test gerektirir.
+
+## Üç yeni gölge strateji (2026-11-26, kullanıcı isteği) — `tradebot/signals/modules/strategies/classic.py`
+
+Hepsi yalnızca gölge kipinde; canlıya alma kullanıcının onayıyla. Parametreler yaygın/özgün tanımlardan alındı ve
+sonuca göre AYARLANMADI. Aynı ileri test ve yıllık backtestten geçerler (`forward.PLAN_IDS`).
+
+| Kimlik | Tanım | Kaynak |
+|---|---|---|
+| `tb_silver_bullet_v1` | New York saatiyle 03–04, 10–11, 14–15 pencereleri. Pencerede tamamlanan bir FVG (3 mumluk boşluk) ve FVG'nin orta mumu dahil son 9 mum içinde bir likidite süpürmesi (dönüş noktası, eşit tepe/dip, önceki günün tepe/dibi, Asya/Londra seans tepe/dibi); FVG'ye İLK dönüşte, mum kapanışında giriş. Stop süpürmenin 0,1 ATR ötesi; hedef karşı taraftaki en yakın likidite (en az 1R uzakta; yoksa işlem yok); en çok 96 mum. | Michael J. Huddleston (ICT), "Silver Bullet" (2022–23 mentorluk videoları). Özgün tanım 1–5 dakikalık grafikte; burada en küçük zaman dilimi M15. |
+| `tb_asia_london_v1` | Londra saatiyle 00–08 aralığının tepe/dibi; 08–12 arasında aralık dışındaki İLK M15 kapanışında giriş. Stop aralığın karşı ucu; hedef aralık genişliği kadar ileride; 21:00'de çıkış. Aralık genişliği günlük ATR(14)'ün %20–%100'ü arasında olmalı. | Yaygın "Asian range / London breakout" tanımı (ör. Kathy Lien, *Day Trading and Swing Trading the Currency Market*; "London breakout" literatürü). Kontrolcü Londra penceresini UTC 07–08 önermişti: Londra yerel saati kullanıldı (yaz saatinde 07 UTC, kışın 08 UTC). |
+| `tb_turtle55_v1` | Günlük kapanış önceki 55 günün tepesini aşarsa AL (dibini kırarsa SAT); stop 2N (N = 20 günlük Wilder ATR); günlük kapanış önceki 20 günün dibinin altına (üstüne) inerse çıkış. | Kaplumbağa (Turtle) kuralları, Sistem 2 (Richard Dennis / William Eckhardt; Curtis Faith, *Way of the Turtle*). Farklar: giriş gün içi kırılımla değil kapanışla; piramitleme ve N'e göre birim boyutlandırma yok. |
+
+- Silver Bullet penceresi için kaynaklarda "Londra" penceresi New York saatiyle 03–04'tür (UTC 07–08 yaz, 08–09 kış).
+- Çıkış benzetimleri: sabit stop + sabit hedef + süre (`simulate_fixed`); kanal çıkışı (`simulate_channel`, yalnızca
+  önceki günlerin dip/tepesi; tutma süresi sınırı yok).
+- Canlı gölge kaydı bu stratejileri de ortak 2R planıyla izler; gerçek ölçüm backtesttir.
+- Bağımsız inceleme (PR #29) bulguları düzeltildi: (1) Kaplumbağa cuma günkü günlük kapanışı atlıyordu (FX/metal
+  gece yarısından önce kapanır): giriş ve kanal çıkışı artık günlük kapanıştan sonraki İLK M15 mumunda (haftanın
+  ilk mumu) değerlendirilir; (2) Asya/Londra 21:00 çıkışı mum sayısı yerine saatle (`exit_at`); (3) spread hedefi
+  yutmuşsa (gerçek giriş hedefin ötesinde) işlem sayılmaz; (4) süpürme penceresi tanımı koda göre düzeltildi.
+  Bilinen iyimserlik: stopu boşlukla (hafta sonu) aşan fiyat tam −1R sayılır (diğer benzetimlerle aynı).
+- Testler: `tests/signals/test_classic.py` (her sinyal kuralına uyuyor, gelecek kesilince aynı sinyaller, kanal
+  çıkışı yalnızca önceki günleri kullanır, oynatmada kendi çıkışlarıyla sonuçlanır). Uygulama 1.0.3: yeni adlar.

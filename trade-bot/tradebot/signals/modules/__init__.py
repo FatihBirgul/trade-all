@@ -7,6 +7,7 @@ from .base import Context, Module, Signal, Vote, get, modules, register
 from .strategies.donchian_breakout import DonchianBreakout
 from .strategies.ema_pullback import EmaPullback
 from .strategies.ema_pullback_h1 import EmaPullbackH1
+from .strategies.classic import AsiaLondon, SilverBullet, Turtle55
 from .strategies.smc_sweep import SmcSweep
 from .strategies.v13 import V13
 from .strategies.week_trade import WeekTrade
@@ -42,5 +43,9 @@ register(V13("smc", "H4"))
 register(V13("ema", "H1"))
 register(V13("ema", "H4"))
 register(WeekTrade())
+# Bilinen uc strateji (ICT Silver Bullet, Asya araligi / Londra kirilimi, Kaplumbaga 55/20): yalnizca golge.
+register(SilverBullet())
+register(AsiaLondon())
+register(Turtle55())
 
 __all__ = ["Context", "Module", "Signal", "Vote", "get", "modules", "register"]

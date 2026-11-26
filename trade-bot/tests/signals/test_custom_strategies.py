@@ -111,7 +111,8 @@ def test_indicators():
 
 def test_registry_has_the_new_strategies_and_they_default_to_shadow():
     swing = {"tb_smc_sweep_v1", "tb_emapb_h1_20_21_v1", "tb_emapb_h1_21_50_v1", "tb_smc_day_v13",
-             "tb_smc_week_v13", "tb_emapb_day_v13", "tb_emapb_week_v13", "tb_week_trade_v1"}
+             "tb_smc_week_v13", "tb_emapb_day_v13", "tb_emapb_week_v13", "tb_week_trade_v1", "tb_silver_bullet_v1",
+             "tb_asia_london_v1", "tb_turtle55_v1"}
     assert {m.id for m in modules("strategy")} == {PULLBACK, BREAKOUT} | swing == custom.strategy_ids()
     assert all(strategy_mode(BotSettings(), strategy_id) == "shadow" for strategy_id in swing)
     settings = BotSettings()
