@@ -112,3 +112,51 @@ def test_existing_strategy_adapters_run_and_give_positive_stops():
 def test_registry_ids_are_unique_and_every_strategy_states_a_source():
     ids = [s.id for s in S.STRATEGIES]
     assert len(ids) == len(set(ids)) and all(s.source and s.tf in E.TF_SECONDS for s in S.STRATEGIES)
+
+
+def test_rsi2_buys_a_short_dip_above_the_200_day_average_and_exits_above_sma5():
+    closes = list(np.linspace(100, 150, 230)) + [146.0, 141.0] + [150.0]
+    s = daily(closes)
+    spec = S.rsi2(s, {})
+    assert spec.long[231] and not spec.long[:229].any() and spec.exit_long[232]
+
+
+def test_double7_buys_the_seven_day_closing_low_in_an_uptrend():
+    closes = list(np.linspace(100, 150, 230)) + [149.0, 148.0, 147.0]
+    spec = S.double7(daily(closes), {})
+    assert spec.long[232] and not spec.short.any()
+
+
+def test_ibs_and_three_down_are_long_only_index_rules():
+    s = E.Series("US500", "D1", T0 + np.arange(4) * 86400, np.array([10.0, 10, 10, 10]), np.array([11.0, 11, 11, 11]),
+                 np.array([9.0, 9, 9, 9]), np.array([9.1, 10.9, 10, 10]))
+    spec = S.ibs(s, {})
+    assert spec.long[0] and not spec.long[1] and spec.exit_long[1] and spec.max_bars == 1
+    closes = list(np.linspace(100, 150, 230)) + [149.0, 148.0, 147.0, 148.5]
+    spec = S.three_down(daily(closes), {})
+    assert spec.long[232] and not spec.long[231] and spec.exit_long[233]
+    assert S.BY_ID["C21_ibs"].kinds == ("index",) and S.BY_ID["C23_three_down"].kinds == ("index",)
+
+
+def test_turtle_soup_needs_an_old_low_a_break_and_a_close_back_above():
+    lows = [100.0] * 5 + [95.0] + [100.0] * 15 + [94.0]
+    closes = [101.0] * 21 + [96.0]
+    s = E.Series("X", "D1", T0 + np.arange(22) * 86400, np.array(closes), np.array([102.0] * 22), np.array(lows),
+                 np.array(closes))
+    spec = S.turtle_soup(s, {})
+    assert spec.long[21] and spec.stop[21] > 96.0 - 94.0
+    fresh = lows[:]
+    fresh[18] = 95.0  # dip yalnizca 3 gun once: kurulum yok
+    fresh[5] = 100.0
+    s2 = E.Series("X", "D1", s.time, s.open, s.high, np.array(fresh), s.close)
+    assert not S.turtle_soup(s2, {}).long[21]
+
+
+def test_holy_grail_and_bollinger_reversion_follow_the_trend_direction():
+    rng = np.random.default_rng(4)
+    up = np.linspace(100, 200, 300) + rng.normal(0, 0.8, 300)
+    s = daily(up, spread=1.5)
+    hg = S.holy_grail(s, {})
+    assert not hg.short.any() and np.all(hg.stop[np.flatnonzero(hg.long)] > 0)
+    br = S.bollinger_revert(s, {})
+    assert not br.short[220:].any()

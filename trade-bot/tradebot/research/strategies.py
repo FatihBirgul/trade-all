@@ -116,6 +116,72 @@ def macd_zero(s: Series, ctx) -> Spec:
     return Spec(long=up & (line > 0), short=down & (line < 0), stop=_atr_stop(s), exit_long=down, exit_short=up)
 
 
+# ---------------------------------------------------------------- C. ortalamaya donus
+def rsi2(s: Series, ctx) -> Spec:
+    m200, m5, r = ind.sma(s.close, 200), ind.sma(s.close, 5), ind.rsi(s.close, 2)
+    return Spec(long=(s.close > m200) & (r < 10), short=(s.close < m200) & (r > 90), stop=_atr_stop(s),
+                exit_long=s.close > m5, exit_short=s.close < m5)
+
+
+def double7(s: Series, ctx) -> Spec:
+    m200 = ind.sma(s.close, 200)
+    lo7, hi7 = ind.rolling_min(s.close, 7, prior=False), ind.rolling_max(s.close, 7, prior=False)
+    at_low, at_high = s.close <= lo7, s.close >= hi7
+    return Spec(long=(s.close > m200) & at_low, short=(s.close < m200) & at_high, stop=_atr_stop(s),
+                exit_long=at_high, exit_short=at_low)
+
+
+def ibs(s: Series, ctx) -> Spec:
+    span = s.high - s.low
+    with np.errstate(divide="ignore", invalid="ignore"):
+        value = np.where(span > 0, (s.close - s.low) / span, 0.5)
+    return Spec(long=value < 0.2, short=_false(len(s)), stop=_atr_stop(s), exit_long=value > 0.8, max_bars=1)
+
+
+def bollinger_revert(s: Series, ctx) -> Spec:
+    mid, upper, lower = ind.bollinger(s.close, 20, 2.0)
+    m200 = ind.sma(s.close, 200)
+    long = (s.close > m200) & (s.low <= lower) & (s.close > lower)
+    short = (s.close < m200) & (s.high >= upper) & (s.close < upper)
+    return Spec(long=long, short=short, stop=_atr_stop(s), exit_long=s.close >= mid, exit_short=s.close <= mid)
+
+
+def three_down(s: Series, ctx) -> Spec:
+    m200 = ind.sma(s.close, 200)
+    d = np.diff(s.close, prepend=NAN)
+    down3 = (d < 0) & (np.roll(d, 1) < 0) & (np.roll(d, 2) < 0)
+    down3[:3] = False
+    return Spec(long=(s.close > m200) & down3, short=_false(len(s)), stop=_atr_stop(s), exit_long=d > 0,
+                max_bars=5)
+
+
+def turtle_soup(s: Series, ctx) -> Spec:
+    """20 gunluk dip, en az 4 gun once yapilmis; bugun o dibin altina inip uzerinde kapanis -> AL (ayna: SAT)."""
+    n = len(s)
+    long, short, stop = _false(n), _false(n), np.full(n, NAN)
+    a = ind.atr(s.high, s.low, s.close, 14)
+    for i in range(21, n):
+        window_l, window_h = s.low[i - 20:i], s.high[i - 20:i]
+        k_l, k_h = int(np.argmin(window_l)), int(np.argmax(window_h))
+        prior_low, prior_high = window_l[k_l], window_h[k_h]
+        if 20 - k_l >= 4 and s.low[i] < prior_low < s.close[i]:
+            long[i], stop[i] = True, s.close[i] - s.low[i] + 0.1 * a[i]
+        elif 20 - k_h >= 4 and s.high[i] > prior_high > s.close[i]:
+            short[i], stop[i] = True, s.high[i] - s.close[i] + 0.1 * a[i]
+    return Spec(long=long, short=short, stop=stop, trail=3.0 * a)
+
+
+def holy_grail(s: Series, ctx) -> Spec:
+    pdi, mdi, adx = ind.dmi(s.high, s.low, s.close, 14)
+    e20 = ind.ema(s.close, 20)
+    a = ind.atr(s.high, s.low, s.close, 14)
+    strong = adx > 30
+    long = strong & (pdi > mdi) & (s.low <= e20) & (s.close > e20)
+    short = strong & (mdi > pdi) & (s.high >= e20) & (s.close < e20)
+    stop = np.where(long, s.close - s.low, np.where(short, s.high - s.close, NAN)) + 0.1 * a
+    return Spec(long=long, short=short, stop=stop, trail=3.0 * a)
+
+
 # ---------------------------------------------------------------- mevcut stratejiler (karsilastirma)
 def week_trade(s: Series, ctx) -> Spec:
     """WEEK TRADE (`bt.py`): 4H kapanisinda sinyal; stop 2 x gunluk ATR; cikis: +1R'de stop girise, +2R'de +1R
@@ -220,6 +286,21 @@ STRATEGIES: list[Strategy] = [
              "bulut ustu + Tenkan > Kijun; Kijun alti kapanista cikis; stop 2 x ATR(14)"),
     Strategy("A11_macd_zero", "A", "D1", "Gerald Appel, MACD 12/26/9", macd_zero,
              "MACD > 0 iken sinyal kesisimi; ters kesisimde cikis; stop 2 x ATR(14)"),
+    Strategy("C19_rsi2", "C", "D1", "Connors & Alvarez (2008), RSI(2)", rsi2,
+             "SMA200 ustu RSI(2) < 10 AL, SMA5 ustu kapanista cikis (ayna SAT); stop 2 x ATR(14) varsayilan"),
+    Strategy("C20_double7", "C", "D1", "Connors & Alvarez, Double 7s", double7,
+             "7 gunun en dusuk kapanisinda AL, en yuksekte cikis; FX'te ayna SAT; stop 2 x ATR(14)"),
+    Strategy("C21_ibs", "C", "D1", "Pagonidis (2013), IBS etkisi", ibs,
+             "IBS < 0,2 AL; ertesi gun kapanis ya da IBS > 0,8'de cikis; yalnizca AL, endeksler",
+             kinds=("index",)),
+    Strategy("C22_bollinger_revert", "C", "H4", "John Bollinger, banda dokunup iceri kapanis", bollinger_revert,
+             "SMA200 yonunde; orta bantta cikis; stop 2 x ATR(14)"),
+    Strategy("C23_three_down", "C", "D1", "Connors & Alvarez, 3 gun dusus", three_down,
+             "SMA200 ustu 3 dusuk kapanis; 5 gun ya da ilk yukselis kapanisinda cikis; endeksler", kinds=("index",)),
+    Strategy("C24_turtle_soup", "C", "D1", "Raschke & Connors, Street Smarts (1995), Turtle Soup", turtle_soup,
+             "kapanisla (gun ici stop emri degil); stop gunun dibinin 0,1 ATR alti; iz suren 3 x ATR(14)"),
+    Strategy("C25_holy_grail", "C", "D1", "Raschke & Connors, Street Smarts, Holy Grail", holy_grail,
+             "ADX(14) > 30, EMA20'ye dokunup trend yonunde kapanis; stop mumun ucu; iz suren 3 x ATR(14)"),
     Strategy("X_week_trade", "X", "H4", "Eski masanin bt.py'si (WEEK TRADE, yumusak)", week_trade),
     Strategy("X_ema_h1_20_21", "X", "H1", "Eski masanin EMA pullback H1 (20/21)", ema_h1(20, 21)),
     Strategy("X_ema_h1_21_50", "X", "H1", "Eski masanin EMA pullback H1 (21/50)", ema_h1(21, 50)),
