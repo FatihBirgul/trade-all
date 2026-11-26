@@ -838,3 +838,42 @@ sonuca göre AYARLANMADI. Aynı ileri test ve yıllık backtestten geçerler (`f
   Bilinen iyimserlik: stopu boşlukla (hafta sonu) aşan fiyat tam −1R sayılır (diğer benzetimlerle aynı).
 - Testler: `tests/signals/test_classic.py` (her sinyal kuralına uyuyor, gelecek kesilince aynı sinyaller, kanal
   çıkışı yalnızca önceki günleri kullanır, oynatmada kendi çıkışlarıyla sonuçlanır). Uygulama 1.0.3: yeni adlar.
+
+## İlk yıllık backtest sonucu (2026-11-26, GitHub Actions run 45890500451, main 66c3daa)
+
+Akış gerçek ortamda ilk kez çalıştı: sunucu yalnızca piyasa verisini verdi (18 sn), sembol başına bir iş (28 iş,
+10–62 dk; en uzunu ETHUSD), birleştirme 6 dk, sonuç sunucuya yüklendi. Toplam 82 dk. Veri: 28 sembolde 365 gün
+(medyan = taban = 365). V9: 716 131 değerlendirme, 3 hata. Kurallar: 2000 USC, işlem başına %0,5 risk, en çok 3 açık
+işlem, sembol başına 1, maliyet kapısı %15, swap 0; haber penceresi geçmişe uygulanamadı.
+
+**Hiçbir strateji geçme ölçütünü sağlamadı** (1 yılda ≥50 işlem, PF ≥ 1,2, iki yarıyıl artı, düşüş ≤ %15, 6 ay artı).
+
+| Strateji | 1 ay: işlem / R / PF | 6 ay: işlem / R / PF | 1 yıl: işlem / R / USC / PF / düşüş |
+|---|---|---|---|
+| fx_trend_momentum_v6 (V9) | 153 / −3,35 / 0,96 | 353 / +19,11 / 1,11 | 791 / +10,18 / +70 / 1,03 / %14,7 |
+| tb_asia_london_v1 | 89 / +0,25 / 1,01 | 533 / −2,74 / 0,98 | 1031 / −2,96 / −43 / 0,99 / %12,3 |
+| tb_smc_sweep_v1 | 6 / +5,3 / 6,3 | 35 / +1,0 / 1,06 | 78 / −3,2 / −34 / 0,92 / %6,9 |
+| tb_turtle55_v1 | 0 | 12 / −2,45 / 0,66 | 23 / −3,94 / −40 / 0,74 / %4,2 |
+| tb_emapb_h1_21_50_v1 | 6 / −4,5 / 0,10 | 51 / −8,3 / 0,70 | 108 / −4,8 / −50 / 0,91 / %7,8 |
+| fx_failed_breakout_v6 (V9) | 61 / −22,22 / 0,42 | 110 / −33,12 / 0,49 | 245 / −5,46 / −63 / 0,96 / %16,5 |
+| tb_emapb_h1_20_21_v1 | 10 / −3,5 / 0,50 | 59 / −8,6 / 0,74 | 115 / −9,7 / −97 / 0,84 / %9,0 |
+| fx_confirmed_breakout_v6 (V9) | 38 / +2,53 / 1,15 | 76 / +1,33 / 1,04 | 167 / −9,66 / −100 / 0,89 / %12,7 |
+| tb_week_trade_v1 | 6 / −0,47 / 0,64 | 54 / −6,11 / 0,66 | 116 / −10,11 / −100 / 0,73 / %6,7 |
+| fx_range_reversion_v6 (V9) | 27 / −5,03 / 0,66 | 59 / −0,37 / 0,99 | 150 / −10,34 / −106 / 0,86 / %7,7 |
+| tb_smc_day_v13 | 33 / +1,95 / 1,12 | 156 / −12,34 / 0,85 | 313 / −13,02 / −135 / 0,92 / %17,3 |
+| tb_smc_week_v13 | 11 / +2,84 / 1,97 | 80 / −6,92 / 0,76 | 172 / −17,09 / −168 / 0,74 / %11,0 |
+| tb_emapb_week_v13 | 28 / −9,93 / 0,32 | 155 / −30,21 / 0,59 | 299 / −30,94 / −298 / 0,77 / %18,2 |
+| tb_emapb_day_v13 | 52 / −0,07 / 1,00 | 334 / +4,45 / 1,03 | 686 / −43,15 / −408 / 0,88 / %26,9 |
+| tb_silver_bullet_v1 | 139 / −28,73 / 0,69 | 751 / −114,95 / 0,76 | 1557 / −235,34 / −1401 / 0,76 / %72,1 |
+| tb_donchian_breakout_v1 | 272 / +3,13 / 1,02 | 1596 / −142,08 / 0,87 | 3236 / −244,19 / −1454 / 0,89 / %78,9 |
+| tb_ema_pullback_v1 | 230 / +9,03 / 1,06 | 1307 / −112,52 / 0,87 | 2635 / −327,53 / −1633 / 0,82 / %83,8 |
+
+Okuma:
+- Bir yılda artıda kalan tek strateji V9'un `fx_trend_momentum_v6`'sı; kenarı çok ince (PF 1,03) ve ölçütün altında.
+- Asya/Londra kırılımı 1031 işlemde başa baş (PF 0,99): maliyet sonrası kenar yok.
+- Silver Bullet M15'te açıkça zararda (özgün tanım 1–5 dk grafikte; M15 uyarlaması tutmadı).
+- Kaplumbağa 23 işlemle yargı için az (ölçüt 50); bir yıl bu sistem için kısa.
+- Eski masanın WEEK TRADE'i 2 yıllık kendi testinde artıydı (ağırlıkla XAU); burada 28 sembolde PF 0,73.
+- XAUUSD ve bir sembol daha listede yok: iş akışı, saatlik spread profili olmayan sembolleri atlıyor (30 → 28).
+- Sonuç sunucuya yüklendi; uygulamadaki Backtest ekranı bu tabloyu gösterir. Canlıya alma kapısı açılmadı
+  (hiçbir strateji geçmedi); bot dry-run'da.
