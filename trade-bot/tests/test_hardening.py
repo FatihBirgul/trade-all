@@ -511,3 +511,30 @@ async def test_lot_ceiling_fails_closed_when_it_cannot_be_checked(tmp_path):
     app.bot.quotes._last.clear()
     with pytest.raises(ValueError, match="denetlenemedi"):
         guard("XAUUSD", "BUY", 0.1, None, entry - 5.0)  # fiyat da yoksa emir yok
+
+
+async def test_swap_is_measured_read_only_from_positions_held_overnight(tmp_path):
+    """Gecelik faiz orani API'de yok: en az bir gece tasinmis pozisyonun birikmis swap'indan olculur. Yalnizca
+    oran saklanir (tutar yok); hicbir istek gonderilmez, hicbir karar etkilenmez."""
+    from tradebot.exness.schema import Position
+    app = await started(tmp_path)
+    now = app.clock["now"]
+    entry = app.bot.quotes.quote("XAUUSD")["ask"]
+    notional = abs(app.bot.provider.loss_for("XAUUSD", "BUY", 0.1, entry, 0.0))
+    held = Position(id="p-gece", symbol="XAUUSD", side="BUY", volume=0.1, open_price=entry, swap=-notional * 0.05 / 365 * 2,
+                    opened_at=now - 2 * 86400)
+    fresh = Position(id="p-yeni", symbol="XAUUSD", side="SELL", volume=0.1, open_price=entry, swap=0.0, opened_at=now - 600)
+    before = len(app.fake.requests)
+    app.bot._observe_swaps([held, fresh])
+    seen = app.bot.scan_summary()["swap_observed"]
+    assert list(seen) == ["XAUUSD|BUY"]  # ayni gun acilan pozisyon olculmez
+    assert seen["XAUUSD|BUY"]["nights"] == 2 and seen["XAUUSD|BUY"]["rate_pct_year"] == pytest.approx(-5.0, abs=0.01)
+    assert seen["XAUUSD|BUY"]["zero"] is False and len(app.fake.requests) == before
+    free = Position(id="p-sifir", symbol="XAUUSD", side="SELL", volume=0.1, open_price=entry, swap=0.0,
+                    opened_at=now - 3 * 86400)
+    app.bot._observe_swaps([free])
+    assert app.bot.scan_summary()["swap_observed"]["XAUUSD|SELL"] == {"at": round(now), "nights": 3, "rate_pct_year": 0.0,
+                                                                     "zero": True}
+    assert str(round(notional)) not in str(app.bot.scan_summary()["swap_observed"])  # tutar yok
+    app.bot._observe_swaps([Position(id="p-bozuk", symbol="YOKUSD", side="BUY", volume=0.1, open_price=1.0,
+                                     opened_at=now - 3 * 86400)])  # bilinmeyen sembol botu etkilemez

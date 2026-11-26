@@ -25,7 +25,7 @@ from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 
 from .config import BotSettings, Settings, strategy_mode
 from .execution.executor import Executor
-from .execution.reconcile import fetch_all_deals, reconcile
+from .execution.reconcile import fetch_all_deals, reconcile, canonical
 from . import backtest, forward, week_replica
 from .store import backup
 from .store.repo import Trade
@@ -88,6 +88,7 @@ HEAL_RETRY = 6 * 3600.0  # borsanin da vermedigi bosluk icin yeniden deneme aral
 # Ileri test (yalnizca deneme modunda, ayri dusuk oncelikli surecte): bkz. backtest.py
 SHADOW_CHECK_HOURS = 48.0  # /health/outcomes capraz denetimi: en cok bu kadar eski golge islemler
 SHADOW_CHECK_MAX = 120  # ...ve cagri basina en cok bu kadar islem
+SWAP_ROLLOVER = 22 * 3600.0  # gun devri (UTC, yaklasik): bu ani gecen pozisyon bir gece tasinmis sayilir
 HARD_MAX_RISK_PCT = 5.0  # tek emirde stopta olusacak zararin varliga orani icin MUTLAK tavan (ayar degil)
 HARD_MAX_NOTIONAL_X = 50.0  # tek pozisyonun buyuklugu / varlik icin MUTLAK tavan (ayar degil)
 BACKTEST_DELAY = 180.0  # acilistan sonra bekleme (sn)
@@ -1073,6 +1074,7 @@ class Bot:
             return False
         report = await self.executor.reconcile()
         if report is not None:
+            self._observe_swaps(report.positions)
             try:
                 # Hesap ayarlari (durum, kaldirac) calisirken degisebilir: marjin kisiti, yalnizca-kapat kipi.
                 # Yalnizca acilista okunursa bot bunu emir reddedilene kadar ogrenemezdi. Mutabakat basarili
@@ -1211,6 +1213,9 @@ class Bot:
                         "stop_seen": t.last_sl is not None or t.sl is not None, "sltp_order": bool(t.sltp_order_id),
                         "target_seen": t.tp2 is not None or t.planned_tp is not None}
                        for t in reversed(self.repo.closed_trades(since=since, limit=10))]}
+        # Olculen gecelik faiz (yillik %, eksi = maliyet; tutar yok). Bos ise henuz gece tasinan pozisyon olmadi.
+        observed = self.repo.get_setting("swap_observed", {})
+        out["swap_observed"] = observed if isinstance(observed, dict) else {}
         # Kimlik retleri (tanilama): an, tur, kod, kaynak, ardisik ret sayisi / duzelme suresi. Tutar ya da kimlik yok.
         out["auth"] = [
             {"at": round(event["at"]), "kind": event["kind"],
@@ -1401,6 +1406,35 @@ class Bot:
     async def _once_after(self, delay: float, action) -> None:
         await self._sleep(delay)
         await action()
+
+    def _observe_swaps(self, positions: list) -> None:
+        """Gecelik faiz (swap) OLCUMU, yalnizca okuma: en az bir gece tasinmis acik pozisyonlarda broker'in bildirdigi
+        birikmis swap, pozisyon buyuklugune ve gece sayisina oranlanip yillik yuzde olarak saklanir (eksi = maliyet,
+        0 = swap yok). Tutar saklanmaz; hicbir karari etkilemez. API'de enstruman bazinda swap orani olmadigi icin
+        gercek deger ancak boyle ogrenilir."""
+        now = self._clock()
+        try:
+            seen = self.repo.get_setting("swap_observed", {})
+            seen = dict(seen) if isinstance(seen, dict) else {}
+            changed = False
+            for position in positions:
+                if position.closed or not position.opened_at or not position.open_price or not position.volume:
+                    continue
+                nights = int((now - SWAP_ROLLOVER) // 86400) - int((position.opened_at - SWAP_ROLLOVER) // 86400)
+                if nights < 1:
+                    continue
+                symbol = canonical(self.catalog, position.symbol)
+                notional = abs(self.provider.loss_for(symbol, "BUY", position.volume, position.open_price, 0.0))
+                if notional <= 0:
+                    continue
+                rate = float(position.swap or 0.0) / notional / nights * 365.0 * 100.0
+                seen[f"{symbol}|{position.side}"] = {"at": round(now), "nights": nights,
+                                                     "rate_pct_year": round(rate, 3), "zero": not position.swap}
+                changed = True
+            if changed:
+                self.repo.set_setting("swap_observed", seen)
+        except (LookupError, KeyError, TypeError, ValueError, sqlite3.Error) as exc:
+            log.info("swap olcumu yapilamadi: %s", type(exc).__name__)
 
     def lot_guard(self, symbol: str, side: str, lots: float, entry: float | None, stop: float | None) -> None:
         """Mutlak lot tavani: bakiye ve sembole gore. Asilirsa ValueError (emir kurulmaz).

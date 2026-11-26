@@ -161,6 +161,10 @@ Kritik bulgu yok; "deneme modunda dağıtılabilir". İkinci tur düzeltmeleri (
 - Kontrolcü: deneme modunda ilk okunan varlık `capital_seen` olayıyla, para yatırma/çekme `balance_change` olayıyla kayda geçer (biçim `/events` üzerinden doğrulanacak).
 
 İlk gerçek emirden ÖNCE yapılacaklar (inceleme kararı: "henüz değil"):
+> **Güncelleme 2026-11-26:** 1. ve 2. madde KARŞILANDI (elle GBPUSD SELL 0,01 lot: sunucu kaydında broker tarafında
+> stop görüldü, stop/hedef emri eşleşti, hedef görüldü, `sl_missing` 0; kullanıcının Exness uygulamasında pozisyonda
+> TP ve SL etiketleri görünüyor; kapanış K/Z'si terminalde −0,18 USC, bizim kayıtla birebir aynı). 3. madde ilk bot
+> emrinde doğrulanacak; 4. madde kullanıcı kararı bekliyor.
 1. Gerçek fixture'lar: balance deal, pozisyon, sltp emri, deal, tick, WS olayları (I-3, I-10). Deneme modunda terminalden elle 0.01 lot pozisyon açıp `/positions` içinde `sl`/`tp` göründüğünü doğrula; yoksa stop koruması sağlıklı pozisyonu ~96 sn'de kapatır.
 2. Kapanan elle işlemde `trade_closed` K/Z'sinin terminaldekiyle (USC, komisyon işareti) aynı olduğunu doğrula.
 3. İlk bot emrinde: PATCH verilmeyen TP'yi koruyor mu (I7), dolum olayı sltp emrini taşıyor mu, ACK/operasyon biçimleri, yeniden bağlanmada snapshot, `client_request_id` yankısı.
@@ -707,3 +711,16 @@ bilinmiyorsa aday geçmez; yüzde → oran dönüşümü; tekrar ayıklama. Bili
 tarama başına ADAY sayar (aynı kurulum art arda taramalarda yeniden sayılır; `candidates` de böyle sayılır);
 kapı sayıları uygulamada henüz gösterilmiyor (yalnızca özet uçlarında); sınır değiştirilirse ileri testin V9
 aşaması baştan hesaplanır.
+
+
+### Canlı öncesi liste ve gecelik faiz (2026-11-26, kontrolcü)
+- Canlı öncesi listenin 1. ve 2. maddesi karşılandı (ayrıntı listenin altındaki güncelleme notunda).
+- **Swap:** kullanıcının Exness profilinde "Swap-free" avantajı listeleniyor (durum etiketi görünmüyor; kesin değil).
+  Exness'in ilan ettiği "extended swap-free" kuralı majörlerde, XAUUSD'de ve kriptoda swap'ı sıfırlar; çaprazlarda
+  (ör. GBPAUD) swap olabilir. Bu yüzden WEEK raporunda **ana senaryo swap 0**'dır; ikinci senaryo %3 / %6 yıllık
+  faizi yalnızca çaprazlara uygular (altı sembolden yalnızca GBPAUD); üçüncü (en kötü) senaryo hepsine uygular.
+  Kullanıcı sembol bilgisinden swap değerlerini teyit edecek.
+- **Gerçek swap ölçümü (yalnızca okuma):** `Bot._observe_swaps` her mutabakatta, en az bir gece taşınmış açık
+  pozisyonların birikmiş swap'ını pozisyon büyüklüğüne ve gece sayısına oranlayıp yıllık yüzde olarak saklar
+  (eksi = maliyet, 0 = swap yok; tutar saklanmaz). Herkese açık özette `swap_observed` (sembol|yön → gece, oran).
+  Deneme modunda bot pozisyon açmadığından ölçüm ancak elle açılıp bir gece taşınan pozisyonla dolar.

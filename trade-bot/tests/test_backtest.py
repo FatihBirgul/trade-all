@@ -517,7 +517,14 @@ def test_week_trade_corrected_measurement_differs_only_where_the_source_was_opti
     replica, fixed = W.summarize(rows, exclude_open=False), W.summarize(rows, exclude_open=True)
     assert replica["all"]["net_r"] == 5.5 and fixed["all"]["net_r"] == 3.0 and fixed["open"] == {"trades": 1, "r": 2.5}
     assert fixed["ex_xau"]["net_r"] == 0.0 and fixed["ex_xau"]["trades"] == 2 and fixed["all"]["pf"] == 4.0
-    assert fixed["all"]["nights"] == 15 and fixed["swap"]["0.06"]["all"] == pytest.approx(3.0 - 15 * 0.02 * 0.06, abs=0.01)
+    # Gecelik faiz: ana senaryo 0 (toplamlar). Ikinci senaryo yalnizca swap'li sembollere (caprazlara) uygulanir;
+    # bu ornekte capraz yok, sonuc degismez. En kotu senaryo butun sembollere uygular.
+    assert fixed["all"]["nights"] == 15 and fixed["swap"]["cross_nights"] == 0
+    assert fixed["swap"]["crosses"]["0.06"] == {"all": 3.0, "ex_xau": 0.0}
+    assert fixed["swap"]["everything"]["0.06"]["all"] == pytest.approx(3.0 - 15 * 0.02 * 0.06, abs=0.01)
+    cross = [dict(rows[1], symbol="GBPAUD", r=1.0, nights=10)]
+    assert W.summarize(cross, exclude_open=True)["swap"]["crosses"]["0.06"]["all"] == pytest.approx(1.0 - 10 * 0.02 * 0.06, abs=0.01)
+    assert W.SWAP_FREE == {"BTCUSD", "ETHUSD", "XAUUSD", "EURUSD", "USDCHF"}
     assert fixed["all"]["max_dd"] == -1.0 and fixed["by_symbol"]["XAUUSD"]["trades"] == 1
 
 

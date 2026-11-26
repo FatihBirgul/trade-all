@@ -28,7 +28,12 @@ MAX_PER_DAY = 2
 WINDOW_H4, WINDOW_D1 = 300, 300
 H4, DAY = 14400, 86400
 TIMEOUT = 7 * DAY
+REPORT_VERSION = 2  # rapor bicimi degisince ileri testin A asamasi onbellegi yenilenir
 SWAP_RATES = (0.03, 0.06)  # duyarlilik: pozisyon buyuklugunun yillik orani olarak gecelik faiz (aleyhte)
+# Exness "extended swap-free": majorlerde, XAUUSD'de ve kriptoda swap yok; caprazlarda olabilir. Alti sembolden
+# yalnizca GBPAUD caprazdir. Ana senaryo swap 0'dir; duyarlilik yalnizca swap'li sembollere uygulanir. Gercek deger
+# botun olcumuyle (ozet `swap_observed`) dogrulanmalidir.
+SWAP_FREE = frozenset({"BTCUSD", "ETHUSD", "XAUUSD", "EURUSD", "USDCHF"})
 REFERENCE = Path(__file__).parent / "data" / "week_reference.json"
 
 
@@ -150,9 +155,17 @@ def summarize(trades: list[dict], *, exclude_open: bool) -> dict:
            "exits": {why: sum(1 for t in rows if t["why"] == why) for why in ("stop", "time", "open")},
            "by_symbol": {symbol: stats([t for t in rows if t["symbol"] == symbol]) for symbol in SYMBOLS}}
     # Gecelik faiz duyarliligi: her gece, pozisyon buyuklugunun yillik `oran`i kadar aleyhte maliyet varsayilirsa.
-    out["swap"] = {str(rate): {"all": round(sum(t["r"] - t["nights"] * t["night_r"] * rate for t in rows), 2),
-                               "ex_xau": round(sum(t["r"] - t["nights"] * t["night_r"] * rate for t in rows
-                                                   if t["symbol"] != "XAUUSD"), 2)} for rate in SWAP_RATES}
+    def net(rate: float, only_crosses: bool, without_gold: bool) -> float:
+        return round(sum(t["r"] - (0.0 if only_crosses and t["symbol"] in SWAP_FREE else t["nights"] * t["night_r"] * rate)
+                         for t in rows if not (without_gold and t["symbol"] == "XAUUSD")), 2)
+
+    # Ana senaryo: swap 0 (= yukaridaki toplamlar). Ikinci senaryo: yalnizca caprazlarda faiz. Ucuncu (en kotu):
+    # butun sembollerde faiz.
+    out["swap"] = {"crosses": {str(rate): {"all": net(rate, True, False), "ex_xau": net(rate, True, True)}
+                               for rate in SWAP_RATES},
+                   "everything": {str(rate): {"all": net(rate, False, False), "ex_xau": net(rate, False, True)}
+                                  for rate in SWAP_RATES},
+                   "cross_nights": sum(t["nights"] for t in rows if t["symbol"] not in SWAP_FREE)}
     return out
 
 

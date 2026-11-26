@@ -40,6 +40,7 @@ class ReconcileReport:
     deferred: list[str] = field(default_factory=list)  # goruntude yok ama kapatmak icin kanit yetersiz
     errors: list[str] = field(default_factory=list)
     account: AccountState | None = None
+    positions: list = field(default_factory=list)  # goruntudeki acik pozisyonlar (salt-okuma olcumler icin)
 
 
 def deal_pnl(deal: Deal) -> float:
@@ -184,6 +185,7 @@ async def reconcile(client, repo: Repo, catalog, *, clock: Callable[[], float] =
                 break
     now = clock()
     report.account = snapshot.account
+    report.positions = list(snapshot.positions)
     broker = {p.id: p for p in snapshot.positions}
     known = {t.position_id: t for t in repo.open_trades()}
 

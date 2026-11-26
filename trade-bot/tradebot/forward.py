@@ -526,7 +526,7 @@ def run_job(job_path: Path, pool_factory=None) -> dict:
     signature = f"{VERSION}:{job['v9_start']}:{job['end']}:{job.get('max_spread_stop_pct')}"
     # A asamasinin imzasi girdileri de kapsar: semboller ya da spread profili degisirse yeniden hesaplanir.
     max_cost = max_cost_of(job)
-    inputs = hashlib.sha1(json.dumps([symbols, job["spreads"], job["start"], max_cost],
+    inputs = hashlib.sha1(json.dumps([symbols, job["spreads"], job["start"], max_cost, week_replica.REPORT_VERSION],
                                      sort_keys=True).encode()).hexdigest()[:12]
     # A asamasi (swing + WEEK TRADE yeniden uretimi) ayni pencere icin bir kez hesaplanir; V9 turlari yeniden kullanir.
     cached = folder / "swing.json"
