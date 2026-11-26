@@ -8,7 +8,9 @@
     "userInterfaceStyle": "light",
     "icon": "./assets/icon.png",
     "backgroundColor": "#F2F3FA",
-    "web": { "bundler": "metro" },
+    "web": {
+      "bundler": "metro"
+    },
     "android": {
       "package": "com.fatihbirgul.tradeai",
       "versionCode": 23,
@@ -16,10 +18,13 @@
       "allowBackup": false,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-foreground.png",
+        "backgroundImage": "./assets/adaptive-background.png",
         "monochromeImage": "./assets/adaptive-monochrome.png",
         "backgroundColor": "#2A2D7C"
       },
-      "permissions": ["android.permission.POST_NOTIFICATIONS"]
+      "permissions": [
+        "android.permission.POST_NOTIFICATIONS"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -27,8 +32,23 @@
       "expo-secure-store",
       "expo-font",
       "expo-notifications",
-      ["expo-splash-screen", { "backgroundColor": "#2A2D7C", "image": "./assets/adaptive-foreground.png", "imageWidth": 200, "resizeMode": "contain" }],
-      ["expo-navigation-bar", { "enforceContrast": false, "style": "dark", "hidden": false }]
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#2A2D7C",
+          "image": "./assets/splash-logo.png",
+          "imageWidth": 200,
+          "resizeMode": "contain"
+        }
+      ],
+      [
+        "expo-navigation-bar",
+        {
+          "enforceContrast": false,
+          "style": "dark",
+          "hidden": false
+        }
+      ]
     ]
   }
 }

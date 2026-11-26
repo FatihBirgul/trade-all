@@ -26,6 +26,12 @@ kendi penceresiyle sorulur (`src/ui/confirm.tsx`).
   `cd ../trade-bot && .venv/bin/python tools/capture_app_fixtures.py ../trade-bot-app/fixtures`
 - `e2e/`: her ekranın bu yanıtlarla veri gösterdiğini kanıtlayan tarayıcı testleri; görüntüler `screenshots/`.
 
+## Simge ve açılış ekranı
+Çizim `tools/brand.cjs` içinde tanımlıdır (nabız çizgisi yükselen bir eğilime dönüşür, yeşil noktada biter).
+`node tools/brand.cjs` şunları üretir: `assets/icon.png`, adaptive simgenin ön / arka / tek renk katmanları,
+açılış logosu ve önizlemeler (`screenshots/00-logo.png`, `00b-acilis-ekrani.png`). Android'in yoğunluk
+dosyalarını (mdpi…xxxhdpi) `expo prebuild` bu kaynaklardan üretir.
+
 ## Komutlar
 ```bash
 npm ci
