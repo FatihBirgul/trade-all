@@ -34,6 +34,9 @@ outcomes="$(curl -fsS --max-time 20 "${URL%/health}/health/outcomes" 2>/dev/null
 [ -n "$outcomes" ] && echo "sonuclar: $outcomes"
 backtest="$(curl -fsS --max-time 20 "${URL%/health}/health/backtest" 2>/dev/null || true)"
 [ -n "$backtest" ] && echo "ileri-test: $backtest"
+# Yillik backtest (1 ay / 6 ay / 1 yil; benzetim sonucu, hesap bilgisi icermez). Eski surumde yoktur.
+yeartest="$(curl -fsS --max-time 20 "${URL%/health}/health/yeartest" 2>/dev/null || true)"
+[ -n "$yeartest" ] && echo "yillik-test: $yeartest"
 # Gunluk yedek: 36 saatten eskiyse (ya da hic alinmadiysa) uyar. Servis yeni baslamissa ilk yedek 30 dk icinde alinir.
 backup_at="$(printf '%s' "$body" | sed -n 's/.*"last_backup_at":\([0-9][0-9]*\).*/\1/p')"
 if [ -n "$backup_at" ] && [ $(( $(date +%s) - backup_at )) -gt 129600 ]; then

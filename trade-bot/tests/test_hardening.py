@@ -511,3 +511,76 @@ async def test_lot_ceiling_fails_closed_when_it_cannot_be_checked(tmp_path):
     app.bot.quotes._last.clear()
     with pytest.raises(ValueError, match="denetlenemedi"):
         guard("XAUUSD", "BUY", 0.1, None, entry - 5.0)  # fiyat da yoksa emir yok
+
+
+async def test_swap_is_measured_read_only_from_positions_held_overnight(tmp_path):
+    """Gecelik faiz orani API'de yok: en az bir gece tasinmis pozisyonun birikmis swap'indan olculur. Yalnizca
+    oran saklanir (tutar yok); hicbir istek gonderilmez, hicbir karar etkilenmez."""
+    from tradebot.exness.schema import Position
+    app = await started(tmp_path)
+    now = app.clock["now"]
+    entry = app.bot.quotes.quote("XAUUSD")["ask"]
+    notional = abs(app.bot.provider.loss_for("XAUUSD", "BUY", 0.1, entry, 0.0))
+    held = Position(id="p-gece", symbol="XAUUSD", side="BUY", volume=0.1, open_price=entry, swap=-notional * 0.05 / 365 * 2,
+                    opened_at=now - 2 * 86400)
+    fresh = Position(id="p-yeni", symbol="XAUUSD", side="SELL", volume=0.1, open_price=entry, swap=0.0, opened_at=now - 600)
+    before = len(app.fake.requests)
+    assert app.bot._observe_swaps([held, fresh]) == ["XAUUSD|BUY"]  # swap ilk kez sifirdan farkli goruldu
+    assert app.bot._observe_swaps([held, fresh]) == []  # ayni durum yeniden bildirilmez
+    seen = app.bot.scan_summary()["swap_observed"]
+    assert list(seen) == ["XAUUSD|BUY"]  # ayni gun acilan pozisyon olculmez
+    assert seen["XAUUSD|BUY"]["nights"] == 2 and seen["XAUUSD|BUY"]["rate_pct_year"] == pytest.approx(-5.0, abs=0.01)
+    assert seen["XAUUSD|BUY"]["zero"] is False and len(app.fake.requests) == before
+    free = Position(id="p-sifir", symbol="XAUUSD", side="SELL", volume=0.1, open_price=entry, swap=0.0,
+                    opened_at=now - 3 * 86400)
+    assert app.bot._observe_swaps([free]) == []  # swap 0: bildirim yok
+    assert app.bot.scan_summary()["swap_observed"]["XAUUSD|SELL"] == {"at": round(now), "nights": 3, "rate_pct_year": 0.0,
+                                                                     "zero": True}
+    assert str(round(notional)) not in str(app.bot.scan_summary()["swap_observed"])  # tutar yok
+    assert app.bot._observe_swaps([Position(id="p-bozuk", symbol="YOKUSD", side="BUY", volume=0.1, open_price=1.0,
+                                            opened_at=now - 3 * 86400)]) == []  # bilinmeyen sembol botu etkilemez
+
+
+async def test_owner_is_told_once_when_a_swap_free_account_starts_paying_swap(tmp_path):
+    """Hesap swap'siz; broker statuyu geri alirsa gece tasinan pozisyonda swap gorulur ve BIR kez bildirilir."""
+    from tradebot.exness.schema import Position
+    app = await started(tmp_path)
+    now = app.clock["now"]
+    entry = app.bot.quotes.quote("XAUUSD")["ask"]
+    calls = {"n": 0}
+    position = Position(id="p-gece", symbol="XAUUSD", side="BUY", volume=0.1, open_price=entry, swap=0.0,
+                        opened_at=now - 2 * 86400)
+
+    async def fake_reconcile():
+        from tradebot.execution.reconcile import ReconcileReport
+        calls["n"] += 1
+        return ReconcileReport(account=app.bot.account, positions=[position])
+
+    app.bot.executor.reconcile = fake_reconcile
+    await app.bot.reconcile_now()
+    assert "swap_charged" not in app.kinds()  # swap 0: sessiz
+    position = Position(id="p-gece", symbol="XAUUSD", side="BUY", volume=0.1, open_price=entry, swap=-1.25,
+                        opened_at=now - 2 * 86400)
+    await app.bot.reconcile_now()
+    await app.bot.reconcile_now()
+    assert app.kinds().count("swap_charged") == 1 and calls["n"] == 3
+    event = next(e for e in app.repo.events() if e["kind"] == "swap_charged")
+    assert "1.25" not in event["message"] and "1,25" not in event["message"]  # tutar yazilmaz
+    assert any(item[0] == "swap_charged" for item in app.notifier.sent)
+
+
+async def test_missing_swap_field_is_not_reported_as_swap_free(tmp_path):
+    """API pozisyonda swap alanini vermezse olcum yapilmaz: "swap 0" diye yanlis teyit uretilmez."""
+    from tradebot.exness.schema import Position
+    app = await started(tmp_path)
+    now = app.clock["now"]
+    entry = app.bot.quotes.quote("XAUUSD")["ask"]
+    unknown = Position(id="p-1", symbol="XAUUSD", side="BUY", volume=0.1, open_price=entry, swap=None,
+                       opened_at=now - 2 * 86400)
+    bad = Position(id="p-2", symbol="YOKUSD", side="BUY", volume=0.1, open_price=1.0, swap=-1.0, opened_at=now - 2 * 86400)
+    good = Position(id="p-3", symbol="XAUUSD", side="SELL", volume=0.1, open_price=entry, swap=0.0,
+                    opened_at=now - 2 * 86400)
+    assert app.bot._observe_swaps([unknown, bad, good]) == []
+    assert list(app.bot.scan_summary()["swap_observed"]) == ["XAUUSD|SELL"]  # bozuk kayit digerini dusurmez
+    listed = app.bot.scan_summary()["swap_listed"]
+    assert isinstance(listed, dict)

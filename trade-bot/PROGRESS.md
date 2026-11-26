@@ -161,6 +161,10 @@ Kritik bulgu yok; "deneme modunda dağıtılabilir". İkinci tur düzeltmeleri (
 - Kontrolcü: deneme modunda ilk okunan varlık `capital_seen` olayıyla, para yatırma/çekme `balance_change` olayıyla kayda geçer (biçim `/events` üzerinden doğrulanacak).
 
 İlk gerçek emirden ÖNCE yapılacaklar (inceleme kararı: "henüz değil"):
+> **Güncelleme 2026-11-26:** 1. ve 2. madde KARŞILANDI (elle GBPUSD SELL 0,01 lot: sunucu kaydında broker tarafında
+> stop görüldü, stop/hedef emri eşleşti, hedef görüldü, `sl_missing` 0; kullanıcının Exness uygulamasında pozisyonda
+> TP ve SL etiketleri görünüyor; kapanış K/Z'si terminalde −0,18 USC, bizim kayıtla birebir aynı). 3. madde ilk bot
+> emrinde doğrulanacak; 4. madde kullanıcı kararı bekliyor.
 1. Gerçek fixture'lar: balance deal, pozisyon, sltp emri, deal, tick, WS olayları (I-3, I-10). Deneme modunda terminalden elle 0.01 lot pozisyon açıp `/positions` içinde `sl`/`tp` göründüğünü doğrula; yoksa stop koruması sağlıklı pozisyonu ~96 sn'de kapatır.
 2. Kapanan elle işlemde `trade_closed` K/Z'sinin terminaldekiyle (USC, komisyon işareti) aynı olduğunu doğrula.
 3. İlk bot emrinde: PATCH verilmeyen TP'yi koruyor mu (I7), dolum olayı sltp emrini taşıyor mu, ACK/operasyon biçimleri, yeniden bağlanmada snapshot, `client_request_id` yankısı.
@@ -707,3 +711,107 @@ bilinmiyorsa aday geçmez; yüzde → oran dönüşümü; tekrar ayıklama. Bili
 tarama başına ADAY sayar (aynı kurulum art arda taramalarda yeniden sayılır; `candidates` de böyle sayılır);
 kapı sayıları uygulamada henüz gösterilmiyor (yalnızca özet uçlarında); sınır değiştirilirse ileri testin V9
 aşaması baştan hesaplanır.
+
+
+### Canlı öncesi liste ve gecelik faiz (2026-11-26, kontrolcü)
+- Canlı öncesi listenin 1. ve 2. maddesi karşılandı (ayrıntı listenin altındaki güncelleme notunda).
+- **Swap:** kullanıcının Exness profilinde "Swap-free" avantajı listeleniyor (durum etiketi görünmüyor; kesin değil).
+  Exness'in ilan ettiği "extended swap-free" kuralı majörlerde, XAUUSD'de ve kriptoda swap'ı sıfırlar; çaprazlarda
+  (ör. GBPAUD) swap olabilir. Bu yüzden WEEK raporunda **ana senaryo swap 0**'dır; ikinci senaryo %3 / %6 yıllık
+  faizi yalnızca çaprazlara uygular (altı sembolden yalnızca GBPAUD); üçüncü (en kötü) senaryo hepsine uygular.
+  Kullanıcı sembol bilgisinden swap değerlerini teyit edecek.
+- **Gerçek swap ölçümü (yalnızca okuma):** `Bot._observe_swaps` her mutabakatta, en az bir gece taşınmış açık
+  pozisyonların birikmiş swap'ını pozisyon büyüklüğüne ve gece sayısına oranlayıp yıllık yüzde olarak saklar
+  (eksi = maliyet, 0 = swap yok; tutar saklanmaz). Herkese açık özette `swap_observed` (sembol|yön → gece, oran).
+  Deneme modunda bot pozisyon açmadığından ölçüm ancak elle açılıp bir gece taşınan pozisyonla dolar.
+- **Güncelleme (kullanıcı teyidi, aynı gün):** Türkiye, Exness'in resmi sitesindeki otomatik swap-free (İslam
+  ülkeleri) listesinde; bu hesapta **bütün enstrümanlarda swap 0**. WEEK ve diğer çok günlük stratejilerde ana
+  senaryo swap 0'dır; %3 / %6 duyarlılığı yalnızca dipnottur (statü geri alınırsa ne olur). Exness statüyü kötüye
+  kullanım şüphesinde geri alabildiği için ölçüm bir uyarıya bağlandı: gece taşınan bir pozisyonda swap ilk kez
+  sıfırdan farklı görülürse `swap_charged` olayı ve "Swap uygulanıyor" bildirimi bir kez gönderilir (tutar yazılmaz;
+  yalnızca okuma, hiçbir karar değişmez).
+- **DÜZELTME (aynı gün):** "API'de enstrüman bazında swap oranı yok" tespiti YANLIŞTI. Enstrüman koşullarında
+  `swap_long` / `swap_short` (gece başına puan) ve gün çarpanları var; gerçek hesaptan alınmış kayıtlarda değerler
+  sıfır değil (ör. EURUSD alış −16,5; XAUUSD alış −1297,2; USDCHF satış −31,8; GBPAUD alış −6,8; BTCUSD alış
+  −1352,9; karşı taraflar 0; çarşamba 3 kat, hafta sonu 0). Bu, hesabın swap'sız statüsüyle çelişiyor GÖRÜNÜR;
+  liste değerleri swap'sız hesapta uygulanmıyor olabilir. Kesin durum ancak gece taşınan pozisyondaki birikmiş
+  swap'tan anlaşılır (`swap_observed`; sıfırdan farklıysa `swap_charged` bildirimi).
+  - Artık okunuyor: `Instrument.swap_long/swap_short/swap_multipliers`; özet `swap_listed`.
+  - WEEK raporu: ana senaryo swap 0 (kullanıcı teyidi); ek senaryo `swap.listed` = broker'ın listelediği değerler
+    uygulansaydı net R (sembol bazında maliyetle); %3 / %6 varsayımı dipnot.
+  - Pozisyonda swap alanı yoksa ölçüm yapılmaz ("0" sayılmaz); tek pozisyondaki hata diğer ölçümleri düşürmez.
+
+## Yıllık backtest (yt-1) ve canlıya alma kapısına alternatif şart (2026-11-26, kullanıcı kararı)
+
+Kullanıcı gölgede 1–2 hafta beklemek istemiyor: 14 stratejinin hepsi sunucuda Exness mumlarıyla, 30 sembolde,
+üç pencerede (1 ay / 6 ay / 1 yıl) ölçülür. `tradebot/yeartest.py`.
+
+- **Stratejiler:** V9'un 4 stratejisi + `tb_smc_sweep_v1`, `tb_emapb_h1_20_21_v1`, `tb_emapb_h1_21_50_v1` (kendi
+  planlarıyla, 2R hedef), `tb_smc_day_v13`, `tb_emapb_day_v13`, `tb_smc_week_v13`, `tb_emapb_week_v13`,
+  `tb_week_trade_v1`, `tb_ema_pullback_v1`, `tb_donchian_breakout_v1`.
+- **Kurallar:** karar yalnızca kapanmış mumla (ileri testle aynı oynatma); her strateji kendi çıkış planıyla;
+  saatlik spread profili + maliyet kapısı (ayardaki sınır, şu an %15); swap 0; portföy kuralları (en çok 3 açık,
+  sembol başına 1, aynı para biriminde aynı yönde en çok 2); bakiye eğrisi 2000 USC başlangıç, işlem başına bakiyenin
+  %0,5'i (bileşik). Pencereler tek bir 1 yıllık oynatmadan türetilir (pencere = o tarihten sonra açılan işlemler;
+  bakiye 2000'den yeniden başlar).
+- **Çıktı (strateji × pencere):** işlem, kazanma %, net R, net USC, PF, en büyük düşüş (R ve %), maliyet/stop,
+  sembol kırılımı, bakiye eğrisi; 1 yılda ilk / son 6 ay; kapıya ve portföy sınırına takılan sayılar; geçen
+  stratejilerin birleşik portföy satırı; veri kapsamı (sembol başına kaç gün M15 verildi).
+- **Geçme ölçütü:** 1 yılda ≥ 50 işlem, PF ≥ 1,2, iki yarıyılın ikisi de artı, en büyük düşüş ≤ %15, 6 ay da artı.
+  Verisi 1 yılı kapsamayan strateji "bekliyor"dur.
+- **Uygulanamayan / yaklaşık olan:** haber penceresi geçmişe uygulanamıyor (takvim kaynağı yalnızca içinde bulunulan
+  haftayı veriyor); spread bugünkü saatlik profildir; portföy sınırına takılan işlemin yerine aynı sembolde hemen
+  sonraki sinyal alınmaz; en küçük lot denetimi yok; stoplar tam fiyatından dolmuş sayılır.
+- **V9 süresi:** değerlendirme başına ~0,3 sn, tek çekirdek: 30 sembol × 1 ay ≈ 7–8 saat, 6 ay ≈ 2 gün, 1 yıl ≈ 4
+  gün. Bu yüzden V9 en yeni aydan geriye 30 günlük parçalarla hesaplanır; biten parçalar saklanır, her tur (6 saat)
+  sonunda ara sonuç yayınlanır ve hangi pencerenin tamamlandığı belirtilir. V9 dışı 10 strateji için yıllık sonuç
+  ilk turda gelir.
+- **Çalışma düzeni:** önce ileri testin A aşaması (90 gün + WEEK yeniden üretimi) yayınlanır, sonra yıllık test
+  turları. Bir yıllık geçmiş (~3000 istek) aynı pencere için bir kez çekilir ve iş bitene kadar saklanır; pencere 7
+  güne kadar sabit kalır. İleri testin eski 60 günlük V9 aşaması artık çalışmaz (V9 yıllık testin içinde).
+- **API:** `GET /backtest` (yetkili, tam sonuç: sembol tabloları ve eğriler), `GET /health/yeartest` (herkese açık
+  özet; benzetim sonucu, hesap verisi yok). Sonuç `yeartest_result` ayarında kalıcıdır. Durum çıktısında
+  `yillik-test:` satırı.
+- **Canlıya alma kapısı:** yeni (V9 dışı) strateji için "en az 20 sonuçlanmış ve olumlu gölge işlem" şartına
+  ALTERNATİF olarak yıllık backtestin geçme ölçütü kabul edilir (`routes._live_blocker`). Yalnızca engeli kaldırır:
+  canlıya alma yine `confirm=true` ile kullanıcının açık onayını ister; risk ayarlarına dokunulmadı. Botun kötü
+  sonuç nedeniyle duraklattığı strateji için alternatif geçerli değildir. `/strategies` satırlarında
+  `backtest_passed`.
+
+**Bağımsız inceleme (yıllık backtest + kapı):** kritik bulgu yok; `confirm=true` olmadan canlıya alma mümkün değil,
+sonucu dışarıdan yazabilen uç yok, duraklatılmış strateji istisnası doğru. Düzeltilenler:
+- Backtest geçişi süresiz değil: ölçüm penceresi 45 günden önce bittiyse ya da maliyet sınırı ölçümden sonra
+  gevşetildiyse geçiş sayılmaz (`yeartest.passed`). Önbellek imzası oynatma sürümünü ve çıkış kurallarını da kapsar.
+- "Tam veri" medyana göre değil, sembollerin en kötü %20'lik dilimine göre ölçülür; mumu olmayan sembol 0 gün sayılır
+  (`history.days_floor`, `symbols_full`).
+- Geçmiş çekimi tek bir aralığın alınamamasıyla ya da istek sınırıyla düşmez (aralık atlanır, kapsam eksik görünür;
+  sınırda artan beklemeyle 4 deneme; 200'den fazla aralık alınamazsa iş bırakılır).
+- Sonuçlanmamış işlem portföyü süresiz kilitlemez (en çok 31 gün yer tutar).
+- Yıllık iş için tur sayısı 36, pencere sabitleme 10 gün.
+Bilinen sınırlar: eşikler yuvarlanmış değerlere uygulanır; 6 ay koşulu ikinci yarıyılla neredeyse aynı işlemleri
+kapsar; 12 stratejiye tek ölçüt uygulandığından bazıları şans eseri geçebilir (çoklu test düzeltmesi yok); V9
+yaklaşık 4 gün boyunca tek çekirdeği düşük öncelikle kullanır.
+
+**Uygulama 1.0.2:** Raporlar'dan açılan Backtest ekranı (pencere seçici 1A/6A/1Y; strateji listesi: net R, USC,
+işlem, kazanma, PF, düşüş, maliyet/stop, geçti/kaldı/bekliyor rozeti; ayrıntıda sembol tablosu, bakiye eğrisi,
+yarıyıllar, neden kaldı; sonuç tarihi, kapsam, kurallar). Ekran testleri: veri, pencere değişimi, ayrıntı, sonuç
+yok, veri eksik, hata.
+
+## Backtest sunucuda değil GitHub Actions'ta (2026-11-26, kullanıcı kararı)
+
+Bot yavaşlamasın diye sunucu artık hiçbir backtest hesabı yapmaz (`BACKTEST_ON_SERVER = False`).
+- **Sunucu:** yalnızca geçmiş mumları çeker ve dışa aktarıma hazırlar: `backtest/history.db` (OHLC + hacim) ve
+  `backtest/export.json` (enstrüman koşulları, saatlik spread profili, kur sınırları, çıkış kuralları, pencere).
+  Hesap numarası, bakiye, lot, işlem ve API anahtarı içermez; kaldıraç da yazılmaz. Dosyalar yalnızca sunucunun
+  içinden okunabilen uçlardan verilir (`/health/export`, `/health/export/history`; ters vekilden gelen istek 404).
+- **İş akışı** `.github/workflows/backtest.yml` (elle başlatılır): `export` (SSH ile piyasa verisini alır) →
+  `run` (sembol başına bir iş, hepsi paralel; V9 parçaları runner'ın bütün çekirdeklerinde) → `assemble` (portföy
+  kuralları, pencereler, geçti/kaldı, bakiye eğrisi + ileri testin A aşaması; sonucu SSH ile
+  `/opt/tradebot/backtest-results/` altına yükler). Artifact'lar 1 gün (sonuç 7 gün) saklanır.
+- **İçe alma:** bot `RESULTS_DIR` altındaki `year.json` / `forward.json` dosyalarını dakikada bir yoklar; sürümü ve
+  biçimi uyan dosyayı içe alır (`backtest_imported` olayı). Klasöre yalnızca dağıtım kullanıcısı yazabilir (kodu da
+  dağıtan kimlik); bot oradan yalnızca okur.
+- `yeartest` komut satırı: `--only SEMBOL`, `--assemble`, `--history`, `--out`, `--workers`. Sembol sembol koşup
+  sonradan toplamak tek seferde koşmakla aynı sonucu verir (test).
+- V9 değerlendirmesinin kendisi hızlandırılmadı (artımlı gösterge hesabı): Actions paralelliği süre sorununu
+  çözdüğü için ertelendi; sonuçların birebir aynı kaldığını kanıtlayan test gerektirir.

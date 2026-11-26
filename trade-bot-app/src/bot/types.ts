@@ -168,3 +168,28 @@ export type BotSummary = {
   veto_reasons: Record<string, number>;
   samples?: { at: number; symbol: string | null; side: string | null; strategy_id: string | null; score: number | null }[];
 };
+
+// Yıllık backtest (sunucu: yeartest.py). Benzetim sonucudur: 2000 USC başlangıç, işlem başına %0,5 risk.
+export type BacktestWindowKey = "1m" | "6m" | "1y";
+export type BacktestWindow = {
+  trades: number; closed: number; open: number; wins: number; win_pct: number | null; net_r: number; net_usc: number;
+  pf: number | null; max_dd_r: number; max_dd_pct: number; open_r: number; cost_stop_pct: number | null;
+  complete: boolean; curve?: [number, number][]; by_symbol?: Record<string, { trades: number; wins: number; net_r: number }>;
+};
+export type BacktestHalf = { trades: number; closed: number; net_r: number; pf: number | null };
+export type BacktestStrategy = {
+  source?: string; strategies?: string[];
+  windows: Record<BacktestWindowKey, BacktestWindow>;
+  halves: { first: BacktestHalf; second: BacktestHalf };
+  portfolio_rejected: number; cost_gate: { signals: number; blocked: number };
+  verdict: { passed: boolean | null; reasons: string[] };
+};
+export type BacktestResult = {
+  version: string; from: number; to: number; symbols: number; complete: boolean; finished_at: number;
+  rules: { start_balance: number; risk_pct: number; max_open: number; per_currency_side: number; max_spread_stop_pct: number | null; swap: number; news_applied: boolean; currency: string };
+  pass_rule: { min_trades: number; min_pf: number; max_dd_pct: number };
+  history: { days_median: number; days_min: number };
+  progress: { tb_symbols_done: number; symbols: number; v9_chunks_done: number; v9_chunks_total: number; v9_days_complete: number };
+  strategies: Record<string, BacktestStrategy>; combined: BacktestStrategy | null;
+};
+export type BacktestReport = { state: string; result: BacktestResult | null };

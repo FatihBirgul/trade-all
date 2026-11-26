@@ -16,7 +16,7 @@ const ROUTES = [
   [/^\/status$/, "status"], [/^\/positions$/, "positions"], [/^\/settings$/, "settings"],
   [/^\/reports\?period=day/, "reports_day"], [/^\/reports\?period=week/, "reports_week"], [/^\/reports\?period=month/, "reports_month"],
   [/^\/scorecard/, "scorecard"], [/^\/strategies$/, "strategies"], [/^\/news/, "news"], [/^\/events/, "events"],
-  [/^\/symbols/, "symbols"], [/^\/health\/summary/, "summary"], [/^\/health$/, "health"], [/^\/pair$/, "pair"],
+  [/^\/symbols/, "symbols"], [/^\/backtest$/, "backtest"], [/^\/health\/summary/, "summary"], [/^\/health$/, "health"], [/^\/pair$/, "pair"],
 ];
 const CORS = { "access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "*" };
 

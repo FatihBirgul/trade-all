@@ -28,7 +28,13 @@ MAX_PER_DAY = 2
 WINDOW_H4, WINDOW_D1 = 300, 300
 H4, DAY = 14400, 86400
 TIMEOUT = 7 * DAY
+REPORT_VERSION = 3  # rapor bicimi degisince ileri testin A asamasi onbellegi yenilenir
 SWAP_RATES = (0.03, 0.06)  # duyarlilik: pozisyon buyuklugunun yillik orani olarak gecelik faiz (aleyhte)
+# Hesap swap'siz (kullanici Exness'in resmi listesinden teyit etti, 2026-11-26: Turkiye otomatik swap-free
+# listesinde; butun enstrumanlarda swap 0). ANA SENARYO swap 0'dir (= ozet toplamlar). Asagidaki duyarlilik
+# yalnizca DIPNOTTUR: broker bu statuyu geri alirsa ne olacagini gosterir (`crosses`: yalnizca caprazlarda faiz,
+# `everything`: hepsinde). Gercek durum botun olcumuyle izlenir (ozet `swap_observed`, `swap_charged` bildirimi).
+SWAP_FREE = frozenset({"BTCUSD", "ETHUSD", "XAUUSD", "EURUSD", "USDCHF"})
 REFERENCE = Path(__file__).parent / "data" / "week_reference.json"
 
 
@@ -83,8 +89,29 @@ def all_signals(bars: dict, start: float = START) -> list[tuple]:
     return found
 
 
+WEEKDAYS = ("THU", "FRI", "SAT", "SUN", "MON", "TUE", "WED")  # 1970-01-01 persembe
+ROLLOVER = 22 * 3600  # gun devri (UTC, yaklasik)
+
+
+def listed_swap_r(swap: dict | None, sign: int, at: float, exit_time: float, risk: float) -> float | None:
+    """Broker'in enstruman kosullarinda bildirdigi swap UYGULANSAYDI islemin R cinsinden maliyeti (eksi = maliyet).
+
+    `swap`: {"long", "short": gece basina puan, "point": puan buyuklugu, "multipliers": gun -> kat}. Her gun devri
+    (22:00 UTC) icin o gunun kati uygulanir (carsamba 3, hafta sonu 0). Bilgi yoksa None."""
+    if not swap or risk <= 0:
+        return None
+    points = swap.get("long") if sign > 0 else swap.get("short")
+    if points is None or not swap.get("point"):
+        return None
+    multipliers = swap.get("multipliers") or {}
+    total = 0.0
+    for day in range(int((at - ROLLOVER) // DAY) + 1, int((exit_time - ROLLOVER) // DAY) + 1):
+        total += float(multipliers.get(WEEKDAYS[day % 7], 1.0))
+    return float(points) * float(swap["point"]) * total / risk
+
+
 def run(bars: dict, *, soft: bool, mode: str, spread=None, start: float = START,
-        found: list[tuple] | None = None) -> list[dict]:
+        found: list[tuple] | None = None, swaps: dict | None = None) -> list[dict]:
     """`bars`: sembol -> {"H4": [...], "D1": [...]}. `spread(sembol, an)`: "fixed" kipinde gercek spread."""
     found = [item for item in (all_signals(bars, start) if found is None else found) if soft or not item[3]]
     frames: dict[str, tuple] = {}
@@ -120,7 +147,8 @@ def run(bars: dict, *, soft: bool, mode: str, spread=None, start: float = START,
         nights = max(0, int(result["exit"] // DAY) - int(at // DAY))
         trades.append({"at": at, "symbol": symbol, "side": "BUY" if sign > 0 else "SELL", "stretch": stretch,
                        "r": result["r"], "exit": result["exit"], "why": result["why"], "nights": nights,
-                       "cost_r": cost / risk, "night_r": entry / 365.0 / risk})
+                       "cost_r": cost / risk, "night_r": entry / 365.0 / risk,
+                       "listed_swap_r": listed_swap_r((swaps or {}).get(symbol), sign, at, result["exit"], risk)})
     return trades
 
 
@@ -150,9 +178,26 @@ def summarize(trades: list[dict], *, exclude_open: bool) -> dict:
            "exits": {why: sum(1 for t in rows if t["why"] == why) for why in ("stop", "time", "open")},
            "by_symbol": {symbol: stats([t for t in rows if t["symbol"] == symbol]) for symbol in SYMBOLS}}
     # Gecelik faiz duyarliligi: her gece, pozisyon buyuklugunun yillik `oran`i kadar aleyhte maliyet varsayilirsa.
-    out["swap"] = {str(rate): {"all": round(sum(t["r"] - t["nights"] * t["night_r"] * rate for t in rows), 2),
-                               "ex_xau": round(sum(t["r"] - t["nights"] * t["night_r"] * rate for t in rows
-                                                   if t["symbol"] != "XAUUSD"), 2)} for rate in SWAP_RATES}
+    def net(rate: float, only_crosses: bool, without_gold: bool) -> float:
+        return round(sum(t["r"] - (0.0 if only_crosses and t["symbol"] in SWAP_FREE else t["nights"] * t["night_r"] * rate)
+                         for t in rows if not (without_gold and t["symbol"] == "XAUUSD")), 2)
+
+    # Ana senaryo: swap 0 (= yukaridaki toplamlar). Ikinci senaryo: yalnizca caprazlarda faiz. Ucuncu (en kotu):
+    # butun sembollerde faiz.
+    out["swap"] = {"crosses": {str(rate): {"all": net(rate, True, False), "ex_xau": net(rate, True, True)}
+                               for rate in SWAP_RATES},
+                   "everything": {str(rate): {"all": net(rate, False, False), "ex_xau": net(rate, False, True)}
+                                  for rate in SWAP_RATES},
+                   "cross_nights": sum(t["nights"] for t in rows if t["symbol"] not in SWAP_FREE)}
+    # Broker'in LISTELEDIGI swap degerleri uygulansaydi (hesap swap'siz degilse gercek maliyet budur).
+    known = [t for t in rows if t.get("listed_swap_r") is not None]
+    out["swap"]["listed"] = {
+        "trades_with_data": len(known), "trades": len(rows),
+        "cost_r": round(sum(t["listed_swap_r"] for t in known), 2),
+        "all": round(sum(t["r"] + (t.get("listed_swap_r") or 0.0) for t in rows), 2),
+        "ex_xau": round(sum(t["r"] + (t.get("listed_swap_r") or 0.0) for t in rows if t["symbol"] != "XAUUSD"), 2),
+        "by_symbol": {symbol: round(sum(t["listed_swap_r"] for t in known if t["symbol"] == symbol), 2)
+                      for symbol in SYMBOLS}}
     return out
 
 
@@ -184,7 +229,7 @@ def compare(ours: list[dict], reference: list[list], until: float) -> dict:
                                    "ours": sum(1 for t in mine if t["symbol"] == symbol)} for symbol in SYMBOLS}}
 
 
-def report(bars: dict, spread, data_end: float) -> dict:
+def report(bars: dict, spread, data_end: float, swaps: dict | None = None) -> dict:
     """Ileri test isinin cagirdigi ozet: kaynak kipinde karsilastirma + duzeltilmis olcum."""
     reference = json.loads(REFERENCE.read_text())
     covered = {symbol: [bars[symbol]["H4"][0]["time"], bars[symbol]["H4"][-1]["time"], len(bars[symbol]["H4"]),
@@ -192,8 +237,8 @@ def report(bars: dict, spread, data_end: float) -> dict:
     out: dict = {"from": START, "to": data_end, "coverage": covered, "missing": [s for s in SYMBOLS if s not in covered]}
     found = all_signals(bars)
     for name, soft in (("soft", True), ("strict", False)):
-        replica = run(bars, soft=soft, mode="bt", found=found)
-        fixed = run(bars, soft=soft, mode="fixed", spread=spread, found=found)
+        replica = run(bars, soft=soft, mode="bt", found=found, swaps=swaps)
+        fixed = run(bars, soft=soft, mode="fixed", spread=spread, found=found, swaps=swaps)
         out[name] = {"replica": summarize(replica, exclude_open=False),
                      "match": compare(replica, reference[name], data_end),
                      "fixed": summarize(fixed, exclude_open=True)}

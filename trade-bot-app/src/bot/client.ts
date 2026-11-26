@@ -2,7 +2,7 @@
 // "/api/v2" önekini ve V2 şema doğrulamasını zorunlu kılar.
 import { ApiError, serverOrigin } from "./base";
 import { recordRequest } from "./requestLog";
-import type {
+import type { BacktestReport,
   BotSummary,
   BotConfig,
   BotEvent,
@@ -232,6 +232,12 @@ export function createBotApi(config: BotConfig | null, transport: Transport = fe
     reports: async (period: ReportPeriod) => {
       const value = await request<BotReport>("/reports?period=" + period);
       if (!isObject(value.totals) || !Array.isArray(value.history)) throw new BotError("INVALID_RESPONSE");
+      return value;
+    },
+    // Yıllık backtestin tam sonucu (sembol tabloları ve bakiye eğrileri dahil). Sonuç henüz yoksa `result` null.
+    backtest: async () => {
+      const value = await request<BacktestReport>("/backtest");
+      if (typeof value.state !== "string" || (value.result !== null && !isObject(value.result?.strategies))) throw new BotError("INVALID_RESPONSE");
       return value;
     },
     strategies: async () =>

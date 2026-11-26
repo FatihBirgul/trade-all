@@ -8,7 +8,7 @@ import pytest
 from tests.app_helpers import started
 from tests.test_scan_summary import public_get
 from tradebot import app as app_module
-from tradebot import backtest, forward
+from tradebot import backtest, forward, yeartest
 from tradebot.exness.schema import Account, Instrument
 from tradebot.signals.adapter import Candidate
 
@@ -113,16 +113,22 @@ class InlinePool:
     def imap_unordered(self, function, items):
         return (function(item) for item in items)
 
+    def imap(self, function, items):
+        return (function(item) for item in items)
+
 
 def short_job(monkeypatch, app):
-    """~1 gunluk pencere: gercek V9 motoru ve swing stratejileri, kisa sure."""
+    """Kisa pencereler: gercek V9 motoru ve stratejiler, kisa sure. Alt surec yerine ayni surecte calisir."""
+    monkeypatch.setattr(app_module, "BACKTEST_ON_SERVER", True)  # hesap yolu (uretimde kapali; bkz. disa aktarim testi)
     monkeypatch.setattr(app_module, "BACKTEST_DAYS", 1)
     monkeypatch.setattr(app_module, "BACKTEST_V9_DAYS", 0.05)
+    monkeypatch.setattr(app_module, "YEAR_DAYS", 0.1)
+    monkeypatch.setattr(app_module, "YEAR_CHUNK_DAYS", 0.05)
     monkeypatch.setattr(app_module, "BACKTEST_FETCH_PAUSE", 0.0)
     jobs = []
 
-    async def in_process(job):
-        jobs.append(json.loads(job.read_text()))
+    async def in_process(job, module="tradebot.forward"):
+        jobs.append({**json.loads(job.read_text()), "module": module})
         import sqlite3
         db = sqlite3.connect(jobs[-1]["history"])
         try:  # gecmis dosyasinda olusmakta olan mum bulunmaz
@@ -130,64 +136,96 @@ def short_job(monkeypatch, app):
                 assert at + forward.DURATIONS[tf] <= jobs[-1]["end"], (tf, at)
         finally:
             db.close()
-        await asyncio.to_thread(forward.run_job, job, InlinePool)
+        runner = yeartest.run_job if module.endswith("yeartest") else forward.run_job
+        await asyncio.to_thread(runner, job, InlinePool)
         return 0
 
     monkeypatch.setattr(app.bot, "_backtest_spawn", in_process)
     return jobs
 
 
-async def test_bot_runs_the_forward_test_once_in_dry_run_and_publishes_only_numbers(tmp_path, monkeypatch):
+async def test_bot_runs_forward_then_year_test_in_dry_run_and_publishes_only_numbers(tmp_path, monkeypatch):
     app = await started(tmp_path, dry_run=True)
     await app.bot.record_spreads()  # olculmus saatlik spread profili
     jobs = short_job(monkeypatch, app)
     assert (await public_get(app, "/health/backtest")).json() == {"state": "idle", "result": None}
+    assert (await public_get(app, "/health/yeartest")).json() == {"state": "idle", "result": None}
     summary = await app.bot.backtest_once()
     assert summary["version"] == forward.VERSION and summary["symbols"] == 1
-    assert summary["v9_coverage"] == {"symbols_done": 1, "symbols_total": 1, "workers": 1,
-                                      "evaluations": summary["v9_coverage"]["evaluations"], "errors": 0,
-                                      "complete": True}
-    assert summary["v9_coverage"]["evaluations"] >= 4
     assert set(summary["swing"]["strategies"]) == set(forward.SWING_IDS)
-    assert summary["spread_profile"] == {"symbols": 1, "hours_measured_median": 1}
-    job = jobs[0]
+    assert [job["module"] for job in jobs] == ["tradebot.forward", "tradebot.yeartest"] and jobs[0]["skip_v9"] is True
+    job = jobs[1]
     assert job["account"]["equity"] == 10_000.0  # gercek varlik dosyaya yazilmaz (sahte hesap da 10000)
-    assert job["end"] % 86400 == 0 and job["split"] == job["start"] + (job["end"] - job["start"]) * 2 / 3
-    assert list(job["bounds"]) == ["XAUUSD"] and {row[0] for row in [("D1",)]} <= set(forward.DURATIONS)
+    assert job["end"] % 86400 == 0 and job["year_start"] == job["end"] - 0.1 * 86400 and len(job["v9_ids"]) == 4
+    year = app.bot.yeartest_report(full=True)["result"]
+    assert year["version"] == yeartest.VERSION and year["complete"] is True and app.bot.backtest_state == "done"
+    assert set(year["strategies"]) == set(yeartest.TB_IDS) | set(job["v9_ids"])  # 14 strateji
+    assert year["progress"]["v9_chunks_done"] == year["progress"]["v9_chunks_total"] == 2
+    assert year["progress"]["v9_evaluations"] >= 8 and year["rules"]["swap"] == 0
+    for row in year["strategies"].values():
+        assert set(row["windows"]) == {"1m", "6m", "1y"} and "curve" in row["windows"]["1y"]
+        assert row["verdict"]["passed"] in (None, False)  # bu kadar kisa veriyle hicbir strateji "gecti" olamaz
     folder = tmp_path / "backtest"
     assert not (folder / "history.db").exists() and not (folder / "job.json").exists()  # is bitince silinir
-    assert (folder / "v9-XAUUSD.json").exists()  # biten sembol saklanir: yarim kalan is kaldigi yerden surer
-    response = await public_get(app, "/health/backtest")
-    assert response.json()["state"] == "done" and response.json()["result"]["v9"] == summary["v9"]
-    for secret in ("123456", "balance", "equity", "lots", "risk_amount"):
-        assert secret not in response.text
+    public = await public_get(app, "/health/yeartest")
+    assert public.json()["state"] == "done" and "by_symbol" not in public.text and "curve" not in public.text
+    assert public.json()["result"]["strategies"].keys() == year["strategies"].keys()
+    for secret in ("123456", "\"balance\"", "equity", "lots", "risk_amount"):
+        assert secret not in public.text and secret not in (await public_get(app, "/health/backtest")).text
     assert await app.bot.backtest_once() is None  # tam ve taze sonuc varken yeniden calismaz
 
 
-async def test_unfinished_v9_phase_is_resumed_without_redoing_finished_symbols(tmp_path, monkeypatch):
+async def test_unfinished_year_test_resumes_with_the_same_window_history_and_finished_parts(tmp_path, monkeypatch):
+    app = await started(tmp_path, dry_run=True)
+    jobs = short_job(monkeypatch, app)
+    fetches = []
+    real = app.bot._backtest_history
+
+    async def counted(*args, **kwargs):
+        fetches.append(1)
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(app.bot, "_backtest_history", counted)
+    monkeypatch.setattr(app_module, "BACKTEST_BUDGET", -1.0)  # sure hemen doluyor: yillik test hic ilerlemez
+    monkeypatch.setattr(app_module, "YEAR_ROUNDS", 2)
+    await app.bot.backtest_once()
+    assert [job["module"][-8:] for job in jobs] == [".forward", "yeartest", "yeartest"]  # bitmeyen is bir tur daha
+    partial = app.bot.yeartest_report(full=True)["result"]
+    assert partial["complete"] is False and app.bot.backtest_state == "partial"
+    assert partial["progress"]["tb_symbols_done"] == 0 and (tmp_path / "backtest" / "history.db").exists()
+    assert all(row["verdict"]["passed"] is None for row in partial["strategies"].values())
+    app.clock["now"] += 86400.0  # ertesi gun yeniden baslayan surec ayni pencere ve ayni gecmisle surer
+    monkeypatch.setattr(app_module, "BACKTEST_BUDGET", 3600.0)
+    await app.bot.backtest_once()
+    done = app.bot.yeartest_report(full=True)["result"]
+    assert done["complete"] is True and len(fetches) == 1 and jobs[-1]["end"] == jobs[0]["end"]
+    # Biten parcalar dosyada durur: yeniden calistirilirsa V9 hic degerlendirilmez.
+    job = tmp_path / "backtest" / "job.json"
+    job.write_text(json.dumps({k: v for k, v in jobs[-1].items() if k != "module"} | {"deadline": 4e9}))
+    backtest.write_history(Path(jobs[-1]["history"]), [("XAUUSD", "M15", 0, 1.0, 1.0, 1.0, 1.0)])
+    monkeypatch.setattr(forward, "v9_symbol", lambda args: (_ for _ in ()).throw(AssertionError("yeniden calisti")))
+    monkeypatch.setattr(forward, "swing_trades", lambda *a, **k: (_ for _ in ()).throw(AssertionError("yeniden calisti")))
+    again = yeartest.run_job(job, InlinePool)
+    assert again["complete"] is True and again["strategies"].keys() == done["strategies"].keys()
+    app.clock["now"] += 8 * 86400.0  # tamamlanan sonuc eskiyince yeni pencere acilir
+    monkeypatch.undo()
+    short = short_job(monkeypatch, app)
+    await app.bot.backtest_once()
+    assert short[0]["end"] == jobs[0]["end"] + 9 * 86400.0
+
+
+async def test_forward_result_is_published_before_the_year_test_and_includes_the_week_reproduction(tmp_path, monkeypatch):
     app = await started(tmp_path, dry_run=True)
     short_job(monkeypatch, app)
-    monkeypatch.setattr(app_module, "BACKTEST_BUDGET", -1.0)  # sure hemen doluyor: V9 hic bitmez
-    first = await app.bot.backtest_once()
-    assert first["v9_coverage"]["complete"] is False and app.bot.backtest_state == "partial"
-    assert not (tmp_path / "backtest" / "v9-XAUUSD.json").exists()
-    monkeypatch.setattr(app_module, "BACKTEST_BUDGET", 3600.0)
-    second = await app.bot.backtest_once()  # tamamlanmamis sonuc "taze" sayilmaz: is yeniden calisir
-    assert second["v9_coverage"]["complete"] is True and app.bot.backtest_state == "done"
-    # Biten sembolun dosyasi durdukca V9 o sembolde yeniden calistirilmaz.
-    job = tmp_path / "backtest" / "job.json"
-    saved = json.loads((tmp_path / "backtest" / "v9-XAUUSD.json").read_text())
-    signature = saved["signature"].split(":")
-    history = tmp_path / "backtest" / "h.db"
-    backtest.write_history(history, [("XAUUSD", "M15", 0, 1.0, 1.0, 1.0, 1.0)])
-    job.write_text(json.dumps({"instruments": [{"symbol": "XAUUSD", "kind": "metal"}], "spreads": {"XAUUSD": {"hours": {}, "all": 0.2}},
-                               "start": float(signature[1]), "end": float(signature[2]), "split": float(signature[1]),
-                               "v9_start": float(signature[1]), "history": str(history),
-                               "result": str(tmp_path / "backtest" / "again.json"), "workers": 1,
-                               "max_spread_stop_pct": float(signature[3])}))
-    monkeypatch.setattr(forward, "v9_symbol", lambda args: (_ for _ in ()).throw(AssertionError("yeniden calisti")))
-    again = forward.run_job(job, InlinePool)
-    assert again["v9_coverage"]["complete"] is True and again["v9"] == second["v9"]
+    published = []
+    real = app.bot.repo.set_setting
+    monkeypatch.setattr(app.bot.repo, "set_setting", lambda key, value: (published.append(key), real(key, value))[1])
+    summary = await app.bot.backtest_once()
+    keys = [key for key in published if key in ("backtest_result", "yeartest_result")]
+    assert keys == ["backtest_result", "yeartest_result"]  # ileri test once yayinlanir
+    replica = summary["week_replica"]
+    assert "error" not in replica and set(replica["missing"]) | set(replica["coverage"]) == set(forward.week_replica.SYMBOLS)
+    assert replica["soft"]["match"]["reference"] == 182 and replica["strict"]["match"]["reference"] == 184
 
 
 async def test_backtest_never_runs_live_and_a_failure_is_harmless(tmp_path, monkeypatch):
@@ -342,23 +380,6 @@ def test_replay_shows_strategies_only_closed_and_current_bars_and_simulates_from
     assert all(first == at - 5 for _, _, at, first in simulated)  # benzetim giris mumundan SONRAKI mumla baslar
     side, entry = next((side, entry) for side, entry, at, _ in simulated if at == END + 5)
     assert side == "BUY" and entry == 100.5 + 0.02  # AL: kapanis + spread (ask)
-
-
-async def test_unfinished_job_keeps_its_window_across_days(tmp_path, monkeypatch):
-    app = await started(tmp_path, dry_run=True)
-    jobs = short_job(monkeypatch, app)
-    monkeypatch.setattr(app_module, "BACKTEST_BUDGET", -1.0)
-    monkeypatch.setattr(app_module, "BACKTEST_ROUNDS", 2)
-    assert (await app.bot.backtest_once())["v9_coverage"]["complete"] is False
-    # Ilk alt surec yalnizca A asamasidir (erken sonuc); bitmeyen V9 ayni gecmisle iki tur denenir.
-    assert [job["skip_v9"] for job in jobs] == [True, False, False]
-    app.clock["now"] += 86400.0  # ertesi gun yeniden baslayan surec ayni pencereyle surer
-    monkeypatch.setattr(app_module, "BACKTEST_BUDGET", 3600.0)
-    done = await app.bot.backtest_once()
-    assert done["v9_coverage"]["complete"] is True and len(jobs) == 5 and jobs[4]["end"] == jobs[0]["end"]
-    app.clock["now"] += 86400.0  # tamamlanan isten sonra (sonuc eskiyince) yeni pencere acilir
-    await app.bot.backtest_once()
-    assert jobs[5]["end"] == jobs[0]["end"] + 2 * 86400.0
 
 
 async def test_history_never_stores_a_bar_that_is_still_forming(tmp_path, monkeypatch):
@@ -517,24 +538,15 @@ def test_week_trade_corrected_measurement_differs_only_where_the_source_was_opti
     replica, fixed = W.summarize(rows, exclude_open=False), W.summarize(rows, exclude_open=True)
     assert replica["all"]["net_r"] == 5.5 and fixed["all"]["net_r"] == 3.0 and fixed["open"] == {"trades": 1, "r": 2.5}
     assert fixed["ex_xau"]["net_r"] == 0.0 and fixed["ex_xau"]["trades"] == 2 and fixed["all"]["pf"] == 4.0
-    assert fixed["all"]["nights"] == 15 and fixed["swap"]["0.06"]["all"] == pytest.approx(3.0 - 15 * 0.02 * 0.06, abs=0.01)
+    # Gecelik faiz: ana senaryo 0 (toplamlar). Ikinci senaryo yalnizca swap'li sembollere (caprazlara) uygulanir;
+    # bu ornekte capraz yok, sonuc degismez. En kotu senaryo butun sembollere uygular.
+    assert fixed["all"]["nights"] == 15 and fixed["swap"]["cross_nights"] == 0
+    assert fixed["swap"]["crosses"]["0.06"] == {"all": 3.0, "ex_xau": 0.0}
+    assert fixed["swap"]["everything"]["0.06"]["all"] == pytest.approx(3.0 - 15 * 0.02 * 0.06, abs=0.01)
+    cross = [dict(rows[1], symbol="GBPAUD", r=1.0, nights=10)]
+    assert W.summarize(cross, exclude_open=True)["swap"]["crosses"]["0.06"]["all"] == pytest.approx(1.0 - 10 * 0.02 * 0.06, abs=0.01)
+    assert W.SWAP_FREE == {"BTCUSD", "ETHUSD", "XAUUSD", "EURUSD", "USDCHF"}
     assert fixed["all"]["max_dd"] == -1.0 and fixed["by_symbol"]["XAUUSD"]["trades"] == 1
-
-
-async def test_first_result_is_published_before_the_long_v9_phase_and_includes_the_week_reproduction(tmp_path, monkeypatch):
-    app = await started(tmp_path, dry_run=True)
-    jobs = short_job(monkeypatch, app)
-    published = []
-    real = app.bot.repo.set_setting
-    monkeypatch.setattr(app.bot.repo, "set_setting", lambda key, value: (published.append((key, value)), real(key, value))[1])
-    summary = await app.bot.backtest_once()
-    results = [value for key, value in published if key == "backtest_result"]
-    assert len(results) == 2 and results[0]["v9_coverage"]["complete"] is False and jobs[0]["skip_v9"] is True
-    assert results[0]["swing"] == summary["swing"] and summary["v9_coverage"]["complete"] is True
-    replica = summary["week_replica"]
-    assert "error" not in replica and set(replica["missing"]) | set(replica["coverage"]) == set(forward.week_replica.SYMBOLS)
-    assert replica["soft"]["match"]["reference"] == 182 and replica["strict"]["match"]["reference"] == 184
-    assert (tmp_path / "backtest" / "swing.json").exists()  # A asamasi V9 turlarinda yeniden hesaplanmaz
 
 
 def test_corrected_week_measurement_takes_the_trail_atr_from_before_the_entry():
@@ -557,3 +569,173 @@ def test_corrected_week_measurement_takes_the_trail_atr_from_before_the_entry():
     # Ayni girdiyle iki kip yalnizca ATR kaynagi ve dolum kuraliyla ayrisir: en az bir islemin sonucu degisir.
     plain = W.run(bars, soft=True, mode="bt", found=found)
     assert [t["at"] for t in plain][:5] == [t["at"] for t in fixed][:5]
+
+
+def test_listed_swap_cost_counts_each_rollover_with_its_weekday_multiplier():
+    """Broker'in listeledigi swap (gece basina puan) uygulansaydi islemin maliyeti: carsamba 3 kat, hafta sonu 0."""
+    from tradebot import week_replica as W
+    monday = 4 * 86400.0  # 1970-01-05 pazartesi 00:00 UTC
+    swap = {"long": -16.5, "short": 0.0, "point": 0.00001,
+            "multipliers": {"MON": 1, "TUE": 1, "WED": 3, "THU": 1, "FRI": 1, "SAT": 0, "SUN": 0}}
+    week = W.listed_swap_r(swap, 1, monday + 3600, monday + 7 * 86400 + 3600, 0.012)  # bir tam hafta: 1+1+3+1+1 = 7
+    assert week == pytest.approx(-16.5 * 0.00001 * 7 / 0.012)
+    assert W.listed_swap_r(swap, 1, monday + 3600, monday + 20 * 3600, 0.012) == 0.0  # gun devrinden once kapandi
+    assert W.listed_swap_r(swap, 1, monday + 3600, monday + 23 * 3600, 0.012) == pytest.approx(-16.5e-5 / 0.012)
+    assert W.listed_swap_r(swap, -1, monday + 3600, monday + 7 * 86400, 0.012) == 0.0  # satis tarafi 0
+    assert W.listed_swap_r(None, 1, 0, 86400, 1.0) is None and W.listed_swap_r({"long": None, "point": 1e-5}, 1, 0, 1, 1.0) is None
+    rows = [{"at": W.START, "symbol": "EURUSD", "side": "BUY", "stretch": False, "r": 1.0, "exit": 0, "why": "stop",
+             "nights": 7, "cost_r": 0.01, "night_r": 0.02, "listed_swap_r": -0.1},
+            {"at": W.START + 86400, "symbol": "XAUUSD", "side": "SELL", "stretch": False, "r": 2.0, "exit": 0,
+             "why": "stop", "nights": 3, "cost_r": 0.01, "night_r": 0.02, "listed_swap_r": None}]
+    listed = W.summarize(rows, exclude_open=True)["swap"]["listed"]
+    assert listed == {"trades_with_data": 1, "trades": 2, "cost_r": -0.1, "all": 2.9, "ex_xau": 0.9,
+                      "by_symbol": {"BTCUSD": 0, "ETHUSD": 0, "XAUUSD": 0, "EURUSD": -0.1, "USDCHF": 0, "GBPAUD": 0}}
+
+
+def test_listed_swaps_are_read_from_the_real_instrument_conditions():
+    import json as _json
+    from pathlib import Path as _Path
+    from tradebot.exness import schema
+    raw = _json.loads((_Path(__file__).parent / "exness/fixtures/real/conditions/EURUSD.json").read_text())
+    item = schema.parse_instrument(raw)
+    assert item.swap_long == -16.5 and item.swap_short == 0.0
+    assert item.swap_multipliers["WED"] == 3 and item.swap_multipliers["SAT"] == 0
+    assert schema.parse_instrument({**raw, "swap_long": None, "swap_multipliers": "bozuk"}).swap_multipliers is None
+
+
+async def test_a_failing_history_range_does_not_kill_the_job(tmp_path, monkeypatch):
+    """Bir yillik gecmis ~3000 istektir: tek bir araligin alinamamasi (broker eski veriyi vermiyor, gecici hata) ya da
+    istek siniri butun isi dusurmez; eksik kapsam sonucta gorunur."""
+    from tradebot.exness.errors import ExnessRateLimited, ExnessUnavailable
+    app = await started(tmp_path, dry_run=True)
+    short_job(monkeypatch, app)
+    real = app.bot.candles._fetch
+    calls = {"n": 0}
+
+    async def flaky(path):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ExnessUnavailable("eski aralik yok")
+        if calls["n"] in (2, 3):
+            raise ExnessRateLimited("limit")
+        return await real(path)
+
+    monkeypatch.setattr(app.bot.candles, "_fetch", flaky)
+    assert await app.bot.backtest_once() is not None and app.bot.backtest_state == "done"
+    assert calls["n"] > 4
+    # Surekli hata: is birakilir, bot etkilenmez.
+    other = await started(tmp_path / "surekli", dry_run=True)
+    short_job(monkeypatch, other)
+    monkeypatch.setattr(app_module, "BACKTEST_FETCH_FAILURES", 2)
+
+    async def dead(path):
+        raise ExnessUnavailable("yok")
+
+    monkeypatch.setattr(other.bot.candles, "_fetch", dead)
+    assert await other.bot.backtest_once() is None and other.bot.backtest_state == "failed: RuntimeError"
+
+
+# ---------------------------------------------------------------- sunucu disinda hesap (GitHub Actions)
+async def test_server_only_exports_market_data_and_never_computes(tmp_path, monkeypatch):
+    """Uretimdeki varsayilan: sunucu gecmisi ceker ve disa aktarir; hicbir alt surec baslatmaz."""
+    import httpx
+    from tradebot.api.server import create_app
+    app = await started(tmp_path, dry_run=True)
+    monkeypatch.setattr(app_module, "YEAR_DAYS", 0.1)
+    monkeypatch.setattr(app_module, "BACKTEST_DAYS", 1)
+    monkeypatch.setattr(app_module, "BACKTEST_FETCH_PAUSE", 0.0)
+    assert app_module.BACKTEST_ON_SERVER is False
+
+    async def never(*args, **kwargs):
+        raise AssertionError("sunucuda hesap baslatildi")
+
+    monkeypatch.setattr(app.bot, "_backtest_spawn", never)
+    assert await app.bot.backtest_once() is None and app.bot.backtest_state == "exported"
+    job = app.bot.export_job()
+    assert job["ready"] is True and job["version"] == yeartest.VERSION and job["bars"] > 0
+    assert job["account"]["leverage"] is None and job["account"]["equity"] == 10_000.0  # hesap verisi yok
+    text_form = json.dumps(job)
+    for secret in ("123456", "api_key", "secret", "lots", "risk_amount", str(tmp_path)):
+        assert secret not in text_form
+    assert "history" not in job and "year_result" not in job and app.bot.export_history_path().exists()
+    api = create_app(app.bot, clock=lambda: app.clock["now"])
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api), base_url="http://bot") as http:
+        local = await http.get("/health/export")
+        assert local.status_code == 200 and local.json()["end"] == job["end"]
+        data = await http.get("/health/export/history")
+        assert data.status_code == 200 and data.content[:15] == b"SQLite format 3"
+        # Ters vekil uzerinden (disaridan) gelen istek: yok sayilir.
+        for path in ("/health/export", "/health/export/history"):
+            assert (await http.get(path, headers={"X-Forwarded-For": "203.0.113.9"})).status_code == 404
+    remote = httpx.ASGITransport(app=api, client=("203.0.113.9", 4000))
+    async with httpx.AsyncClient(transport=remote, base_url="http://bot") as outside:
+        assert (await outside.get("/health/export")).status_code == 404
+
+
+async def test_uploaded_results_are_imported_once_and_only_in_the_right_format(tmp_path, monkeypatch):
+    app = await started(tmp_path, dry_run=True)
+    folder = tmp_path / "yuklenen"
+    folder.mkdir()
+    monkeypatch.setattr(app_module, "RESULTS_DIR", folder)
+    assert await app.bot.import_results() == []  # dosya yok
+    (folder / "year.json").write_text(json.dumps({"version": "eski", "strategies": {}}))
+    assert await app.bot.import_results() == [] and app.repo.get_setting("yeartest_result") is None
+    window = {"trades": 1, "closed": 1, "net_r": 1.0, "complete": True}
+    row = {"windows": {"1m": window, "6m": window, "1y": window}, "verdict": {"passed": False, "reasons": []}}
+    good = {"version": yeartest.VERSION, "complete": True, "to": app.clock["now"], "finished_at": app.clock["now"] - 50,
+            "history": {"days_median": 365.0}, "rules": {"max_spread_stop_pct": 15.0}, "strategies": {"tb_a": row},
+            "combined": None}
+    for broken in ({**good, "strategies": {"tb_a": {}}}, {**good, "strategies": {"tb_a": {**row, "windows": {"1y": window}}}},
+                   {**good, "history": 1}, {**good, "to": app.clock["now"] + 10 * 86400}, {**good, "combined": {"x": 1}}):
+        (folder / "year.json").write_text(json.dumps(broken) + " " * (len(str(broken)) % 7))
+        assert await app.bot.import_results() == [], broken  # bicimi bozuk dosya alinmaz
+    assert app.repo.get_setting("yeartest_result") is None
+    (folder / "year.json").write_text(json.dumps(good) + " ")
+    (folder / "forward.json").write_text(json.dumps({"version": forward.VERSION, "swing": {}}))
+    assert sorted(await app.bot.import_results()) == ["forward.json", "year.json"]
+    stored = app.repo.get_setting("yeartest_result")
+    assert stored["imported"] is True and stored["finished_at"] == app.clock["now"] - 50  # dosyanin kendi zamani
+    assert app.bot.backtest_state == "imported"
+    # Yeniden baslatma: ayni dosya "yeni sonuc" olarak yeniden alinmaz.
+    app.bot._results_seen.clear()
+    app.clock["now"] += 3600
+    assert "year.json" not in await app.bot.import_results()
+    assert app.repo.get_setting("yeartest_result")["finished_at"] == stored["finished_at"]
+    assert app.bot.yeartest_report(full=True)["result"]["strategies"] == good["strategies"]
+    assert app.repo.get_setting("backtest_result")["version"] == forward.VERSION
+    assert await app.bot.import_results() == []  # degismeyen dosya yeniden alinmaz
+    assert app.kinds().count("backtest_imported") >= 2
+    (folder / "year.json").write_text("{bozuk")
+    (folder / "forward.json").write_text("x" * (app_module.RESULTS_MAX_BYTES + 1))
+    assert await app.bot.import_results() == [] and app.repo.get_setting("yeartest_result")["imported"] is True
+
+
+def test_year_test_split_per_symbol_and_assembled_equals_a_single_run(tmp_path):
+    """Is sembol sembol ayri makinelerde kosup tek yerde toplanabilir: sonuc tek seferde kosulanla aynidir."""
+    from tests.signals.market_gen import T0, market
+    from tests.test_yeartest import FakePool
+    history = tmp_path / "history.db"
+    symbols = ["S1USD", "S2USD"]
+    for index, symbol in enumerate(symbols):
+        backtest.write_history(history, [(symbol, tf, b["time"], b["open"], b["high"], b["low"], b["close"], 1.0)
+                                         for tf, bars in market(index, 60).items() for b in bars])
+    end = float(T0 + 60 * 86400)
+    base = {"instruments": [{"symbol": s, "kind": "forex"} for s in symbols], "history": str(history),
+            "spreads": {s: {"hours": {}, "all": 0.004} for s in symbols}, "end": end, "year_start": end - 10 * 86400.0,
+            "chunk_days": 5.0, "deadline": 4e9, "workers": 1, "v9_ids": ["fx_a"], "max_spread_stop_pct": 15.0,
+            "rules": {}}
+    FakePool.skip = set()
+    (tmp_path / "tek").mkdir()
+    single = yeartest.run({**base, "year_result": str(tmp_path / "tek" / "year.json")}, tmp_path / "tek", FakePool)
+    parts = tmp_path / "parca"
+    parts.mkdir()
+    for symbol in symbols:  # her sembol "ayri makinede"
+        partial = yeartest.run({**base, "only": [symbol], "year_result": str(parts / "year.json")}, parts, FakePool)
+        assert partial["complete"] is (symbol == symbols[-1])
+    job = tmp_path / "job.json"
+    job.write_text(json.dumps(base))
+    assembled = yeartest.main([str(job), "--out", str(parts), "--assemble"])  # hicbir sey hesaplamadan toplar
+    strip = lambda result: {k: v for k, v in result.items() if k not in ("seconds", "finished_at")}  # noqa: E731
+    assert strip(assembled) == strip(single) and assembled["complete"] is True
+    empty = tmp_path / "bos"
+    assert yeartest.main([str(job), "--out", str(empty), "--assemble"])["complete"] is False  # parca yoksa tam degil

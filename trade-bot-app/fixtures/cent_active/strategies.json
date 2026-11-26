@@ -12,7 +12,8 @@
     "avg_r": null
    },
    "can_go_live": false,
-   "live_blocker": null
+   "live_blocker": null,
+   "backtest_passed": false
   },
   {
    "strategy_id": "fx_failed_breakout_v6",
@@ -26,7 +27,8 @@
     "avg_r": null
    },
    "can_go_live": false,
-   "live_blocker": null
+   "live_blocker": null,
+   "backtest_passed": false
   },
   {
    "strategy_id": "fx_range_reversion_v6",
@@ -40,7 +42,8 @@
     "avg_r": null
    },
    "can_go_live": false,
-   "live_blocker": null
+   "live_blocker": null,
+   "backtest_passed": false
   },
   {
    "strategy_id": "fx_trend_momentum_v6",
@@ -54,7 +57,8 @@
     "avg_r": null
    },
    "can_go_live": false,
-   "live_blocker": null
+   "live_blocker": null,
+   "backtest_passed": false
   },
   {
    "strategy_id": "tb_donchian_breakout_v1",
@@ -68,7 +72,8 @@
     "avg_r": null
    },
    "can_go_live": false,
-   "live_blocker": "yeni strateji canlıya alınamaz: en az 20 sonuçlanmış gölge işlem gerekli (şu an 0)"
+   "live_blocker": "yeni strateji canlıya alınamaz: en az 20 sonuçlanmış gölge işlem gerekli (şu an 0)",
+   "backtest_passed": false
   },
   {
    "strategy_id": "tb_ema_pullback_v1",
@@ -82,7 +87,8 @@
     "avg_r": null
    },
    "can_go_live": false,
-   "live_blocker": "yeni strateji canlıya alınamaz: en az 20 sonuçlanmış gölge işlem gerekli (şu an 0)"
+   "live_blocker": "yeni strateji canlıya alınamaz: en az 20 sonuçlanmış gölge işlem gerekli (şu an 0)",
+   "backtest_passed": false
   },
   {
    "strategy_id": "tb_emapb_day_v13",
@@ -96,7 +102,8 @@
     "avg_r": null
    },
    "can_go_live": false,
-   "live_blocker": "yeni strateji canlıya alınamaz: en az 20 sonuçlanmış gölge işlem gerekli (şu an 0)"
+   "live_blocker": "yeni strateji canlıya alınamaz: en az 20 sonuçlanmış gölge işlem gerekli (şu an 0)",
+   "backtest_passed": false
   },
   {
    "strategy_id": "tb_emapb_h1_20_21_v1",
@@ -110,7 +117,8 @@
     "avg_r": null
    },
    "can_go_live": false,
-   "live_blocker": "yeni strateji canlıya alınamaz: en az 20 sonuçlanmış gölge işlem gerekli (şu an 0)"
+   "live_blocker": "yeni strateji canlıya alınamaz: en az 20 sonuçlanmış gölge işlem gerekli (şu an 0)",
+   "backtest_passed": false
   },
   {
    "strategy_id": "tb_emapb_h1_21_50_v1",
@@ -124,7 +132,8 @@
     "avg_r": null
    },
    "can_go_live": false,
-   "live_blocker": "yeni strateji canlıya alınamaz: en az 20 sonuçlanmış gölge işlem gerekli (şu an 0)"
+   "live_blocker": "yeni strateji canlıya alınamaz: en az 20 sonuçlanmış gölge işlem gerekli (şu an 0)",
+   "backtest_passed": false
   },
   {
    "strategy_id": "tb_emapb_week_v13",
@@ -138,7 +147,8 @@
     "avg_r": null
    },
    "can_go_live": false,
-   "live_blocker": "yeni strateji canlıya alınamaz: en az 20 sonuçlanmış gölge işlem gerekli (şu an 0)"
+   "live_blocker": "yeni strateji canlıya alınamaz: en az 20 sonuçlanmış gölge işlem gerekli (şu an 0)",
+   "backtest_passed": false
   },
   {
    "strategy_id": "tb_smc_day_v13",
@@ -152,7 +162,8 @@
     "avg_r": null
    },
    "can_go_live": false,
-   "live_blocker": "yeni strateji canlıya alınamaz: en az 20 sonuçlanmış gölge işlem gerekli (şu an 0)"
+   "live_blocker": "yeni strateji canlıya alınamaz: en az 20 sonuçlanmış gölge işlem gerekli (şu an 0)",
+   "backtest_passed": false
   },
   {
    "strategy_id": "tb_smc_sweep_v1",
@@ -166,7 +177,8 @@
     "avg_r": null
    },
    "can_go_live": false,
-   "live_blocker": "yeni strateji canlıya alınamaz: en az 20 sonuçlanmış gölge işlem gerekli (şu an 0)"
+   "live_blocker": "yeni strateji canlıya alınamaz: en az 20 sonuçlanmış gölge işlem gerekli (şu an 0)",
+   "backtest_passed": false
   },
   {
    "strategy_id": "tb_smc_week_v13",
@@ -180,7 +192,8 @@
     "avg_r": null
    },
    "can_go_live": false,
-   "live_blocker": "yeni strateji canlıya alınamaz: en az 20 sonuçlanmış gölge işlem gerekli (şu an 0)"
+   "live_blocker": "yeni strateji canlıya alınamaz: en az 20 sonuçlanmış gölge işlem gerekli (şu an 0)",
+   "backtest_passed": false
   },
   {
    "strategy_id": "tb_week_trade_v1",
@@ -194,7 +207,8 @@
     "avg_r": null
    },
    "can_go_live": false,
-   "live_blocker": "yeni strateji canlıya alınamaz: en az 20 sonuçlanmış gölge işlem gerekli (şu an 0)"
+   "live_blocker": "yeni strateji canlıya alınamaz: en az 20 sonuçlanmış gölge işlem gerekli (şu an 0)",
+   "backtest_passed": false
   }
  ]
 }

@@ -1,0 +1,169 @@
+name: Backtest (yillik)
+# Yillik backtest sunucuda DEGIL burada kosar (bot yavaslamasin). Akis:
+#   1) export   : sunucudan yalnizca piyasa verisi cekilir (OHLC mumlar + saatlik spread profili + enstruman
+#                 kosullari). Hesap numarasi, bakiye, lot, islem ve API anahtari sunucudan CIKMAZ.
+#   2) run      : sembol basina bir is; her is butun cekirdekleri kullanir (V9 parcalari havuzda).
+#   3) assemble : parcalar toplanir (portfoy kurallari, pencereler, gecti/kaldi, bakiye egrisi) ve sonuc sunucuya
+#                 yuklenir; bot dosyayi ice alir, uygulama ayni API'den gorur.
+# Depo herkese acik oldugu icin artifact'lar da herkese aciktir: yalnizca piyasa verisi ve benzetim sonucu icerir,
+# saklama suresi kisadir.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: backtest
+  cancel-in-progress: false
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  PYTHONUTF8: '1'
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      symbols: ${{ steps.meta.outputs.symbols }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: trade-bot/deploy
+      - name: Piyasa verisini sunucudan al
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          trade-bot/deploy/ci_ssh.sh
+          remote() { ssh -i ~/.ssh/deploy_key -p "${VPS_PORT:-22}" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "$@"; }
+          mkdir -p data
+          if ! remote 'curl -fsS --max-time 60 http://127.0.0.1:8090/health/export' > data/job.json; then
+            echo "::error::Disa aktarim hazir degil: bot gecmis mumlari hala cekiyor olabilir. Birkac dakika sonra yeniden deneyin."
+            exit 1
+          fi
+          remote 'curl -fsS --max-time 900 http://127.0.0.1:8090/health/export/history | gzip -1' > data/history.db.gz
+          gzip -t data/history.db.gz
+          ls -l data
+      - name: Remove key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
+      - id: meta
+        name: Sembol listesi
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          job = json.load(open("data/job.json"))
+          names = [row["symbol"] for row in job["instruments"] if row["symbol"] in job["spreads"]]
+          print("symbols=" + json.dumps(names))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: market-data
+          path: data
+          retention-days: 1
+  run:
+    needs: export
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        symbol: ${{ fromJson(needs.export.outputs.symbols) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --quiet -e trade-bot -r trade-ai-unified/requirements-lock.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: market-data
+          path: data
+      - name: Backtest (${{ matrix.symbol }})
+        working-directory: trade-bot
+        env:
+          SYMBOL: ${{ matrix.symbol }}
+        run: |
+          set -euo pipefail
+          gunzip ../data/history.db.gz
+          python -m tradebot.yeartest ../data/job.json --history ../data/history.db --out ../out \
+            --only "$SYMBOL" --workers "$(nproc)"
+          ls ../out | head -40
+      - uses: actions/upload-artifact@v4
+        with:
+          name: part-${{ matrix.symbol }}
+          path: out/yt-*.json
+          retention-days: 1
+  assemble:
+    needs: [export, run]
+    if: ${{ !cancelled() && needs.export.result == 'success' }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --quiet -e trade-bot -r trade-ai-unified/requirements-lock.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: market-data
+          path: data
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: part-*
+          path: out
+          merge-multiple: true
+      - name: Topla (pencereler, portfoy kurallari, gecti/kaldi) ve ileri testin A asamasi
+        working-directory: trade-bot
+        run: |
+          set -euo pipefail
+          gunzip ../data/history.db.gz
+          python -m tradebot.yeartest ../data/job.json --history ../data/history.db --out ../out --assemble
+          python - <<'PY'
+          import json, time
+          job = json.load(open("../data/job.json"))
+          job.update({"history": "../data/history.db", "result": "../out/forward.json", "skip_v9": True,
+                      "deadline": time.time() + 3 * 3600})
+          json.dump(job, open("../out/forward-job.json", "w"))
+          PY
+          python -m tradebot.forward ../out/forward-job.json
+          python - <<'PY'
+          import json
+          year = json.load(open("../out/year.json"))
+          print("tamam:", year["complete"], "| veri (gun) medyan/taban:", year["history"]["days_median"], year["history"].get("days_floor"),
+                "| ilerleme:", year["progress"])
+          for name, row in year["strategies"].items():
+              w = row["windows"]
+              print(f"{name:26s} {str(row['verdict']['passed']):5s} " + " | ".join(
+                  f"{k}: n={w[k]['closed']} R={w[k]['net_r']} USC={w[k]['net_usc']} PF={w[k]['pf']} DD%={w[k]['max_dd_pct']}" for k in ("1m", "6m", "1y")))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backtest-result
+          path: |
+            out/year.json
+            out/forward.json
+          retention-days: 7
+      - name: Sonucu sunucuya yukle
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          trade-bot/deploy/ci_ssh.sh
+          remote() { ssh -i ~/.ssh/deploy_key -p "${VPS_PORT:-22}" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "$@"; }
+          remote 'mkdir -p /opt/tradebot/backtest-results'
+          for name in year forward; do
+            remote "cat > /opt/tradebot/backtest-results/$name.json.new && mv -f /opt/tradebot/backtest-results/$name.json.new /opt/tradebot/backtest-results/$name.json" < "out/$name.json"
+          done
+          echo "sonuc yuklendi; bot bir dakika icinde ice alir"
+      - name: Remove key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
