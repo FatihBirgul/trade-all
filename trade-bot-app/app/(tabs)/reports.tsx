@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { View } from "react-native";
+import { router } from "expo-router";
 import { amountText, centNote, majorText, pnlText, priceText, timeText } from "../../src/bot/presentation";
 import { MODE_LABEL, strategyName } from "../../src/bot/settingsForm";
 import { useBot } from "../../src/bot/state";
@@ -85,6 +86,11 @@ export default function Reports() {
                 </Card>
               </>
             )}
+            <Card testID="report-backtest">
+              <T weight="800" size={16}>Backtest sonuçları</T>
+              <T muted size={13}>Stratejilerin geçmiş Exness mumlarıyla 1 ay, 6 ay ve 1 yıllık ölçümü; geçti / kaldı durumu.</T>
+              <Button testID="open-backtest" title="Backtest ekranını aç" kind="tonal" icon="stats-chart" onPress={() => router.push("/backtest")} />
+            </Card>
             <Card testID="report-shadow">
               <T weight="800" size={16}>Strateji karnesi (sanal işlemler)</T>
               <T muted size={13}>Gölge kipindeki stratejiler emir göndermez; sinyalleri sanal olarak izlenir.</T>

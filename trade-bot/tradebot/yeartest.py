@@ -46,6 +46,9 @@ PASS_MIN_TRADES = 50
 PASS_MIN_PF = 1.2
 PASS_MAX_DD_PCT = 15.0
 COMPLETE_SHARE = 0.97  # verinin pencerenin en az bu kadarini kapsamasi gerekir
+COVERAGE_QUANTILE = 0.2  # kapsam, sembollerin en kotu %20'lik diliminin sinirina gore olculur (medyana gore degil)
+UNRESOLVED_HOLD = 31 * DAY  # sonuclanmamis islem portfoyde en cok bu kadar yer tutar (benzetimin en uzun tutma suresi)
+PASS_MAX_AGE = 45 * DAY  # gecis, pencerenin bitisinden bu kadar sonra gecerliligini yitirir
 TB_IDS = forward.SWING_IDS + forward.PLAN_IDS + forward.FIXED_IDS
 
 
@@ -73,7 +76,8 @@ def portfolio(trades: list[dict], currencies: dict) -> tuple[list[dict], int]:
     """Portfoy kurallarindan gecen islemler (giris sirasiyla) ve reddedilen sayisi."""
     accepted, rejected, book = [], 0, []
     for trade in sorted(trades, key=lambda t: (t["a"], t["y"], t["s"])):
-        book = [item for item in book if item["c"] is None or item["c"] > trade["a"]]
+        # Sonuclanmamis islem sonsuza kadar yer tutmaz: en uzun tutma suresi kadar acik sayilir.
+        book = [item for item in book if (item["c"] if item["c"] is not None else item["a"] + UNRESOLVED_HOLD) > trade["a"]]
         exposure: dict = {}
         for item in book:
             for leg in legs(item["y"], item["d"], currencies):
@@ -200,7 +204,9 @@ def run_job(job_path: Path, pool_factory=None) -> dict:
     end, start = float(job["end"]), float(job["year_start"])
     span = end - start
     max_cost = forward.max_cost_of(job)
-    signature = f"{VERSION}:{start}:{end}:{job.get('max_spread_stop_pct')}"
+    # Imza olcumu etkileyen her seyi kapsar: oynatma surumu, pencere, maliyet siniri, cikis kurallari.
+    signature = (f"{VERSION}:{forward.VERSION}:{start}:{end}:{job.get('max_spread_stop_pct')}:"
+                 f"{json.dumps(job.get('rules'), sort_keys=True)}")
     history_path = Path(job["history"])
 
     # A) V9 disi stratejiler: sembol sembol, sonuc dosyada saklanir (yeniden baslatmada yeniden hesaplanmaz).
@@ -220,8 +226,8 @@ def run_job(job_path: Path, pool_factory=None) -> dict:
             (folder / f"yt-tb-{symbol}.json").write_text(json.dumps(cached))
         tb_done += 1
         tb_trades += cached["trades"]
-        if cached["first_bar"] is not None:
-            coverage[symbol] = round((end - max(start, cached["first_bar"])) / DAY, 1)
+        coverage[symbol] = (round((end - max(start, cached["first_bar"])) / DAY, 1)
+                            if cached["first_bar"] is not None else 0.0)  # mumu olmayan sembol 0 gun sayilir
 
     # B) V9: en yeni parcadan eskiye. Biten (sembol, parca) dosyada saklanir.
     size = float(job.get("chunk_days", 30.0)) * DAY
@@ -258,7 +264,10 @@ def run_job(job_path: Path, pool_factory=None) -> dict:
         return {name: enough and from_time <= end - share * span * COMPLETE_SHARE + 1e-6
                 for name, share in WINDOW_SHARES.items()}
 
-    data_from = end - (statistics.median(coverage.values()) if coverage else 0.0) * DAY
+    # Kapsam medyana gore DEGIL, en kotu dilime gore: sembollerin cogu eksikse "tam" denmez.
+    ranked = sorted(coverage.values())
+    floor_days = ranked[int(COVERAGE_QUANTILE * (len(ranked) - 1))] if ranked else 0.0
+    data_from = end - floor_days * DAY
     strategies: dict = {}
     for strategy_id in TB_IDS:
         mine = [t for t in tb_trades if t["s"] == strategy_id]
@@ -281,7 +290,9 @@ def run_job(job_path: Path, pool_factory=None) -> dict:
         "pass_rule": {"min_trades": PASS_MIN_TRADES, "min_pf": PASS_MIN_PF, "max_dd_pct": PASS_MAX_DD_PCT,
                       "both_halves_positive": True, "six_months_positive": True},
         "history": {"days_median": statistics.median(coverage.values()) if coverage else 0.0,
-                    "days_min": min(coverage.values()) if coverage else 0.0, "by_symbol": coverage},
+                    "days_min": min(coverage.values()) if coverage else 0.0, "days_floor": floor_days,
+                    "symbols_full": sum(1 for days in coverage.values() if days >= span / DAY * COMPLETE_SHARE),
+                    "by_symbol": coverage},
         "progress": {"tb_symbols_done": tb_done, "symbols": len(symbols), "v9_chunks_done": len(done),
                      "v9_chunks_total": len(parts) * len(symbols), "v9_days_complete": round((end - v9_from) / DAY, 1),
                      "v9_evaluations": sum(d["evaluations"] for d in done.values()),
@@ -309,9 +320,19 @@ def public(result: dict | None) -> dict | None:
             "combined": slim(result["combined"]) if result.get("combined") else None}
 
 
-def passed(result: dict | None, strategy_id: str) -> bool:
-    """Bu strateji, tamamlanmis guncel surum sonucunda gecme olcutunu sagliyor mu?"""
+def passed(result: dict | None, strategy_id: str, now: float, max_spread_stop_pct: float) -> bool:
+    """Bu strateji gecme olcutunu sagliyor mu? Gecis yalnizca su kosullarda sayilir: guncel surum; olcum penceresi
+    en cok `PASS_MAX_AGE` once bitmis (eski sonuc suresiz gecerli olmaz); olcumdeki maliyet siniri SIMDIKI ayardan
+    gevsek degil (sinir sonradan gevsetildiyse canli, backtestin eledigi islemleri acardi)."""
     if not isinstance(result, dict) or result.get("version") != VERSION:
+        return False
+    try:
+        if now - float(result.get("to")) > PASS_MAX_AGE:
+            return False
+        measured = (result.get("rules") or {}).get("max_spread_stop_pct")
+        if measured is None or float(measured) < float(max_spread_stop_pct) - 1e-9:
+            return False
+    except (TypeError, ValueError):
         return False
     row = (result.get("strategies") or {}).get(strategy_id)
     return bool(isinstance(row, dict) and (row.get("verdict") or {}).get("passed") is True)

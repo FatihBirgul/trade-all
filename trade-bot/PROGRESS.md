@@ -777,3 +777,22 @@ Kullanıcı gölgede 1–2 hafta beklemek istemiyor: 14 stratejinin hepsi sunucu
   canlıya alma yine `confirm=true` ile kullanıcının açık onayını ister; risk ayarlarına dokunulmadı. Botun kötü
   sonuç nedeniyle duraklattığı strateji için alternatif geçerli değildir. `/strategies` satırlarında
   `backtest_passed`.
+
+**Bağımsız inceleme (yıllık backtest + kapı):** kritik bulgu yok; `confirm=true` olmadan canlıya alma mümkün değil,
+sonucu dışarıdan yazabilen uç yok, duraklatılmış strateji istisnası doğru. Düzeltilenler:
+- Backtest geçişi süresiz değil: ölçüm penceresi 45 günden önce bittiyse ya da maliyet sınırı ölçümden sonra
+  gevşetildiyse geçiş sayılmaz (`yeartest.passed`). Önbellek imzası oynatma sürümünü ve çıkış kurallarını da kapsar.
+- "Tam veri" medyana göre değil, sembollerin en kötü %20'lik dilimine göre ölçülür; mumu olmayan sembol 0 gün sayılır
+  (`history.days_floor`, `symbols_full`).
+- Geçmiş çekimi tek bir aralığın alınamamasıyla ya da istek sınırıyla düşmez (aralık atlanır, kapsam eksik görünür;
+  sınırda artan beklemeyle 4 deneme; 200'den fazla aralık alınamazsa iş bırakılır).
+- Sonuçlanmamış işlem portföyü süresiz kilitlemez (en çok 31 gün yer tutar).
+- Yıllık iş için tur sayısı 36, pencere sabitleme 10 gün.
+Bilinen sınırlar: eşikler yuvarlanmış değerlere uygulanır; 6 ay koşulu ikinci yarıyılla neredeyse aynı işlemleri
+kapsar; 12 stratejiye tek ölçüt uygulandığından bazıları şans eseri geçebilir (çoklu test düzeltmesi yok); V9
+yaklaşık 4 gün boyunca tek çekirdeği düşük öncelikle kullanır.
+
+**Uygulama 1.0.2:** Raporlar'dan açılan Backtest ekranı (pencere seçici 1A/6A/1Y; strateji listesi: net R, USC,
+işlem, kazanma, PF, düşüş, maliyet/stop, geçti/kaldı/bekliyor rozeti; ayrıntıda sembol tablosu, bakiye eğrisi,
+yarıyıllar, neden kaldı; sonuç tarihi, kapsam, kurallar). Ekran testleri: veri, pencere değişimi, ayrıntı, sonuç
+yok, veri eksik, hata.

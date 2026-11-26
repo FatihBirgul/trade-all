@@ -85,15 +85,22 @@ def test_chunks_run_newest_first_and_cover_the_year_exactly():
 
 def test_public_summary_drops_symbol_tables_and_curves_and_passed_needs_the_current_version():
     row = Y.summarize(year_rows(2.0, 2.0), CCY, 0.0, 365 * DAY, {"1m": True, "6m": True, "1y": True})
-    result = {"version": Y.VERSION, "complete": True, "history": {"days_median": 365.0, "by_symbol": {"EURUSD": 365.0}},
+    now = 400 * DAY
+    result = {"version": Y.VERSION, "complete": True, "to": 365 * DAY, "rules": {"max_spread_stop_pct": 15.0},
+              "history": {"days_median": 365.0, "by_symbol": {"EURUSD": 365.0}},
               "strategies": {"tb_a": row}, "combined": {"strategies": ["tb_a"], **row}}
     slim = Y.public(result)
     assert "by_symbol" not in str(slim) and "curve" not in str(slim) and slim["strategies"]["tb_a"]["verdict"]["passed"]
     assert slim["strategies"]["tb_a"]["windows"]["1y"]["net_r"] == row["windows"]["1y"]["net_r"]
-    assert Y.passed(result, "tb_a") and not Y.passed(result, "tb_b") and not Y.passed(None, "tb_a")
-    assert not Y.passed({**result, "version": "eski"}, "tb_a")
+    assert Y.passed(result, "tb_a", now, 15.0) and not Y.passed(result, "tb_b", now, 15.0)
+    assert not Y.passed(None, "tb_a", now, 15.0) and not Y.passed({**result, "version": "eski"}, "tb_a", now, 15.0)
     waiting = {**result, "strategies": {"tb_a": {**row, "verdict": {"passed": None, "reasons": []}}}}
-    assert not Y.passed(waiting, "tb_a") and Y.public(None) is None
+    assert not Y.passed(waiting, "tb_a", now, 15.0) and Y.public(None) is None
+    # Gecis suresiz degildir: pencere 45 gunden once bittiyse sayilmaz.
+    assert Y.passed(result, "tb_a", 365 * DAY + 45 * DAY, 15.0) and not Y.passed(result, "tb_a", 365 * DAY + 46 * DAY, 15.0)
+    # Maliyet siniri olcumden SONRA gevsetildiyse gecis sayilmaz (sikilastirildiysa sayilir).
+    assert not Y.passed(result, "tb_a", now, 20.0) and Y.passed(result, "tb_a", now, 10.0)
+    assert not Y.passed({**result, "rules": {}}, "tb_a", now, 15.0) and not Y.passed({**result, "to": None}, "tb_a", now, 15.0)
 
 
 async def test_backtest_pass_replaces_the_shadow_count_but_never_the_owners_confirmation(tmp_path):
@@ -107,7 +114,13 @@ async def test_backtest_pass_replaces_the_shadow_count_but_never_the_owners_conf
         assert listed[strategy]["can_go_live"] is False and listed[strategy]["backtest_passed"] is False
         refused = await http.post(f"/strategies/{strategy}/mode", json={"mode": "live", "confirm": True})
         assert refused.status_code == 409 and "gölge işlem" in refused.json()["detail"]
-        app.repo.set_setting("yeartest_result", {"version": Y.VERSION, "complete": True, "strategies": {strategy: row}})
+        stored = {"version": Y.VERSION, "complete": True, "to": app.clock["now"] - DAY,
+                  "rules": {"max_spread_stop_pct": app.repo.get_bot_settings().risk.max_spread_stop_pct},
+                  "strategies": {strategy: row}}
+        app.repo.set_setting("yeartest_result", {**stored, "to": app.clock["now"] - 60 * DAY})
+        stale = {s["strategy_id"]: s for s in (await http.get("/strategies")).json()["strategies"]}
+        assert stale[strategy]["can_go_live"] is False and stale[strategy]["backtest_passed"] is False  # eski sonuc
+        app.repo.set_setting("yeartest_result", stored)
         listed = {s["strategy_id"]: s for s in (await http.get("/strategies")).json()["strategies"]}
         assert listed[strategy]["can_go_live"] is True and listed[strategy]["backtest_passed"] is True
         assert listed["tb_smc_day_v13"]["can_go_live"] is False  # gecmeyen strateji icin sart degismedi
@@ -127,3 +140,78 @@ async def test_backtest_pass_replaces_the_shadow_count_but_never_the_owners_conf
         results = (await http.get("/backtest")).json()
         assert results["result"]["strategies"][strategy]["windows"]["1y"]["by_symbol"]  # tam sonuc yetkili uctan
     assert (await client(app, authed=False).get("/backtest")).status_code in (401, 403)
+
+
+def test_unresolved_trade_does_not_freeze_the_portfolio_forever():
+    stuck = trade(0, None, "EURUSD")
+    later = [trade(10 * DAY, 1.0, "EURUSD"), trade(40 * DAY, 1.0, "EURUSD")]
+    accepted, rejected = Y.portfolio([stuck] + later, CCY)
+    assert [t["a"] for t in accepted] == [0, 40 * DAY] and rejected == 1  # 31 gun sonra yer acilir
+
+
+def year_job(tmp_path, histories, pool):
+    """Sentetik gecmisle gercek `run_job`. `histories`: sembol -> (tohum, gun sayisi)."""
+    import json
+    from tests.signals.market_gen import T0, market
+    from tradebot import backtest
+    history = tmp_path / "history.db"
+    end = float(T0 + 60 * 86400)
+    for symbol, (seed, days) in histories.items():
+        frames = market(seed, 60)
+        cut = end - days * 86400
+        backtest.write_history(history, [(symbol, tf, b["time"], b["open"], b["high"], b["low"], b["close"], 1.0)
+                                         for tf, bars in frames.items() for b in bars
+                                         if tf != "M15" or b["time"] >= cut])
+    job = tmp_path / "job.json"
+    job.write_text(json.dumps({
+        "instruments": [{"symbol": s, "kind": "forex"} for s in histories], "history": str(history),
+        "spreads": {s: {"hours": {}, "all": 0.004} for s in histories}, "end": end, "year_start": end - 10 * 86400.0,
+        "chunk_days": 5.0, "deadline": 4e9, "workers": 1, "v9_ids": ["fx_a"], "max_spread_stop_pct": 15.0,
+        "rules": {}, "year_result": str(tmp_path / "year.json")}))
+    return Y.run_job(job, pool)
+
+
+class FakePool:
+    """V9 parcalarini sahte sonuclarla doldurur; `skip` icindeki (sembol, parca) bitmemis doner."""
+    skip: set = set()
+
+    def __init__(self, count):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def imap(self, function, tasks):
+        for _, symbol, index, lower, upper in tasks:
+            done = (symbol, index) not in self.skip
+            yield {"symbol": symbol, "index": index, "done": done, "evaluations": 10, "errors": 0,
+                   "trades": [trade(lower + 3600, 1.0, symbol, strategy="fx_a")] if done else []}
+
+
+def test_coverage_is_judged_by_the_weakest_symbols_and_unfinished_v9_parts_do_not_count(tmp_path):
+    """Sembollerin cogunda veri tam olsa bile eksik semboller "tam" denmesini engeller; V9'da bir parca bitmediyse
+    o parca ve daha eskileri kapsama girmez."""
+    full = {f"S{i}USD": (i, 60) for i in range(4)}
+    FakePool.skip = set()
+    whole = year_job(tmp_path / "a", {k: v for k, v in full.items()} | {}, FakePool) if (tmp_path / "a").mkdir() is None else None
+    assert whole["complete"] is True and whole["history"]["symbols_full"] == 4
+    assert all(row["windows"]["1y"]["complete"] for row in whole["strategies"].values())
+    assert whole["strategies"]["fx_a"]["windows"]["1y"]["trades"] > 0
+    # Bes sembolden ikisinde yalnizca 3 gun M15 var: medyan tam gorunur ama kapsam "tam" DEGILDIR.
+    (tmp_path / "b").mkdir()
+    short = year_job(tmp_path / "b", full | {"S8USD": (8, 3), "S9USD": (9, 3)}, FakePool)
+    assert short["history"]["days_median"] == 10.0 and short["history"]["days_floor"] < 5 and short["history"]["symbols_full"] == 4
+    assert not any(row["windows"]["1y"]["complete"] for row in short["strategies"].values())
+    assert all(row["verdict"]["passed"] is None for row in short["strategies"].values())
+    # V9: en yeni parca bir sembolde bitmedi -> hicbir pencere tam degil, o parcanin islemleri sayilmaz.
+    (tmp_path / "c").mkdir()
+    FakePool.skip = {("S1USD", 0)}
+    partial = year_job(tmp_path / "c", full, FakePool)
+    FakePool.skip = set()
+    v9 = partial["strategies"]["fx_a"]
+    assert partial["complete"] is False and partial["progress"]["v9_days_complete"] == 0.0
+    assert v9["windows"]["1y"]["complete"] is False and v9["windows"]["1y"]["trades"] == 0 and v9["verdict"]["passed"] is None
+    assert partial["strategies"]["tb_week_trade_v1"]["windows"]["1y"]["complete"] is True  # V9 disi stratejiler etkilenmez

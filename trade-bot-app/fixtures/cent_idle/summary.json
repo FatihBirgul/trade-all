@@ -35,6 +35,8 @@
   "sl_missing_events": 0,
   "closed": []
  },
+ "swap_observed": {},
+ "swap_listed": {},
  "auth": [],
  "signals": 0
 }

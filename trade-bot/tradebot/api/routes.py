@@ -458,10 +458,11 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
     def _strategy_ids() -> frozenset[str]:
         return v9.builtin_strategy_ids() | custom.strategy_ids()
 
-    def _backtest_passed(strategy_id: str) -> bool:
-        return yeartest.passed(repo.get_setting("yeartest_result"), strategy_id)
+    def _backtest_passed(strategy_id: str, settings: BotSettings, year: object = None) -> bool:
+        year = repo.get_setting("yeartest_result") if year is None else year
+        return yeartest.passed(year, strategy_id, clock(), settings.risk.max_spread_stop_pct)
 
-    def _live_blocker(strategy_id: str, settings: BotSettings) -> str | None:
+    def _live_blocker(strategy_id: str, settings: BotSettings, year: object = None) -> str | None:
         """Yeni (V9 disi) strateji ancak golge karnesi olumluysa canliya alinabilir (spec §6.2).
 
         Alternatif sart (kullanici karari 2026-11-26): strateji yillik backtestin gecme olcutunu sagliyorsa golge
@@ -471,7 +472,7 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
         if strategy_id not in custom.strategy_ids():
             return None
         held = scorecard.paused(repo).get(strategy_id)
-        if held is None and _backtest_passed(strategy_id):
+        if held is None and _backtest_passed(strategy_id, settings, year):
             return None
         if held is not None:
             # Bot bu stratejiyi kotu sonuc nedeniyle duraklatti: eski karne degil, duraklatmadan SONRAKI
@@ -498,15 +499,16 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
         """Tum stratejiler: kaynak, kip, golge karnesi ve canliya alinabilirlik."""
         settings = repo.get_bot_settings()
         book, held = ShadowBook(repo), scorecard.paused(repo)
+        year = repo.get_setting("yeartest_result") or {}  # bir kez okunur (buyuk bir kayit)
         rows = []
         for strategy_id in sorted(_strategy_ids()):
             mode = strategy_mode(settings, strategy_id)
-            blocker = _live_blocker(strategy_id, settings)
+            blocker = _live_blocker(strategy_id, settings, year)
             rows.append({"strategy_id": strategy_id,
                          "source": "custom" if strategy_id in custom.strategy_ids() else "v9", "mode": mode,
                          "paused": strategy_id in held, "shadow": book.stats(strategy_id, "shadow"),
                          "can_go_live": mode != "live" and blocker is None, "live_blocker": blocker,
-                         "backtest_passed": _backtest_passed(strategy_id)})
+                         "backtest_passed": _backtest_passed(strategy_id, settings, year)})
         return {"strategies": rows}
 
     @private.post("/strategies/{strategy_id}/mode")

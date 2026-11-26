@@ -263,7 +263,7 @@ run([
     assert.equal(await page.getByLabel("İşlem başı risk").inputValue(), String(settings.risk.risk_pct).replace(".", ","));
     assert.match(await text(page, "settings-symbols"), /4 \/ 4/);
     assert.match(await text(page, "settings-strategies"), /Sahte kırılım/);
-    assert.match(await text(page, "settings-app"), /Trade Bot 1\.0\.1/);
+    assert.match(await text(page, "settings-app"), /Trade Bot 1\.0\.2/);
     // Maliyet kapısı: sunucudaki gerçek değer (%15) görünür; yükseltmek risk artışıdır.
     assert.equal(await page.getByLabel("En çok maliyet (alış-satış farkı ÷ stop)").inputValue(), String(settings.risk.max_spread_stop_pct));
     assert.equal(settings.risk.max_spread_stop_pct, 15);
@@ -309,6 +309,81 @@ run([
     await page.getByTestId("confirm-yes").click();
     assert.match(await text(page, "settings-notice"), /Ayarlar kaydedildi/);
     assert.equal(calls.find((call) => call.method === "PUT").body.risk.max_spread_stop_pct, 20);
+  }],
+  ["backtest: strateji listesi, pencere seçici, geçti/kaldı ve ayrıntı (sembol tablosu + bakiye eğrisi)", async (page) => {
+    const data = fixture("dry_idle", "backtest").result;
+    await mock(page, "dry_idle");
+    await pair(page);
+    await page.getByTestId("tab-reports").click();
+    await page.getByTestId("open-backtest").click();
+    await page.getByTestId("backtest-summary").waitFor();
+    const all = Object.values(data.strategies);
+    const passed = all.filter((row) => row.verdict.passed === true).length;
+    assert.ok(all.length === 14 && passed > 0 && passed < all.length);
+    assert.match(await text(page, "backtest-summary"), new RegExp(passed + " / 14 strateji geçti"));
+    assert.match(await text(page, "backtest-summary"), /Tamamlandı/);
+    assert.match(await text(page, "backtest-summary"), /2000 USC/);
+    assert.match(await text(page, "backtest-summary"), /haber penceresi geçmişe uygulanamadı/);
+    // Kalan bir strateji: rozet ve 1 yıllık ölçüler sunucudaki sayılarla aynı.
+    const failed = data.strategies.fx_range_reversion_v6;
+    const card = await text(page, "backtest-fx_range_reversion_v6");
+    assert.match(card, /Bant içi dönüş/);
+    assert.match(card, /Kaldı/);
+    assert.ok(card.includes(failed.windows["1y"].closed + " işlem"));
+    assert.ok(card.includes("−" + String(Math.abs(failed.windows["1y"].net_r)).replace(".", ",") + "R") || card.includes("−" + Math.abs(failed.windows["1y"].net_r) + "R"));
+    assert.match(await text(page, "backtest-fx_confirmed_breakout_v6"), /Geçti/);
+    assert.match(await text(page, "backtest-combined"), /birleşik portföy/);
+    await shot(page, "27-backtest");
+    // Pencere değişince rakamlar o pencereninkilere döner.
+    await page.getByRole("button", { name: "1A" }).click();
+    const month = await text(page, "backtest-fx_range_reversion_v6");
+    assert.ok(month.includes(failed.windows["1m"].closed + " işlem"));
+    await page.getByRole("button", { name: "1Y" }).click();
+    // Ayrıntı: neden kaldı, sembol tablosu ve bakiye eğrisi.
+    await page.getByRole("button", { name: "Bant içi dönüş ayrıntısı" }).click();
+    const detail = await text(page, "backtest-detail");
+    assert.match(detail, /Neden kaldı/);
+    assert.match(detail, /PF 0[.,]74/);
+    assert.match(await text(page, "backtest-symbols"), /EURUSD/);
+    assert.match(await text(page, "backtest-symbols"), /XAUUSD/);
+    assert.match(await text(page, "backtest-curve"), /2000 USC/);
+    await shot(page, "28-backtest-ayrinti", "backtest-detail");
+  }],
+  ["backtest: sonuç yokken, veri eksikken ve hata durumunda açık mesaj", async (page) => {
+    const base = fixture("dry_idle", "backtest");
+    let reply = { status: 200, body: { state: "running", result: null } };
+    await mock(page, "dry_idle", { "GET /backtest": () => reply });
+    await pair(page);
+    await page.getByTestId("tab-reports").click();
+    await page.getByTestId("open-backtest").click();
+    await page.getByText("Henüz sonuç yok").waitFor();
+    assert.match(await text(page, "screen-backtest"), /durum: running/);
+    await shot(page, "29-backtest-sonuc-yok");
+    // Yarım sonuç: V9 için bir yıl tamam değil -> "Bekliyor" ve pencere uyarısı; hiçbiri geçmediyse birleşik satır yok.
+    const partial = JSON.parse(JSON.stringify(base));
+    partial.result.complete = false;
+    partial.result.combined = null;
+    partial.result.progress.v9_days_complete = 30;
+    for (const row of Object.values(partial.result.strategies)) {
+      row.verdict = { passed: null, reasons: ["veri 1 yılı kapsamıyor"] };
+      row.windows["1y"].complete = false;
+    }
+    reply = { status: 200, body: partial };
+    await page.getByRole("button", { name: "Yenile" }).click();
+    await page.getByTestId("backtest-summary").waitFor();
+    assert.match(await text(page, "backtest-summary"), /0 \/ 14 strateji geçti/);
+    assert.match(await text(page, "backtest-summary"), /Sürüyor · V9: son 30 gün hazır/);
+    assert.match(await text(page, "backtest-fx_trend_momentum_v6"), /Bekliyor/);
+    assert.match(await text(page, "backtest-fx_trend_momentum_v6"), /verisi henüz tam değil/);
+    assert.match(await text(page, "backtest-none-passed"), /birleşik portföy satırı yok/);
+    await shot(page, "30-backtest-suruyor");
+  }],
+  ["backtest: sunucu yanıt vermezse hata ve yeniden deneme", async (page) => {
+    await mock(page, "dry_idle", { "GET /backtest": { status: 500, body: { detail: "iç hata" } } });
+    await pair(page);
+    await page.getByTestId("tab-reports").click();
+    await page.getByTestId("open-backtest").click();
+    await page.getByText("Yeniden dene").waitFor();
   }],
   ["bağlantı ve tanı: bağlı durumu ve istek günlüğü", async (page) => {
     await mock(page, "live_active");

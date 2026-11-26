@@ -66,6 +66,8 @@
    }
   ]
  },
+ "swap_observed": {},
+ "swap_listed": {},
  "auth": [],
  "signals": 2
 }

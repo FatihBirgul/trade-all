@@ -600,3 +600,35 @@ def test_listed_swaps_are_read_from_the_real_instrument_conditions():
     assert item.swap_long == -16.5 and item.swap_short == 0.0
     assert item.swap_multipliers["WED"] == 3 and item.swap_multipliers["SAT"] == 0
     assert schema.parse_instrument({**raw, "swap_long": None, "swap_multipliers": "bozuk"}).swap_multipliers is None
+
+
+async def test_a_failing_history_range_does_not_kill_the_job(tmp_path, monkeypatch):
+    """Bir yillik gecmis ~3000 istektir: tek bir araligin alinamamasi (broker eski veriyi vermiyor, gecici hata) ya da
+    istek siniri butun isi dusurmez; eksik kapsam sonucta gorunur."""
+    from tradebot.exness.errors import ExnessRateLimited, ExnessUnavailable
+    app = await started(tmp_path, dry_run=True)
+    short_job(monkeypatch, app)
+    real = app.bot.candles._fetch
+    calls = {"n": 0}
+
+    async def flaky(path):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ExnessUnavailable("eski aralik yok")
+        if calls["n"] in (2, 3):
+            raise ExnessRateLimited("limit")
+        return await real(path)
+
+    monkeypatch.setattr(app.bot.candles, "_fetch", flaky)
+    assert await app.bot.backtest_once() is not None and app.bot.backtest_state == "done"
+    assert calls["n"] > 4
+    # Surekli hata: is birakilir, bot etkilenmez.
+    other = await started(tmp_path / "surekli", dry_run=True)
+    short_job(monkeypatch, other)
+    monkeypatch.setattr(app_module, "BACKTEST_FETCH_FAILURES", 2)
+
+    async def dead(path):
+        raise ExnessUnavailable("yok")
+
+    monkeypatch.setattr(other.bot.candles, "_fetch", dead)
+    assert await other.bot.backtest_once() is None and other.bot.backtest_state == "failed: RuntimeError"

@@ -24,7 +24,7 @@ M15 = 900
 GETS = {"health": "/health", "summary": "/health/summary?hours=24", "status": "/status", "positions": "/positions", "settings": "/settings",
         "reports_day": "/reports?period=day", "reports_week": "/reports?period=week",
         "reports_month": "/reports?period=month", "scorecard": "/scorecard", "strategies": "/strategies",
-        "news": "/news", "events": "/events?newest=true&limit=100", "symbols": "/symbols"}
+        "news": "/news", "events": "/events?newest=true&limit=100", "symbols": "/symbols", "backtest": "/backtest"}
 
 
 async def next_bar(app):
@@ -71,6 +71,66 @@ async def live_active(folder, **account):
     return app
 
 
+_YEAR: dict | None = None
+
+
+def year_result() -> dict:
+    """Yillik backtest sonucu: sunucunun GERCEK kodu (`yeartest.run_job`) sentetik bir yillik gecmiste calisir.
+    V9 disi stratejiler gercekten oynatilir; V9 parcalari (cok yavas oldugu icin) tohumlu ornek islemlerle doldurulur."""
+    global _YEAR
+    if _YEAR is not None:
+        return _YEAR
+    import random
+    from tests.signals.market_gen import T0, market
+    from tradebot import backtest, yeartest
+    with tempfile.TemporaryDirectory() as raw:
+        folder = Path(raw)
+        history = folder / "history.db"
+        symbols = ("EURUSD", "XAUUSD")
+        for index, symbol in enumerate(symbols):
+            rows = [(symbol, tf, b["time"], b["open"], b["high"], b["low"], b["close"], b["tick_volume"])
+                    for tf, bars in market(3 + index, 400).items() for b in bars]
+            backtest.write_history(history, rows)
+        end = float(T0 + 400 * 86400)
+        v9_ids = ["fx_confirmed_breakout_v6", "fx_failed_breakout_v6", "fx_range_reversion_v6", "fx_trend_momentum_v6"]
+        job = folder / "job.json"
+        job.write_text(json.dumps({
+            "instruments": [{"symbol": s, "kind": "metal" if s == "XAUUSD" else "forex", "currency_base": s[:3],
+                             "currency_profit": s[3:]} for s in symbols],
+            "spreads": {s: {"hours": {}, "all": 0.004} for s in symbols}, "history": str(history), "end": end,
+            "year_start": end - 365 * 86400.0, "chunk_days": 30.0, "deadline": 4e9, "workers": 1, "v9_ids": v9_ids,
+            "max_spread_stop_pct": 15.0, "year_result": str(folder / "year.json")}))
+        rnd = random.Random(5)
+        edge = {"fx_confirmed_breakout_v6": 0.48, "fx_failed_breakout_v6": 0.36, "fx_range_reversion_v6": 0.31,
+                "fx_trend_momentum_v6": 0.27}
+
+        class Pool:
+            def __init__(self, count):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def imap(self, function, tasks):
+                for _, symbol, index, lower, upper in tasks:
+                    trades = []
+                    for name, chance in edge.items():
+                        for _ in range(rnd.randint(2, 5)):
+                            at = rnd.uniform(lower, upper)
+                            trades.append({"s": name, "y": symbol, "d": rnd.choice(["BUY", "SELL"]), "a": at,
+                                           "r": 2.0 if rnd.random() < chance else -1.0, "c": at + rnd.uniform(1, 30) * 3600,
+                                           "o": None, "p": round(rnd.uniform(0.05, 0.22), 4),
+                                           "b": rnd.random() < 0.2})
+                    yield {"symbol": symbol, "index": index, "done": True, "evaluations": 2880, "errors": 0,
+                           "trades": trades}
+
+        _YEAR = yeartest.run_job(job, Pool)
+    return _YEAR
+
+
 async def capture(app, target: Path):
     target.mkdir(parents=True, exist_ok=True)
     # Senaryolar test kurulumunun genis maliyet sinirinda (%25) uretilir (sahte piyasada adaylar acilabilsin);
@@ -78,6 +138,9 @@ async def capture(app, target: Path):
     current = app.repo.get_bot_settings()
     app.repo.set_bot_settings(current.model_copy(update={
         "risk": current.risk.model_copy(update={"max_spread_stop_pct": 15.0})}))
+    year = dict(year_result())
+    year["finished_at"] = app.clock["now"]
+    app.repo.set_setting("yeartest_result", year)
     token = issue_token(app.repo, now=app.clock["now"])
     api = create_app(app.bot, clock=lambda: app.clock["now"])
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api), base_url="http://bot") as http:

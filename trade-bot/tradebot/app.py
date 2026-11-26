@@ -98,12 +98,14 @@ BACKTEST_BUDGET = 6 * 3600.0  # V9 asamasinin bir turu icin en uzun sure (sn); t
 BACKTEST_ROUNDS = 6  # V9 bitmediyse ayni gecmisle art arda en cok bu kadar tur (biten semboller yeniden calismaz)
 YEAR_DAYS = 365.0  # yillik backtestin penceresi (bkz. yeartest.py)
 YEAR_CHUNK_DAYS = 30.0  # V9 en yeniden eskiye bu buyuklukte parcalarla hesaplanir
-YEAR_ROUNDS = 24  # yillik test icin art arda en cok bu kadar tur (tur basina BACKTEST_BUDGET)
+YEAR_ROUNDS = 36  # yillik test icin art arda en cok bu kadar tur (tur basina BACKTEST_BUDGET)
 YEAR_MAX_AGE = 7 * 86400.0  # tamamlanmis yillik sonuc bundan yeniyse yeniden calismaz
-BACKTEST_WINDOW_KEEP = 7 * 86400.0  # yarim kalan is bu kadar eski pencereyle surdurulur (yeniden baslatma sonrasi)
+BACKTEST_WINDOW_KEEP = 10 * 86400.0  # yarim kalan is bu kadar eski pencereyle surdurulur (yeniden baslatma sonrasi)
 BACKTEST_WORKERS = 0  # 0: islemci sayisi kadar alt surec (hepsi dusuk oncelikli)
 BACKTEST_MAX_AGE = 20 * 3600.0  # bundan yeni bir sonuc varsa yeniden calismaz
 BACKTEST_FETCH_PAUSE = 0.3  # gecmis mum istekleri arasinda bekleme (sn)
+BACKTEST_FETCH_TRIES = 4  # istek siniri asilirsa ayni aralik en cok bu kadar denenir (artan beklemeyle)
+BACKTEST_FETCH_FAILURES = 200  # bu kadar aralik alinamazsa is birakilir (surekli hata)
 BACKTEST_RATE_PAUSE = 15.0  # istek siniri asilirsa bir kez yinelemeden once bekleme (sn)
 BACKTEST_MAJORS = ("EURUSD", "GBPUSD", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD")
 # Surec her basladiginda (dagitim, cokme, sunucu yeniden acilisi) bu sure boyunca bot YENI islem acmaz; analiz,
@@ -1283,7 +1285,7 @@ class Bot:
 
         `long_start`: yillik backtest icin butun zaman dilimlerinde daha eski baslangic. Broker o kadar geriye
         vermiyorsa verdigi kadari yazilir; kapsam sonucta ayrica raporlanir."""
-        total = 0
+        total = failures = 0
         for instrument in instruments:
             rows: list[tuple] = []
             for tf, duration in forward.DURATIONS.items():
@@ -1296,11 +1298,25 @@ class Bot:
                 while cursor < now:
                     request = schema.candles_path(self.client.account_id, instrument.broker_symbol, tf, cursor,
                                                   min(now, cursor + step))
-                    try:
-                        payload = await self.candles._fetch(request)
-                    except ExnessRateLimited:
-                        await self._sleep(BACKTEST_RATE_PAUSE)  # salt-okuma istegi: bir kez yinelenir
-                        payload = await self.candles._fetch(request)
+                    payload = None
+                    for attempt in range(BACKTEST_FETCH_TRIES):
+                        try:
+                            payload = await self.candles._fetch(request)
+                            break
+                        except ExnessRateLimited:
+                            await self._sleep(BACKTEST_RATE_PAUSE * (attempt + 1))  # salt-okuma: beklenip yinelenir
+                        except ExnessError as exc:
+                            # Tek bir aralik alinamadi (or. broker o kadar eski veriyi vermiyor): is durmaz, kapsam
+                            # sonucta eksik gorunur.
+                            log.info("gecmis araligi alinamadi %s %s: %s", instrument.symbol, tf, type(exc).__name__)
+                            break
+                    if payload is None:
+                        failures += 1
+                        if failures > BACKTEST_FETCH_FAILURES:
+                            raise RuntimeError("gecmis cekilemiyor")
+                        cursor += step
+                        await self._sleep(BACKTEST_FETCH_PAUSE)
+                        continue
                     for r in schema.parse_candles(payload):
                         if r["time"] + duration <= now:
                             rows.append((instrument.symbol, tf, r["time"], r["open"], r["high"], r["low"],
