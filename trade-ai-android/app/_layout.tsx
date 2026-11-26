@@ -45,6 +45,7 @@ function Navigation() {
         <Stack.Screen name="performance" options={{ title: "Performans" }} />
         <Stack.Screen name="notifications" options={{ title: "Bildirimler" }} />
         <Stack.Screen name="manual-trade" options={{ title: "Elle işlem" }} />
+        <Stack.Screen name="connection" options={{ title: "Bağlantı" }} />
       </Stack>
     </StartupGate>
   );

@@ -23,9 +23,9 @@ import type {
 
 const TIMEOUT_MS = 15000;
 const MESSAGES: Record<string, string> = {
-  UNCONFIGURED: "Trade Bot bağlantısı kurulmadı. Bağlantı sekmesinden eşleştirin.",
+  UNCONFIGURED: "Trade Bot bağlantısı kurulmadı. Bağlantı ekranından eşleştirin.",
   NETWORK: "Sunucuya ulaşılamadı. İnternet bağlantınızı ve sunucu adresini kontrol edin.",
-  UNAUTHORIZED: "Bağlantı anahtarı geçersiz. Bağlantı sekmesinden yeniden eşleştirin.",
+  UNAUTHORIZED: "Bağlantı anahtarı geçersiz. Bağlantı ekranından yeniden eşleştirin.",
   INVALID_ORIGIN: "Geçerli bir sunucu adresi girin. Adres https:// ile başlamalı.",
   INVALID_CODE: "Eşleştirme kodu 6 rakamdan oluşur.",
   PAIR_REJECTED: "Kod geçersiz ya da süresi dolmuş. Sunucuda yeni kod üretin.",
