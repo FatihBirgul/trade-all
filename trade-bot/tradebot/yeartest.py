@@ -192,9 +192,14 @@ def _load(path: Path, signature: str):
 
 
 def run_job(job_path: Path, pool_factory=None) -> dict:
-    job = json.loads(job_path.read_text())
-    folder = job_path.parent
+    return run(json.loads(job_path.read_text()), job_path.parent, pool_factory)
+
+
+def run(job: dict, folder: Path, pool_factory=None) -> dict:
+    """`job["only"]` (sembol listesi) verilirse yalnizca o semboller HESAPLANIR; ozet yine klasordeki butun bitmis
+    parcalardan kurulur. Boylece is sembol sembol ayri makinelerde kosup sonra tek yerde toplanabilir."""
     began = time.time()
+    only = set(job["only"]) if job.get("only") else None
     spreads = forward.Spreads(job["spreads"])
     rows = [row for row in job["instruments"] if spreads.has(row["symbol"])]
     symbols = [row["symbol"] for row in rows]
@@ -216,7 +221,7 @@ def run_job(job_path: Path, pool_factory=None) -> dict:
     for symbol in symbols:
         cached = _load(folder / f"yt-tb-{symbol}.json", signature)
         if cached is None:
-            if time.time() > job["deadline"]:
+            if time.time() > job["deadline"] or (only is not None and symbol not in only):
                 continue
             history = forward.read_history(history_path, symbol)
             m15 = history.all(symbol, "M15")
@@ -239,9 +244,10 @@ def run_job(job_path: Path, pool_factory=None) -> dict:
             cached = _load(folder / f"yt-v9-{symbol}-{index}.json", signature)
             if cached is not None and cached.get("done"):
                 done[(symbol, index)] = cached
-            else:
+            elif only is None or symbol in only:
                 todo.append((job, symbol, index, lower, upper))
-    if todo and tb_done == len(symbols) and time.time() < job["deadline"]:
+    tb_ready = tb_done == len(symbols) if only is None else all((folder / f"yt-tb-{s}.json").exists() for s in only)
+    if todo and tb_ready and time.time() < job["deadline"]:
         workers = max(1, min(int(job.get("workers") or 1), len(todo)))
         make_pool = pool_factory or (lambda count: multiprocessing.get_context("spawn").Pool(count))
         with make_pool(workers) as pool:
@@ -281,7 +287,7 @@ def run_job(job_path: Path, pool_factory=None) -> dict:
     if passed:
         both = [t for t in tb_trades + v9_trades if t["s"] in passed]
         combined = {"strategies": passed, **summarize(both, currencies, start, end, covered(data_from))}
-    complete = tb_done == len(symbols) and full == len(parts)
+    complete = bool(symbols) and tb_done == len(symbols) and full == len(parts)
     summary = {
         "version": VERSION, "from": start, "to": end, "symbols": len(symbols), "complete": complete,
         "rules": {"start_balance": START_BALANCE, "risk_pct": RISK_PCT, "max_open": MAX_OPEN,
@@ -338,9 +344,36 @@ def passed(result: dict | None, strategy_id: str, now: float, max_spread_stop_pc
     return bool(isinstance(row, dict) and (row.get("verdict") or {}).get("passed") is True)
 
 
+def main(argv: list[str]) -> dict:
+    """python -m tradebot.yeartest IS.json [--history DOSYA] [--out KLASOR] [--only SEMBOL,...] [--workers N]
+    [--assemble]. `--assemble`: hicbir sey hesaplamaz, klasordeki parcalardan ozeti kurar."""
+    import argparse
+    parser = argparse.ArgumentParser(prog="tradebot.yeartest")
+    parser.add_argument("job")
+    parser.add_argument("--history")
+    parser.add_argument("--out")
+    parser.add_argument("--only")
+    parser.add_argument("--workers", type=int)
+    parser.add_argument("--assemble", action="store_true")
+    args = parser.parse_args(argv)
+    job = json.loads(Path(args.job).read_text())
+    folder = Path(args.out) if args.out else Path(args.job).parent
+    folder.mkdir(parents=True, exist_ok=True)
+    if args.history:
+        job["history"] = args.history
+    if args.out or "year_result" not in job:
+        job["year_result"] = str(folder / "year.json")
+    if args.only:
+        job["only"] = [name for name in args.only.split(",") if name]
+    if args.workers:
+        job["workers"] = args.workers
+    job["deadline"] = 0.0 if args.assemble else float(job.get("deadline") or time.time() + 5.5 * 3600)
+    return run(job, folder)
+
+
 if __name__ == "__main__":
     try:
         os.nice(19)
     except OSError:
         pass
-    run_job(Path(sys.argv[1]))
+    main(sys.argv[1:])

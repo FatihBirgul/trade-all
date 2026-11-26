@@ -32,3 +32,6 @@ playwright-report/
 
 # graphify knowledge graph output (local, rebuilt per machine)
 graphify-out/
+
+# Disarida hesaplanan backtest sonuclari sunucuda buraya yuklenir (depoya girmez)
+/backtest-results/

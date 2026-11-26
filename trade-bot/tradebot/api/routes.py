@@ -7,7 +7,8 @@ import math
 import re
 from decimal import ROUND_FLOOR, Decimal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 
 from .. import yeartest
 from ..app import QUOTE_MAX_AGE, Bot
@@ -78,6 +79,32 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
     async def health_backtest():
         """Son ileri testin ozeti (V9 stratejileri, gecmis gercek mumlar). Herkese acik: yalnizca sayilar ve R."""
         return bot.backtest_report()
+
+    def _local_only(request: Request) -> None:
+        """Yalnizca sunucunun kendisinden (ters vekil uzerinden DEGIL) gelen istek. Caddy disaridan gelen her istege
+        X-Forwarded-For ekler; dogrudan 127.0.0.1'e yapilan istekte bu baslik yoktur."""
+        host = request.client.host if request.client else ""
+        if host not in ("127.0.0.1", "::1") or any(h in request.headers for h in ("x-forwarded-for", "forwarded")):
+            raise HTTPException(status_code=404, detail="bulunamadı")
+
+    @public.get("/health/export")
+    async def export_job(request: Request):
+        """Backtest icin disa aktarim tanimi: yalnizca piyasa verisi ve ayarlar (hesap no, bakiye, lot, islem yok).
+        Yalnizca sunucunun icinden okunabilir."""
+        _local_only(request)
+        job = bot.export_job()
+        if job is None:
+            raise HTTPException(status_code=409, detail="dışa aktarım henüz hazır değil")
+        return job
+
+    @public.get("/health/export/history")
+    async def export_history(request: Request):
+        """Gecmis mumlar (OHLC + hacim), SQLite dosyasi. Yalnizca sunucunun icinden okunabilir."""
+        _local_only(request)
+        path = bot.export_history_path()
+        if path is None:
+            raise HTTPException(status_code=409, detail="dışa aktarım henüz hazır değil")
+        return FileResponse(path, media_type="application/octet-stream", filename="history.db")
 
     @public.get("/health/yeartest")
     async def health_yeartest():

@@ -119,6 +119,7 @@ class InlinePool:
 
 def short_job(monkeypatch, app):
     """Kisa pencereler: gercek V9 motoru ve stratejiler, kisa sure. Alt surec yerine ayni surecte calisir."""
+    monkeypatch.setattr(app_module, "BACKTEST_ON_SERVER", True)  # hesap yolu (uretimde kapali; bkz. disa aktarim testi)
     monkeypatch.setattr(app_module, "BACKTEST_DAYS", 1)
     monkeypatch.setattr(app_module, "BACKTEST_V9_DAYS", 0.05)
     monkeypatch.setattr(app_module, "YEAR_DAYS", 0.1)
@@ -632,3 +633,94 @@ async def test_a_failing_history_range_does_not_kill_the_job(tmp_path, monkeypat
 
     monkeypatch.setattr(other.bot.candles, "_fetch", dead)
     assert await other.bot.backtest_once() is None and other.bot.backtest_state == "failed: RuntimeError"
+
+
+# ---------------------------------------------------------------- sunucu disinda hesap (GitHub Actions)
+async def test_server_only_exports_market_data_and_never_computes(tmp_path, monkeypatch):
+    """Uretimdeki varsayilan: sunucu gecmisi ceker ve disa aktarir; hicbir alt surec baslatmaz."""
+    import httpx
+    from tradebot.api.server import create_app
+    app = await started(tmp_path, dry_run=True)
+    monkeypatch.setattr(app_module, "YEAR_DAYS", 0.1)
+    monkeypatch.setattr(app_module, "BACKTEST_DAYS", 1)
+    monkeypatch.setattr(app_module, "BACKTEST_FETCH_PAUSE", 0.0)
+    assert app_module.BACKTEST_ON_SERVER is False
+
+    async def never(*args, **kwargs):
+        raise AssertionError("sunucuda hesap baslatildi")
+
+    monkeypatch.setattr(app.bot, "_backtest_spawn", never)
+    assert await app.bot.backtest_once() is None and app.bot.backtest_state == "exported"
+    job = app.bot.export_job()
+    assert job["ready"] is True and job["version"] == yeartest.VERSION and job["bars"] > 0
+    assert job["account"]["leverage"] is None and job["account"]["equity"] == 10_000.0  # hesap verisi yok
+    text_form = json.dumps(job)
+    for secret in ("123456", "api_key", "secret", "lots", "risk_amount", str(tmp_path)):
+        assert secret not in text_form
+    assert "history" not in job and "year_result" not in job and app.bot.export_history_path().exists()
+    api = create_app(app.bot, clock=lambda: app.clock["now"])
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api), base_url="http://bot") as http:
+        local = await http.get("/health/export")
+        assert local.status_code == 200 and local.json()["end"] == job["end"]
+        data = await http.get("/health/export/history")
+        assert data.status_code == 200 and data.content[:15] == b"SQLite format 3"
+        # Ters vekil uzerinden (disaridan) gelen istek: yok sayilir.
+        for path in ("/health/export", "/health/export/history"):
+            assert (await http.get(path, headers={"X-Forwarded-For": "203.0.113.9"})).status_code == 404
+    remote = httpx.ASGITransport(app=api, client=("203.0.113.9", 4000))
+    async with httpx.AsyncClient(transport=remote, base_url="http://bot") as outside:
+        assert (await outside.get("/health/export")).status_code == 404
+
+
+async def test_uploaded_results_are_imported_once_and_only_in_the_right_format(tmp_path, monkeypatch):
+    app = await started(tmp_path, dry_run=True)
+    folder = tmp_path / "yuklenen"
+    folder.mkdir()
+    monkeypatch.setattr(app_module, "RESULTS_DIR", folder)
+    assert await app.bot.import_results() == []  # dosya yok
+    (folder / "year.json").write_text(json.dumps({"version": "eski", "strategies": {}}))
+    assert await app.bot.import_results() == [] and app.repo.get_setting("yeartest_result") is None
+    good = {"version": yeartest.VERSION, "complete": True, "to": app.clock["now"], "strategies": {"tb_a": {"windows": {}}}}
+    (folder / "year.json").write_text(json.dumps(good) + " ")
+    (folder / "forward.json").write_text(json.dumps({"version": forward.VERSION, "swing": {}}))
+    assert sorted(await app.bot.import_results()) == ["forward.json", "year.json"]
+    stored = app.repo.get_setting("yeartest_result")
+    assert stored["imported"] is True and stored["finished_at"] == app.clock["now"] and app.bot.backtest_state == "imported"
+    assert app.bot.yeartest_report(full=True)["result"]["strategies"] == good["strategies"]
+    assert app.repo.get_setting("backtest_result")["version"] == forward.VERSION
+    assert await app.bot.import_results() == []  # degismeyen dosya yeniden alinmaz
+    assert app.kinds().count("backtest_imported") == 2
+    (folder / "year.json").write_text("{bozuk")
+    (folder / "forward.json").write_text("x" * (app_module.RESULTS_MAX_BYTES + 1))
+    assert await app.bot.import_results() == [] and app.repo.get_setting("yeartest_result")["imported"] is True
+
+
+def test_year_test_split_per_symbol_and_assembled_equals_a_single_run(tmp_path):
+    """Is sembol sembol ayri makinelerde kosup tek yerde toplanabilir: sonuc tek seferde kosulanla aynidir."""
+    from tests.signals.market_gen import T0, market
+    from tests.test_yeartest import FakePool
+    history = tmp_path / "history.db"
+    symbols = ["S1USD", "S2USD"]
+    for index, symbol in enumerate(symbols):
+        backtest.write_history(history, [(symbol, tf, b["time"], b["open"], b["high"], b["low"], b["close"], 1.0)
+                                         for tf, bars in market(index, 60).items() for b in bars])
+    end = float(T0 + 60 * 86400)
+    base = {"instruments": [{"symbol": s, "kind": "forex"} for s in symbols], "history": str(history),
+            "spreads": {s: {"hours": {}, "all": 0.004} for s in symbols}, "end": end, "year_start": end - 10 * 86400.0,
+            "chunk_days": 5.0, "deadline": 4e9, "workers": 1, "v9_ids": ["fx_a"], "max_spread_stop_pct": 15.0,
+            "rules": {}}
+    FakePool.skip = set()
+    (tmp_path / "tek").mkdir()
+    single = yeartest.run({**base, "year_result": str(tmp_path / "tek" / "year.json")}, tmp_path / "tek", FakePool)
+    parts = tmp_path / "parca"
+    parts.mkdir()
+    for symbol in symbols:  # her sembol "ayri makinede"
+        partial = yeartest.run({**base, "only": [symbol], "year_result": str(parts / "year.json")}, parts, FakePool)
+        assert partial["complete"] is (symbol == symbols[-1])
+    job = tmp_path / "job.json"
+    job.write_text(json.dumps(base))
+    assembled = yeartest.main([str(job), "--out", str(parts), "--assemble"])  # hicbir sey hesaplamadan toplar
+    strip = lambda result: {k: v for k, v in result.items() if k not in ("seconds", "finished_at")}  # noqa: E731
+    assert strip(assembled) == strip(single) and assembled["complete"] is True
+    empty = tmp_path / "bos"
+    assert yeartest.main([str(job), "--out", str(empty), "--assemble"])["complete"] is False  # parca yoksa tam degil

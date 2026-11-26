@@ -796,3 +796,22 @@ yaklaşık 4 gün boyunca tek çekirdeği düşük öncelikle kullanır.
 işlem, kazanma, PF, düşüş, maliyet/stop, geçti/kaldı/bekliyor rozeti; ayrıntıda sembol tablosu, bakiye eğrisi,
 yarıyıllar, neden kaldı; sonuç tarihi, kapsam, kurallar). Ekran testleri: veri, pencere değişimi, ayrıntı, sonuç
 yok, veri eksik, hata.
+
+## Backtest sunucuda değil GitHub Actions'ta (2026-11-26, kullanıcı kararı)
+
+Bot yavaşlamasın diye sunucu artık hiçbir backtest hesabı yapmaz (`BACKTEST_ON_SERVER = False`).
+- **Sunucu:** yalnızca geçmiş mumları çeker ve dışa aktarıma hazırlar: `backtest/history.db` (OHLC + hacim) ve
+  `backtest/export.json` (enstrüman koşulları, saatlik spread profili, kur sınırları, çıkış kuralları, pencere).
+  Hesap numarası, bakiye, lot, işlem ve API anahtarı içermez; kaldıraç da yazılmaz. Dosyalar yalnızca sunucunun
+  içinden okunabilen uçlardan verilir (`/health/export`, `/health/export/history`; ters vekilden gelen istek 404).
+- **İş akışı** `.github/workflows/backtest.yml` (elle başlatılır): `export` (SSH ile piyasa verisini alır) →
+  `run` (sembol başına bir iş, hepsi paralel; V9 parçaları runner'ın bütün çekirdeklerinde) → `assemble` (portföy
+  kuralları, pencereler, geçti/kaldı, bakiye eğrisi + ileri testin A aşaması; sonucu SSH ile
+  `/opt/tradebot/backtest-results/` altına yükler). Artifact'lar 1 gün (sonuç 7 gün) saklanır.
+- **İçe alma:** bot `RESULTS_DIR` altındaki `year.json` / `forward.json` dosyalarını dakikada bir yoklar; sürümü ve
+  biçimi uyan dosyayı içe alır (`backtest_imported` olayı). Klasöre yalnızca dağıtım kullanıcısı yazabilir (kodu da
+  dağıtan kimlik); bot oradan yalnızca okur.
+- `yeartest` komut satırı: `--only SEMBOL`, `--assemble`, `--history`, `--out`, `--workers`. Sembol sembol koşup
+  sonradan toplamak tek seferde koşmakla aynı sonucu verir (test).
+- V9 değerlendirmesinin kendisi hızlandırılmadı (artımlı gösterge hesabı): Actions paralelliği süre sorununu
+  çözdüğü için ertelendi; sonuçların birebir aynı kaldığını kanıtlayan test gerektirir.

@@ -96,6 +96,12 @@ BACKTEST_DAYS = 90  # swing stratejileri: ilk 60 gun ic orneklem, son 30 gun dis
 BACKTEST_V9_DAYS = 60  # V9 pahalidir: son 60 gun (30 gun ic + 30 gun dis orneklem)
 BACKTEST_BUDGET = 6 * 3600.0  # V9 asamasinin bir turu icin en uzun sure (sn); tur sonunda ara sonuc yayinlanir
 BACKTEST_ROUNDS = 6  # V9 bitmediyse ayni gecmisle art arda en cok bu kadar tur (biten semboller yeniden calismaz)
+# Kullanici karari (2026-11-26): backtest SUNUCUDA hesaplanmaz (bot yavaslamasin). Sunucu yalnizca gecmis mumlari
+# ceker ve disa aktarir (yalnizca piyasa verisi); hesap GitHub Actions'ta yapilir, sonuc dosyasi sunucuya yuklenir.
+BACKTEST_ON_SERVER = False
+RESULTS_DIR = Path(os.environ.get("TRADEBOT_RESULTS_DIR", "/opt/tradebot/backtest-results"))  # dagitim kullanicisi yazar
+RESULTS_INTERVAL = 60.0  # yuklenen sonuc dosyalarina bakma araligi (sn)
+RESULTS_MAX_BYTES = 8_000_000
 YEAR_DAYS = 365.0  # yillik backtestin penceresi (bkz. yeartest.py)
 YEAR_CHUNK_DAYS = 30.0  # V9 en yeniden eskiye bu buyuklukte parcalarla hesaplanir
 YEAR_ROUNDS = 36  # yillik test icin art arda en cok bu kadar tur (tur basina BACKTEST_BUDGET)
@@ -203,6 +209,7 @@ class Bot:
         self._auth_error_at = 0.0
         self._auth_backoff = AUTH_BACKOFF_START
         self._auth_streak = 0  # basarili istek gorulmeden art arda gelen kimlik retleri
+        self._results_seen: dict[str, list] = {}  # ice alinan sonuc dosyalarinin (degisim zamani, boyut) izi
         self._auth_blocked_until = 0.0
         self._stop_checked: dict[str, float] = {}
         self._stop_alerted: set[str] = set()
@@ -1352,7 +1359,7 @@ class Bot:
         self.backtest_state = "running"
         folder = Path(self.repo.db_path).parent / "backtest"
         history = folder / "history.db"
-        complete = False
+        complete = kept_history = False
         try:
             # Spread: olculmus saatlik medyanlar; olcumu olmayan sembolde su anki 30 dk medyani (yoksa anlik spread).
             profile = {symbol: {"hours": {str(hour): value for hour, value in entry["hours"].items()},
@@ -1408,8 +1415,9 @@ class Bot:
             spec = {
                 "instruments": backtest.job_instruments(instruments), "spreads": profile, "bounds": bounds,
                 # Sozlesme hesabi icin yalnizca para birimi gerekir; bakiye/varlik sabit bir sayidir (yazilmaz).
+                # Kaldirac da yazilmaz (hesap bilgisi): is dosyasi sunucu disina aktarilabilir.
                 "account": {"currency": self.account.currency, "balance": 10_000.0, "equity": 10_000.0,
-                            "margin": 0.0, "margin_free": 10_000.0, "leverage": self.account.leverage,
+                            "margin": 0.0, "margin_free": 10_000.0, "leverage": None,
                             "can_open": True, "can_trade": True},
                 "rules": {"be_at_r": manage.be_at_r if manage.be_enabled else None,
                           "partial_at_r": manage.partial_at_r if manage.partial_enabled else None,
@@ -1422,6 +1430,14 @@ class Bot:
                 "workers": BACKTEST_WORKERS or (os.cpu_count() or 1),
                 "max_spread_stop_pct": self.repo.get_bot_settings().risk.max_spread_stop_pct,
                 "history": str(history), "result": str(result)}
+            if not BACKTEST_ON_SERVER:
+                # Hesap sunucuda yapilmaz: is tanimi (yalnizca piyasa verisi ve ayarlar) disa aktarima hazirlanir.
+                export = {key: value for key, value in spec.items() if key not in ("history", "result", "year_result")}
+                (folder / "export.json").write_text(json.dumps({**export, "bars": bars, "ready": True,
+                                                                "version": yeartest.VERSION}))
+                self.backtest_state = "exported"
+                kept_history = True
+                return None
             # 1) Ileri testin A asamasi (swing + WEEK TRADE yeniden uretimi): dakikalar icinde yayinlanir. V9'un
             #    eski 60 gunluk asamasi artik calismaz; V9 yillik testin icinde olculur.
             job.write_text(json.dumps({**spec, "deadline": time.time() + BACKTEST_BUDGET, "skip_v9": True}))
@@ -1459,9 +1475,53 @@ class Bot:
             return None
         finally:
             (folder / "job.json").unlink(missing_ok=True)
-            if complete:  # yarim kalan is icin gecmis dosyasi saklanir (yeniden cekilmesin)
+            if complete and not kept_history:  # yarim kalan is icin gecmis dosyasi saklanir (yeniden cekilmesin)
                 history.unlink(missing_ok=True)
                 (folder / "history.json").unlink(missing_ok=True)
+
+    def export_job(self) -> dict | None:
+        """Disa aktarilacak is tanimi (piyasa verisi + ayarlar; hesap verisi yok). Hazir degilse None."""
+        try:
+            data = json.loads((Path(self.repo.db_path).parent / "backtest" / "export.json").read_text())
+        except (OSError, ValueError):
+            return None
+        return data if isinstance(data, dict) and data.get("ready") else None
+
+    def export_history_path(self) -> Path | None:
+        path = Path(self.repo.db_path).parent / "backtest" / "history.db"
+        return path if self.export_job() is not None and path.exists() else None
+
+    async def import_results(self) -> list[str]:
+        """Disarida hesaplanip `RESULTS_DIR`e yuklenen sonuc dosyalarini ice alir -> alinanlarin adlari.
+
+        Klasore yalnizca dagitim kullanicisi (kodu da dagitan kimlik) yazabilir; bot oradan yalnizca okur. Dosya
+        degismediyse yeniden okunmaz. Surumu ya da bicimi uymayan dosya alinmaz."""
+        taken = []
+        for name, key, version in (("year.json", "yeartest_result", yeartest.VERSION),
+                                   ("forward.json", "backtest_result", forward.VERSION)):
+            path = RESULTS_DIR / name
+            try:
+                stat = path.stat()
+                mark = [stat.st_mtime, stat.st_size]
+                if stat.st_size > RESULTS_MAX_BYTES or self._results_seen.get(name) == mark:
+                    continue
+                data = await asyncio.to_thread(lambda: json.loads(path.read_text()))
+            except (OSError, ValueError):
+                continue
+            self._results_seen[name] = mark
+            if not isinstance(data, dict) or data.get("version") != version:
+                log.warning("sonuc dosyasi alinmadi (surum/bicim uymuyor): %s", name)
+                continue
+            if name == "year.json" and not isinstance(data.get("strategies"), dict):
+                continue
+            data["finished_at"] = self._clock()
+            data["imported"] = True
+            self.repo.set_setting(key, data)
+            taken.append(name)
+            await self._record("info", "backtest_imported", f"Backtest sonucu yüklendi ({name})", {"file": name})
+        if taken:
+            self.backtest_state = "imported"
+        return taken
 
     def yeartest_report(self, full: bool = False) -> dict:
         """Yillik backtestin son sonucu. `full` degilse sembol tablolari ve egriler cikarilir (herkese acik uc)."""
@@ -1832,6 +1892,7 @@ class Bot:
             self._every(MAINTENANCE_INTERVAL, self.maintenance, "bakim"),
             self._every(SPREAD_STATS_INTERVAL, self.record_spreads, "spread olcumu"),
             self._once_after(BACKTEST_DELAY, self.backtest_once),
+            self._every(RESULTS_INTERVAL, self.import_results, "sonuc ice alma"),
         )
 
 
