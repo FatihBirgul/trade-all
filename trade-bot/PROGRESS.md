@@ -940,3 +940,62 @@ bunu gösterir.
 9. Bütün ayarlar önerilen aralığın dışına çıkabilsin, "emin misin?" uyarısıyla (kullanıcı yönetici); stopsuz
    işlem ve emir başı lot tavanı için iki aşamalı onay. (Bu madde risk sınırlarını gevşetme yolu açar: test +
    bağımsız inceleme + kullanıcının açık onayı gerekir.)
+
+# Faz 5: strateji araştırma altyapısı (kontrolcü + kullanıcı kararı, 2026-11-27)
+
+## Ön kayıt — sonuçlar görülmeden yazıldı (2026-11-26 22:30 UTC); SONRADAN DEĞİŞTİRİLMEZ
+
+Bu bölümdeki kurallar hiçbir Faz 5 sonucu görülmeden yazıldı. Değişiklik gerekirse eski kural silinmez; yeni kural
+tarihiyle ve gerekçesiyle ALTINA eklenir ve o değişiklikten önceki sonuçlar raporda ayrı gösterilir.
+
+**Veri.** 33 sembol: botun 30 sembolü + Exness endeksleri `US30`, `US500`, `USTEC` (adlar hesabın gerçek
+enstrüman listesinden doğrulandı). Temel zaman dilimi H1; H4 ve D1, H1'den UTC sınırlarında (H4: 00/04/…/20)
+türetilir. Hedef 5 yıl. Kaynak: Exness'in dışa aktardığı son ~12 ay (gerçek broker verisi); öncesi Dukascopy
+(FX, metal, endeks; BID mumları) ve Binance (BTCUSDT, ETHUSDT). Kaynak farkı (örtüşen dönemde kapanış farkı ve
+H1 getiri korelasyonu) sembol başına raporlanır. Veri GitHub Actions'ta indirilir; hiçbir hesap verisi
+artifact'a girmez; sunucu hesap yapmaz.
+
+**Maliyet.** Giriş ve çıkışta Exness'in saat bazlı spread profili (UTC saatine göre medyan; ölçüm yoksa:
+endeksler için Dukascopy'nin kendi ask−bid medyanı, raporda işaretli). Maliyet kapısı %15 (spread ÷ stop
+mesafesi). Swap 0. Komisyon 0. Haber penceresi geçmişe uygulanamaz.
+
+**Zaman çizelgesi.** T = verinin son tam günü. **Kasa (holdout) = [T−12 ay, T]**: seçimler bitene kadar hiç
+çalıştırılmaz; araştırma koşularında veri kasa başlangıcında KESİLİR (o mumlar yüklenmez). Walk-forward bölgesi
+= [T−60 ay, T−12 ay] (48 ay). Pencere k = 0..3: **seçim** [başlangıç + 6k ay, +24 ay), **görülmemiş test**
+hemen sonraki 6 ay. Sembolün verisi bir pencerenin seçim+test kısmını tam kapsamıyorsa o pencere o sembol için
+kullanılmaz (5 yıldan kısa veride daha az pencere).
+
+**Birim: eşleşme** = (sembol, strateji, filtre, boyutlandırma). Her eşleşme kendi sinyalleriyle, kendi başına
+(aynı anda en çok bir açık işlem) benzetilir. Parametre optimizasyonu YOK: kaynaktaki varsayılanlar.
+Filtreler F0–F4 ve boyutlandırma P1/P2 `strateji_listesi_v2.md`deki tanımlarla; ikili/üçlü filtre birleşimi YOK.
+
+**Seçim kuralı (her seçim penceresinde):** en az 30 kapanmış işlem, PF ≥ 1,2, en büyük düşüş ≤ %15 (2000 USC,
+eşleşmenin boyutlandırmasıyla).
+
+**Görülmemiş sonuç:** eşleşmenin test penceresi k'deki işlemleri, YALNIZCA seçim penceresi k'de seçildiyse
+sayılır. İşlem, giriş zamanına göre pencereye aittir; çıkışı pencereden sonra olsa da gerçek çıkışıyla sayılır.
+Veri sonunda açık kalan işlem sayılmaz (sayısı raporlanır).
+
+**Geçme kuralı (walk-forward):** sayılan test pencerelerinin toplamında en az 40 işlem, PF ≥ 1,15, sayılan
+pencerelerin en az %60'ı artı (net R > 0) ve **en az 2 sayılan pencere** (son koşul benim eklemem: tek pencere
+%60 koşulunu kendiliğinden sağlar).
+
+**Kasa:** yalnızca walk-forward'u geçen eşleşmeler için, bütün seçimler bittikten sonra BİR KEZ çalıştırılır.
+Onay = walk-forward geçti VE kasa döneminde en az 1 işlem ve net R > 0. Kasa sonucu ne olursa olsun yeniden
+seçim yapılmaz.
+
+**Çoklu deneme koruması (monkey test).** Her (sembol, strateji) için gerçek sinyallerle aynı sayıda ve aynı
+alış/satış oranında RASTGELE zamanlı girişler, aynı çıkış kuralı ve aynı maliyetle ≥ 200 tekrar. Raporlanan:
+gerçek PF'nin rastgele dağılımdaki yüzdeliği; her tekrara aynı walk-forward geçme kuralı uygulanır ve geçme
+oranı p bulunur; **beklenen tesadüfi geçen sayısı = Σ p** (bütün denenen eşleşmeler üzerinden), gerçek geçen
+sayısıyla yan yana verilir.
+
+**Boyutlandırma P2 (Moreira & Muir uyarlaması):** işlem riski = %0,5 × min(1, σ_ref ÷ σ_20); σ_20 = son 20
+kapanmış D1 mumunun günlük log getirisi std'si, σ_ref = önceki 250 D1 mumunda σ_20'nin medyanı (ileriye bakış
+yok). P1: sabit %0,5.
+
+**Portföy (sonra):** onaylı eşleşmelerden birleşik portföy; en çok 3 açık işlem, sembol başına 1, para birimi
+yönü başına 2; %0,5 ve %1 risk ile 2000 USC eğrisi; aylık/üç aylık sonuç, en uzun düşüş süresi, korelasyon.
+
+**Canlıya alma:** bot yalnızca onaylı eşleşmeleri kullanır; canlıya geçiş yine kullanıcının uygulamadan açık
+onayıyla. Risk ayarları değişmez.
