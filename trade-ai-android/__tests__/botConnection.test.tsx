@@ -6,6 +6,14 @@ import { BotError } from "../src/bot/client";
 import { useBot } from "../src/bot/state";
 import { ThemeProvider } from "../src/theme";
 
+const mockRouter = { canGoBack: jest.fn(() => true), back: jest.fn(), replace: jest.fn() };
+jest.mock("expo-router", () => ({
+  router: {
+    canGoBack: () => mockRouter.canGoBack(),
+    back: () => mockRouter.back(),
+    replace: (path: string) => mockRouter.replace(path),
+  },
+}));
 jest.mock("../src/bot/state", () => ({ useBot: jest.fn() }));
 jest.mock("react-native-safe-area-context", () => ({
   ...jest.requireActual("react-native-safe-area-context"),
@@ -39,7 +47,12 @@ const screen = () =>
     </ThemeProvider>,
   );
 
-afterEach(() => jest.restoreAllMocks());
+afterEach(() => {
+  jest.restoreAllMocks();
+  mockRouter.back.mockClear();
+  mockRouter.replace.mockClear();
+  mockRouter.canGoBack.mockReturnValue(true);
+});
 
 test("connection screen pairs and shows connected state", async () => {
   const bot = setBot({});
@@ -50,6 +63,8 @@ test("connection screen pairs and shows connected state", async () => {
   await fireEvent.press(ui.getByText("Bağlan"));
   await waitFor(() => expect(bot.pair).toHaveBeenCalledWith(ORIGIN, "482913"));
   expect(bot.pair).toHaveBeenCalledTimes(1);
+  // Gerçek telefonda görüldü (0.9.3): eşleşmeden sonra kullanıcı sekmesiz bu ekranda kalıyordu.
+  await waitFor(() => expect(mockRouter.back).toHaveBeenCalledTimes(1));
 
   setBot({ phase: "ready", config: { origin: ORIGIN, token: "t".repeat(43), pairedAt: 1 } });
   await ui.rerender(
@@ -58,6 +73,9 @@ test("connection screen pairs and shows connected state", async () => {
     </ThemeProvider>,
   );
   expect(ui.getByText("Bağlı")).toBeTruthy();
+  mockRouter.canGoBack.mockReturnValue(false); // uygulama doğrudan bu ekranla açıldıysa geri yok
+  await fireEvent.press(ui.getByText("Panele git"));
+  expect(mockRouter.replace).toHaveBeenCalledWith("/");
   expect(ui.getByText("203-0-113-7.sslip.io")).toBeTruthy();
   expect(ui.queryByLabelText("Eşleştirme kodu")).toBeNull();
   expect(ui.queryByText(/t{43}/)).toBeNull(); // token ekranda gösterilmez
