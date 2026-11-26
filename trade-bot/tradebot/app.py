@@ -88,7 +88,9 @@ HEAL_RETRY = 6 * 3600.0  # borsanin da vermedigi bosluk icin yeniden deneme aral
 BACKTEST_DELAY = 180.0  # acilistan sonra bekleme (sn)
 BACKTEST_DAYS = 90  # swing stratejileri: ilk 60 gun ic orneklem, son 30 gun dis orneklem
 BACKTEST_V9_DAYS = 60  # V9 pahalidir: son 60 gun (30 gun ic + 30 gun dis orneklem)
-BACKTEST_BUDGET = 6 * 3600.0  # V9 asamasi icin en uzun sure (sn); bitmeyen semboller sonraki calismaya kalir
+BACKTEST_BUDGET = 6 * 3600.0  # V9 asamasinin bir turu icin en uzun sure (sn); tur sonunda ara sonuc yayinlanir
+BACKTEST_ROUNDS = 6  # V9 bitmediyse ayni gecmisle art arda en cok bu kadar tur (biten semboller yeniden calismaz)
+BACKTEST_WINDOW_KEEP = 3 * 86400.0  # yarim kalan is bu kadar eski pencereyle surdurulur (yeniden baslatma sonrasi)
 BACKTEST_WORKERS = 0  # 0: islemci sayisi kadar alt surec (hepsi dusuk oncelikli)
 BACKTEST_MAX_AGE = 20 * 3600.0  # bundan yeni bir sonuc varsa yeniden calismaz
 BACKTEST_FETCH_PAUSE = 0.3  # gecmis mum istekleri arasinda bekleme (sn)
@@ -1275,15 +1277,28 @@ class Bot:
                 bounds[symbol] = [rate[0], rate[1]]
             instruments = sorted((i for i in self.catalog.universe() if i.symbol in profile),
                                  key=lambda i: (i.symbol not in BACKTEST_MAJORS, i.kind != "forex", i.symbol))
-            end = float(int(now // 86400) * 86400)  # gun basi: ayni gun yeniden baslayan is kaldigi yerden surer
-            start = end - BACKTEST_DAYS * 86400.0
+            end = float(int(now // 86400) * 86400)  # gun basi
             folder.mkdir(parents=True, exist_ok=True)
+            # Yarim kalan isin penceresi saklanir: sonraki gunlerde yeniden baslayan surec ayni pencereyle surer
+            # (biten semboller yeniden hesaplanmaz). Tamamlanmis isten sonra yeni pencere acilir.
+            pin = folder / "window.json"
+            try:
+                pinned = json.loads(pin.read_text())
+            except (OSError, ValueError):
+                pinned = {}
+            finished = (isinstance(previous, dict) and bool((previous.get("v9_coverage") or {}).get("complete"))
+                        and previous.get("to") == pinned.get("end"))
+            if (pinned.get("version") == forward.VERSION and isinstance(pinned.get("end"), float)
+                    and 0 <= end - pinned["end"] <= BACKTEST_WINDOW_KEEP and not finished):
+                end = pinned["end"]
+            pin.write_text(json.dumps({"version": forward.VERSION, "end": end}))
+            start = end - BACKTEST_DAYS * 86400.0
             job, result = folder / "job.json", folder / "result.json"
             for stale in (history, result):
                 stale.unlink(missing_ok=True)
             bars = await self._backtest_history(instruments, start, end, history)
             manage = self.repo.get_bot_settings().manage
-            job.write_text(json.dumps({
+            spec = {
                 "instruments": backtest.job_instruments(instruments), "spreads": profile, "bounds": bounds,
                 # Sozlesme hesabi icin yalnizca para birimi gerekir; bakiye/varlik sabit bir sayidir (yazilmaz).
                 "account": {"currency": self.account.currency, "balance": 10_000.0, "equity": 10_000.0,
@@ -1294,19 +1309,25 @@ class Bot:
                           "partial_fraction": manage.partial_fraction,
                           "trail_atr_mult": manage.trail_atr_mult if manage.trail_enabled else None},
                 "start": start, "end": end, "split": start + (end - start) * 2.0 / 3.0,
-                "v9_start": end - BACKTEST_V9_DAYS * 86400.0, "deadline": time.time() + BACKTEST_BUDGET,
+                "v9_start": end - BACKTEST_V9_DAYS * 86400.0,
                 "workers": BACKTEST_WORKERS or (os.cpu_count() or 1),
-                "history": str(history), "result": str(result)}))
-            code = await self._backtest_spawn(job)
-            if code != 0 or not result.exists():
-                raise RuntimeError(f"alt surec {code}")
-            summary = json.loads(result.read_text())
-            summary["bars"] = bars
-            summary["finished_at"] = self._clock()  # botun saati (tazelik denetimi bununla yapilir)
-            self.repo.set_setting("backtest_result", summary)
+                "history": str(history), "result": str(result)}
+            summary = None
+            for _ in range(max(1, BACKTEST_ROUNDS)):
+                job.write_text(json.dumps({**spec, "deadline": time.time() + BACKTEST_BUDGET}))
+                result.unlink(missing_ok=True)
+                code = await self._backtest_spawn(job)
+                if code != 0 or not result.exists():
+                    raise RuntimeError(f"alt surec {code}")
+                summary = json.loads(result.read_text())
+                summary["bars"] = bars
+                summary["finished_at"] = self._clock()  # botun saati (tazelik denetimi bununla yapilir)
+                self.repo.set_setting("backtest_result", summary)  # ara sonuc da yayinlanir
+                log.info("ileri test turu bitti: V9 %d/%d sembol", summary["v9_coverage"]["symbols_done"],
+                         summary["v9_coverage"]["symbols_total"])
+                if summary["v9_coverage"]["complete"]:
+                    break
             self.backtest_state = "done" if summary["v9_coverage"]["complete"] else "partial"
-            log.info("ileri test bitti: V9 %d/%d sembol", summary["v9_coverage"]["symbols_done"],
-                     summary["v9_coverage"]["symbols_total"])
             return summary
         except asyncio.CancelledError:
             raise
@@ -1335,10 +1356,12 @@ class Bot:
 
     async def _daily_candles(self, symbol: str) -> None:
         """Gunluk mumlar (swing stratejilerinin yonu ve gunluk ATR'si icin). Yeni bir gunluk mum kapanmadikca ag
-        istegi yapilmaz. Bu ikincil bir veridir: alinamazsa V9 taramasi etkilenmez, swing stratejileri o sembolde
-        sinyal uretmez."""
+        istegi yapilmaz. Bu ikincil bir veridir: gecici bir hatada V9 taramasi etkilenmez; onbellekteki gunluk veri
+        bayatladiysa swing stratejileri o sembolde sinyal uretmez (bkz. custom.evaluate)."""
         try:
             await self.candles.get(symbol, "D1", 120)
+        except (ExnessRateLimited, ExnessAuthError):
+            raise  # istek siniri ve kimlik hatasi taramanin kendi kurallarina gore ele alinir (yutulmaz)
         except ExnessError as exc:
             log.info("gunluk mumlar alinamadi %s: %s", symbol, type(exc).__name__)
 

@@ -120,6 +120,13 @@ def short_job(monkeypatch, app):
 
     async def in_process(job):
         jobs.append(json.loads(job.read_text()))
+        import sqlite3
+        db = sqlite3.connect(jobs[-1]["history"])
+        try:  # gecmis dosyasinda olusmakta olan mum bulunmaz
+            for tf, at in db.execute("SELECT tf, time FROM bars"):
+                assert at + forward.DURATIONS[tf] <= jobs[-1]["end"], (tf, at)
+        finally:
+            db.close()
         await asyncio.to_thread(forward.run_job, job, InlinePool)
         return 0
 
@@ -260,3 +267,100 @@ def test_swing_replay_finds_the_smc_trade_and_never_looks_ahead(tmp_path):
     alone = [t for t in forward.swing_trades("EURUSD", "forex", past, spreads, END - 3600, END + 3600)
              if t["strategy_id"] == "tb_smc_sweep_v1"]
     assert len(alone) == 1 and (alone[0]["at"], alone[0]["side"]) == (smc[0]["at"], smc[0]["side"])
+
+
+def test_stop_day_stays_closed_and_selected_strategies_share_one_portfolio():
+    day = 10 * 86400.0
+    # Uc kayip kapandi, ardindan eski bir islem kazancla kapandi: gun yine kapali kalir.
+    rows = [trade(day, 1.0, closed_after=40_000.0)] + [trade(day + 600 + i * 7200, -1.0) for i in range(3)]
+    rows += [trade(day + 50_000, 1.0), trade(day + 86400 + 60, 1.0)]
+    assert [t["at"] for t in forward.apply_rules(rows, "2.0")][-2:] == [day + 600 + 2 * 7200, day + 86400 + 60]
+    # Hesap geneli: iki stratejinin islemleri AYNI gunluk siniri paylasir.
+    mixed = [trade(day + i * 600, 1.0, closed_after=100_000.0,
+                   strategy=("tb_smc_sweep_v1", "tb_emapb_h1_20_21_v1")[i % 2]) for i in range(8)]
+    targets = {"tb_smc_sweep_v1": "2.0", "tb_emapb_h1_20_21_v1": "1.5"}
+    assert len(forward.apply_rules(mixed, targets)) == 5
+
+
+def test_in_sample_ends_at_the_split_and_open_trades_are_reported_apart():
+    split = 100 * 86400.0
+    rows = [trade(split - 86400.0, 1.0), trade(split - 600.0, 3.0, closed_after=7200.0),  # ikincisi ayrimi asiyor
+            trade(split + 600.0, -1.0), trade(split + 900.0, None)]
+    rows[-1]["results"] = {key: [None, None, 0.4] for key in rows[-1]["results"]}
+    periods = forward._swing_periods(rows, split, "2.0")
+    assert periods["is"]["trades"] == 1 and periods["is"]["sum_r"] == 1.0 and periods["straddle"] == 1
+    assert periods["oos"] == {"trades": 2, "open": 1, "wins": 0, "flat": 0, "losses": 1, "sum_r": -1.0,
+                              "avg_r": -1.0, "open_r": 0.4}  # acik islem ortalamaya 0 diye girmez
+    summary = forward.summarize_swing(rows, split)
+    assert summary["portfolio"] is None  # secim yoksa portfoy satiri da yok
+    spreads = forward.Spreads({"EURUSD": {"hours": {3: 0.0004}, "all": 0.0001}})
+    assert spreads.at("EURUSD", 3 * 3600.0) == 0.0004  # saat anahtari sayi da olsa bulunur
+
+
+def test_wide_stop_never_comes_closer_than_one_and_a_half_daily_atr():
+    assert forward.wide_distance(0.2, 1.0) == 1.5 and forward.wide_distance(2.0, 1.0) == 2.0
+
+
+def test_replay_shows_strategies_only_closed_and_current_bars_and_simulates_from_the_next_bar(monkeypatch):
+    from tests.signals.test_swing_strategies import D1, END, H4, bar, rising, smc_h1, smc_m15
+    history = backtest.History()
+    m15 = [bar(END - (400 - i) * 900, 100.4, 100.45, 100.35, 100.4) for i in range(397)] + smc_m15()
+    future = [bar(END + i * 900, 100.5, 100.6 + i * 0.2, 100.45, 100.55 + i * 0.2) for i in range(40)]
+    history.add("EURUSD", "M15", m15 + future)
+    history.add("EURUSD", "H1", smc_h1() + [bar(END + i * 3600, 101, 101.5, 100.9, 101.2) for i in range(10)])
+    history.add("EURUSD", "H4", rising(80, 0.05, 100.5, H4, END) + [bar(END, 101, 109, 100.9, 108)])
+    history.add("EURUSD", "D1", rising(80, 0.26, 100.5, D1, END, spread=1.0) + [bar(END, 101, 109, 100.9, 108)])
+    seen, simulated = [], []
+    real_modules, real_simulate = forward.modules, forward.outcome.simulate_swing
+
+    class Spy:
+        def __init__(self, inner):
+            self.inner, self.id = inner, inner.id
+
+        def evaluate(self, context):
+            seen.append(context)
+            return self.inner.evaluate(context)
+
+    def simulate(side, entry, stop, target, at, bars, **kwargs):
+        simulated.append((side, entry, at, bars[0]["time"] if bars else None))
+        return real_simulate(side, entry, stop, target, at, bars, **kwargs)
+
+    monkeypatch.setattr(forward, "modules", lambda kind: [Spy(m) for m in real_modules(kind)])
+    monkeypatch.setattr(forward.outcome, "simulate_swing", simulate)
+    spreads = forward.Spreads({"EURUSD": {"hours": {}, "all": 0.02}})
+    trades = forward.swing_trades("EURUSD", "forex", history, spreads, END - 6 * 3600, END + 3 * 3600)
+    assert trades and len(seen) > 30
+    for context in seen:
+        for tf, duration in forward.DURATIONS.items():
+            bars = context.bars[tf]
+            assert bars and bars[-1]["time"] + duration <= context.now  # olusmakta olan mum yok
+        assert context.bars["H1"][-1]["time"] + 2 * 3600 > context.now  # ve en yeni kapanmis H1 mumu (bayat degil)
+    assert all(first == at - 5 for _, _, at, first in simulated)  # benzetim giris mumundan SONRAKI mumla baslar
+    side, entry = next((side, entry) for side, entry, at, _ in simulated if at == END + 5)
+    assert side == "BUY" and entry == 100.5 + 0.02  # AL: kapanis + spread (ask)
+
+
+async def test_unfinished_job_keeps_its_window_across_days(tmp_path, monkeypatch):
+    app = await started(tmp_path, dry_run=True)
+    jobs = short_job(monkeypatch, app)
+    monkeypatch.setattr(app_module, "BACKTEST_BUDGET", -1.0)
+    monkeypatch.setattr(app_module, "BACKTEST_ROUNDS", 2)
+    assert (await app.bot.backtest_once())["v9_coverage"]["complete"] is False
+    assert len(jobs) == 2  # bitmeyen is ayni gecmisle bir tur daha denenir
+    app.clock["now"] += 86400.0  # ertesi gun yeniden baslayan surec ayni pencereyle surer
+    monkeypatch.setattr(app_module, "BACKTEST_BUDGET", 3600.0)
+    done = await app.bot.backtest_once()
+    assert done["v9_coverage"]["complete"] is True and len(jobs) == 3 and jobs[2]["end"] == jobs[0]["end"]
+    app.clock["now"] += 86400.0  # tamamlanan isten sonra (sonuc eskiyince) yeni pencere acilir
+    await app.bot.backtest_once()
+    assert jobs[3]["end"] == jobs[0]["end"] + 2 * 86400.0
+
+
+async def test_history_never_stores_a_bar_that_is_still_forming(tmp_path, monkeypatch):
+    app = await started(tmp_path, dry_run=True)
+    short_job(monkeypatch, app)  # gecmis dosyasindaki her mumun pencere sonunda kapanmis oldugunu denetler
+    real = app_module.schema.parse_candles
+    forming = {"time": int(app.clock["now"] // 900) * 900, "open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0,
+               "tick_volume": 1}
+    monkeypatch.setattr(app_module.schema, "parse_candles", lambda payload: real(payload) + [dict(forming)])
+    assert await app.bot.backtest_once() is not None and app.bot.backtest_state == "done"

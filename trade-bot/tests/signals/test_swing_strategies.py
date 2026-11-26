@@ -184,3 +184,27 @@ def test_smc_sell_is_the_mirror_image():
     signal = SmcSweep().evaluate(swing_context(flip(smc_m15()), flip(smc_h1()), down_d1, down_h4))
     assert signal is not None and signal.side == "SELL" and signal.entry == 99.5
     assert signal.stop >= 101.3 and signal.stop - signal.entry >= 1.5 * atr(down_d1) - 1e-9
+
+
+def test_structure_stop_is_mirrored_exactly_when_it_is_the_further_one():
+    """Gunluk ATR kucukken stop yapidan (supurmenin otesinden) gelir; SAT, AL'in tam ayna goruntusudur."""
+    flip = lambda bars: [bar(b["time"], 200 - b["open"], 200 - b["low"], 200 - b["high"], 200 - b["close"]) for b in bars]  # noqa: E731
+    up_d1 = rising(80, 0.02, 100.5, D1, END, spread=0.1)
+    buy = SmcSweep().evaluate(swing_context(smc_m15(), smc_h1(), up_d1))
+    sell = SmcSweep().evaluate(swing_context(flip(smc_m15()), flip(smc_h1()), flip(up_d1),
+                                             falling(80, 0.05, 99.5, H4, END)))
+    assert buy is not None and sell is not None and (buy.side, sell.side) == ("BUY", "SELL")
+    assert buy.stop < 98.7 and buy.entry - buy.stop > 1.5 * atr(up_d1) + 0.5  # yapi stopu ATR tabanindan uzakta
+    assert sell.stop == pytest.approx(200 - buy.stop) and sell.stop > 101.3
+
+
+def test_common_gates_block_extreme_rsi_and_a_target_without_room():
+    d1, h1 = rising(80, 0.26, 100.5, D1, END, spread=1.0), pullback_h1()
+    entry = h1[-1]["close"]
+    assert swing_rules.plan("BUY", entry, entry - 0.5, {"D1": d1, "H1": h1}) is not None
+    straight = rising(80, 0.2, entry, H1, END)  # hic geri cekilmeyen yukselis: RSI asiri
+    assert swing_rules.plan("BUY", entry, entry - 0.5, {"D1": d1, "H1": straight}) is None
+    capped = [dict(b) for b in d1]
+    capped[-10]["high"] = entry + 1.0  # 1R'den yakin gunluk tepe
+    assert swing_rules.plan("BUY", entry, entry - 0.5, {"D1": capped, "H1": h1}) is None
+    assert swing_rules.plan("BUY", entry, entry - 0.5, {"D1": [], "H1": h1}) is None  # gunluk veri yoksa islem yok

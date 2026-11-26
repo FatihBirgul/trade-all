@@ -1,10 +1,14 @@
-"""Genisletilmis ileri test (surum ft-2): swing ailesi + V9, ic/dis orneklem, saate gore spread.
+"""Genisletilmis ileri test (surum ft-3): swing ailesi + V9, ic/dis orneklem, saate gore spread.
 
 Iki asama, ikisi de ag ve kimlik bilgisi kullanmayan dusuk oncelikli alt surecte:
 A) Swing stratejileri (SMC, H1 EMA geri cekilme): butun semboller, butun donem. Her sinyal uc hedefle
    (1,5R / 2R / 2,5R) ve swing cikis planiyla benzetilir. Hedef ve EMA bolgesi ILK donemde (ic orneklem) secilir,
    SON donemde (dis orneklem) dogrulanir; secim sonuca bakilarak degil, onceden sabit bu kucuk izgaradan yapilir.
-   Portfoy kurallari ayrica uygulanir: gunde en cok 5 islem, art arda 3 kayiptan sonra gunun kalaninda giris yok.
+   Portfoy kurallari (gunde en cok 5 islem, art arda 3 kayiptan sonra gunun kalaninda giris yok) once her
+   stratejiye tek basina, sonra secilen stratejilerin TOPLAMINA (hesap geneli, `portfolio`) uygulanir.
+   Ic orneklem yalnizca ayrim anindan ONCE kapanmis islemlerden olusur; ayrimi asan islemler iki doneme de
+   sayilmaz (`straddle`). Veri sonunda acik kalan islemler ortalamaya girmez; anlik R toplamlari `open_r` olarak
+   ayrica verilir.
 B) V9 stratejileri: canlidaki degerlendirme her M15 kapanisinda calisir (pahalidir; sure siniri dolunca kalan
    semboller sonraki calismaya kalir, biten semboller yeniden hesaplanmaz). Her aday iki stopla benzetilir:
    kendi stopu ve "en az 1,5 x gunluk ATR" stopu.
@@ -13,6 +17,7 @@ Hicbir esik sonuca gore degistirilmez. Sonuc yalnizca sayilar ve R'dir.
 
 from __future__ import annotations
 
+import bisect
 import json
 import multiprocessing
 import os
@@ -29,7 +34,7 @@ from .signals import outcome
 from .signals.modules import Context, modules
 from .signals.modules.indicators import atr
 
-VERSION = "ft-2"
+VERSION = "ft-3"
 TARGETS = (1.5, 2.0, 2.5)
 SWING_IDS = ("tb_smc_sweep_v1", "tb_emapb_h1_20_21_v1", "tb_emapb_h1_21_50_v1")
 EMA_IDS = SWING_IDS[1:]
@@ -53,7 +58,9 @@ class Spreads:
 
     def at(self, symbol: str, moment: float) -> float:
         entry = self._profile[symbol]
-        return float(entry["hours"].get(str(int(moment // 3600) % 24), entry["all"]))
+        hour = int(moment // 3600) % 24
+        hours = entry["hours"]
+        return float(hours.get(str(hour), hours.get(hour, entry["all"])))
 
     def coverage(self) -> dict:
         hours = [len(entry["hours"]) for entry in self._profile.values()]
@@ -76,10 +83,10 @@ def read_history(path: Path, symbol: str) -> History:
 
 
 def _closed(history: History, symbol: str, tf: str, now: float, count: int) -> list[dict]:
+    """`now` aninda KAPANMIS son `count` mum (olusmakta olan mum asla verilmez)."""
     times = history._times.get((symbol, tf))
     if not times:
         return []
-    import bisect
     end = bisect.bisect_right(times, now - DURATIONS[tf])
     return history._bars[(symbol, tf)][max(0, end - count):end]
 
@@ -128,38 +135,58 @@ def swing_trades(symbol: str, kind: str, history: History, spreads: Spreads, sta
     return trades
 
 
-def apply_rules(trades: list[dict], target: str) -> list[dict]:
-    """Portfoy kurallari (zaman sirasiyla): gunde en cok 5 giris; art arda 3 kayiptan sonra o gun giris yok."""
+def _target(trade: dict, target) -> str:
+    return target if isinstance(target, str) else target[trade["strategy_id"]]
+
+
+def apply_rules(trades: list[dict], target) -> list[dict]:
+    """Portfoy kurallari (zaman sirasiyla): gunde en cok 5 giris; art arda 3 kayip KAPANDIYSA o gunun kalaninda
+    giris yok. Yalnizca giris aninda bilinen (kapanmis) sonuclar kullanilir. `target`: hedef anahtari ya da
+    strateji -> hedef anahtari sozlugu (verilen islemlerin tamami tek portfoy sayilir)."""
     accepted: list[dict] = []
     per_day: dict[int, int] = {}
     for trade in sorted(trades, key=lambda t: t["at"]):
         day = int(trade["at"] // DAY)
         if per_day.get(day, 0) >= MAX_PER_DAY:
             continue
-        closed = sorted((t["results"][target][1], t["results"][target][0]) for t in accepted
-                        if t["results"][target][1] is not None and t["results"][target][1] <= trade["at"])
-        streak = 0
-        for _, r in reversed(closed):
-            if r is None or r >= 0:
-                break
-            streak += 1
-        if streak >= LOSS_STREAK and int(closed[-1][0] // DAY) == day:
+        closed = sorted((t["results"][_target(t, target)][1], t["results"][_target(t, target)][0]) for t in accepted
+                        if t["results"][_target(t, target)][1] is not None
+                        and t["results"][_target(t, target)][1] <= trade["at"])
+        streak, blocked = 0, False
+        for closed_at, r in closed:
+            streak = streak + 1 if r is not None and r < 0 else 0
+            if streak >= LOSS_STREAK and int(closed_at // DAY) == day:
+                blocked = True  # ucuncu kayip bugun kapandi: sonradan kazanc kapansa da gun kapali kalir
+        if blocked:
             continue
         accepted.append(trade)
         per_day[day] = per_day.get(day, 0) + 1
     return accepted
 
 
-def stats(values: list[float | None]) -> dict:
+def stats(values: list[float | None], open_values: list[float | None] = ()) -> dict:
     closed = [v for v in values if v is not None]
+    marks = [v for v in open_values if v is not None]
     return {"trades": len(values), "open": len(values) - len(closed), "wins": sum(1 for v in closed if v > 0),
             "flat": sum(1 for v in closed if v == 0), "losses": sum(1 for v in closed if v < 0),
-            "sum_r": round(sum(closed), 2), "avg_r": round(statistics.fmean(closed), 3) if closed else None}
+            "sum_r": round(sum(closed), 2), "avg_r": round(statistics.fmean(closed), 3) if closed else None,
+            "open_r": round(sum(marks), 2)}
 
 
-def _periods(trades: list[dict], split: float, value) -> dict:
-    return {"is": stats([value(t) for t in trades if t["at"] < split]),
-            "oos": stats([value(t) for t in trades if t["at"] >= split])}
+def _periods(trades: list[dict], split: float, value, closed_at, open_r=lambda t: None) -> dict:
+    """Ic orneklem: ayrimdan once ACILIP ayrima kadar KAPANMIS islemler (sonucu ikinci donemin fiyatina
+    dayanan islem secime karismaz). Dis orneklem: ayrimdan sonra acilanlar. Ikisine de girmeyenler: straddle."""
+    early = [t for t in trades if t["at"] < split]
+    inside = [t for t in early if closed_at(t) is not None and closed_at(t) <= split]
+    late = [t for t in trades if t["at"] >= split]
+    return {"is": stats([value(t) for t in inside]),
+            "oos": stats([value(t) for t in late], [open_r(t) for t in late if value(t) is None]),
+            "straddle": len(early) - len(inside)}
+
+
+def _swing_periods(rows: list[dict], split: float, target) -> dict:
+    return _periods(rows, split, lambda t: t["results"][_target(t, target)][0],
+                    lambda t: t["results"][_target(t, target)][1], lambda t: t["results"][_target(t, target)][2])
 
 
 def summarize_swing(trades: list[dict], split: float) -> dict:
@@ -168,9 +195,8 @@ def summarize_swing(trades: list[dict], split: float) -> dict:
         rows = [t for t in trades if t["strategy_id"] == strategy_id]
         table = {}
         for target in (str(t) for t in TARGETS):
-            ruled = apply_rules(rows, target)
-            table[target] = {"raw": _periods(rows, split, lambda t, k=target: t["results"][k][0]),
-                             "rules": _periods(ruled, split, lambda t, k=target: t["results"][k][0])}
+            table[target] = {"raw": _swing_periods(rows, split, target),
+                             "rules": _swing_periods(apply_rules(rows, target), split, target)}
         spreads = [t["spread_r"] for t in rows]
         stops = [t["stop_daily_atr"] for t in rows if t["stop_daily_atr"] is not None]
         out["strategies"][strategy_id] = {
@@ -190,6 +216,10 @@ def summarize_swing(trades: list[dict], split: float) -> dict:
         return {"strategy_id": chosen, "target_r": float(target), **out["strategies"][chosen]["targets"][target]["rules"]}
 
     out["selected"] = {"smc": best(SWING_IDS[:1]), "ema_pullback": best(EMA_IDS)}
+    # Hesap geneli: secilen stratejiler tek portfoy; gunluk sinir ve kayip serisi hepsine birlikte uygulanir.
+    chosen = {pick["strategy_id"]: str(pick["target_r"]) for pick in out["selected"].values() if pick}
+    together = [t for t in trades if t["strategy_id"] in chosen]
+    out["portfolio"] = _swing_periods(apply_rules(together, chosen), split, chosen) if chosen else None
     return out
 
 
@@ -197,6 +227,11 @@ def summarize_swing(trades: list[dict], split: float) -> dict:
 class _Rates:
     def __init__(self, bounds):
         self._bounds = bounds
+
+
+def wide_distance(risk: float, daily_atr: float) -> float:
+    """Genis stop: V9'un kendi stop mesafesi ya da 1,5 x gunluk ATR; hangisi uzaksa (stop asla yaklasmaz)."""
+    return max(risk, DAILY_ATR_MULT * daily_atr)
 
 
 def v9_symbol(args: tuple) -> dict:
@@ -259,7 +294,7 @@ def v9_symbol(args: tuple) -> dict:
         risk = abs(c.entry - c.stop_loss)
         wide = None
         if daily and risk > 0:
-            distance = max(risk, DAILY_ATR_MULT * daily)
+            distance = wide_distance(risk, daily)
             wide = outcome.simulate(c.side, c.entry, c.entry - sign * distance, c.entry + sign * 2 * distance,
                                     c.entry + sign * 3 * distance, clock.now,
                                     before + m15[index + 1:index + 1 + outcome.SWING_MAX_BARS], spread=spread,
@@ -268,7 +303,9 @@ def v9_symbol(args: tuple) -> dict:
             errors += 1
             continue
         trades.append({"strategy_id": c.strategy_id, "symbol": symbol, "side": c.side, "at": clock.now,
-                       "r": base["r"], "wide_r": wide["r"] if wide else None,
+                       "r": base["r"], "closed_at": base["closed_at"], "open_r": base.get("open_r"),
+                       "wide_r": wide["r"] if wide else None, "wide_closed_at": wide["closed_at"] if wide else None,
+                       "wide_open_r": wide.get("open_r") if wide else None,
                        "wide_open": wide is not None and wide["r"] is None,
                        "spread_r": round(spread / risk, 4) if risk > 0 else None})
         open_until = base["closed_at"] if base["closed_at"] is not None else float("inf")
@@ -282,7 +319,9 @@ def summarize_v9(trades: list[dict], split: float) -> dict:
         rows = trades if name == "all" else [t for t in trades if t["strategy_id"] == name]
         wide = [t for t in rows if t["wide_r"] is not None or t["wide_open"]]
         spreads = [t["spread_r"] for t in rows if t["spread_r"] is not None]
-        out[name] = {"base": _periods(rows, split, lambda t: t["r"]), "wide_stop": _periods(wide, split, lambda t: t["wide_r"]),
+        out[name] = {"base": _periods(rows, split, lambda t: t["r"], lambda t: t["closed_at"], lambda t: t["open_r"]),
+                     "wide_stop": _periods(wide, split, lambda t: t["wide_r"], lambda t: t["wide_closed_at"],
+                                           lambda t: t["wide_open_r"]),
                      "spread_r_median": round(statistics.median(spreads), 4) if spreads else None}
     return out
 
@@ -315,6 +354,9 @@ def run_job(job_path: Path, pool_factory=None) -> dict:
                 continue
             if data.get("signature") == signature and data.get("done"):
                 done[symbol] = data
+    for stale in folder.glob("v9-*.json"):  # baska pencereye/surume ait eski dosyalar
+        if stale.name[3:-5] not in done:
+            stale.unlink(missing_ok=True)
     todo = [symbol for symbol in symbols if symbol not in done]
     workers = max(1, min(int(job.get("workers") or 1), len(todo) or 1))
     if todo:

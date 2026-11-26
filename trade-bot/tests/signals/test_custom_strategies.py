@@ -444,3 +444,23 @@ async def test_restart_pause_blocks_a_live_new_strategy_too_but_shadow_bookkeepi
     await shadow.bot.on_bar_close()
     rows = shadow.repo.conn.execute("SELECT symbol, strategy_id FROM shadow_trades").fetchall()
     assert ("EURUSD", PULLBACK) in [tuple(r) for r in rows]  # golge kaydi bekleme sirasinda da tutulur
+
+
+def test_stale_upper_timeframes_are_not_shown_to_strategies(monkeypatch):
+    """Yenilenememis (bayat) H4/D1 onbellegi swing stratejilerine verilmez; taze olan verilir."""
+    seen = {}
+
+    class Probe:
+        id, kind = "tb_probe", "strategy"
+
+        def evaluate(self, context):
+            seen.update({frame: len(context.bars.get(frame) or []) for frame in ("H4", "D1")})
+
+    monkeypatch.setattr(custom, "modules", lambda kind: [Probe()])
+    m15, provider = pullback_m15(), None
+    provider = Provider(m15, h1_up())
+    day = 86400
+    provider.bars["H4"] = [bar(NOW - 4 * H1, 1.0, 1.0, 1.0, 1.0)]
+    provider.bars["D1"] = [bar(NOW - 6 * day, 1.0, 1.0, 1.0, 1.0)]  # 5 gun once kapanmis: bayat
+    custom.evaluate(provider, eurusd(), equity=10_000.0, risk_pct=0.5, modes={}, now=NOW, report={})
+    assert seen == {"H4": 1, "D1": 0}
