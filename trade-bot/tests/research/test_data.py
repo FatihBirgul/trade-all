@@ -95,3 +95,23 @@ def test_fetch_all_collects_bid_ask_and_counts_missing_and_failed_months(monkeyp
     assert eur["h1"] == [(jan, 108600, 108650, 108550, 108600, pytest.approx(1.0))]
     assert eur["ask"] == {jan: 108610} and eur["missing_months"] == 1 and eur["failed"] == 0
     assert got["BTCUSD"]["h1"][0][4] == 1.5 and got["ETHUSD"]["failed"] == 2
+
+
+def test_combine_merges_symbol_files_and_their_meta(tmp_path):
+    import json
+    import sqlite3
+    for name in ("EURUSD", "US30"):
+        db = sqlite3.connect(tmp_path / f"{name}.db")
+        for statement in data._SCHEMA:
+            db.execute(statement)
+        db.execute("INSERT INTO bars VALUES (?,?,?,?,?,?,?,?)", (name, "H1", T0, 1, 2, 0.5, 1.5, 0))
+        db.execute("INSERT INTO spreads VALUES (?,?,?)", (name, T0, 0.1))
+        meta = {"start": T0, "end": T0 + 3600, "symbols": {name: {"days": 1}},
+                "market": {"instruments": [{"symbol": name, "kind": "forex"}], "spreads": {name: {"all": 0.1}}}}
+        db.execute("INSERT INTO meta VALUES ('meta', ?)", (json.dumps(meta),))
+        db.commit()
+        db.close()
+    meta = data.combine([tmp_path / "EURUSD.db", tmp_path / "US30.db"], tmp_path / "all.db")
+    assert set(meta["symbols"]) == {"EURUSD", "US30"} and len(meta["market"]["instruments"]) == 2
+    db = sqlite3.connect(tmp_path / "all.db")
+    assert db.execute("SELECT COUNT(*) FROM bars").fetchone()[0] == 2

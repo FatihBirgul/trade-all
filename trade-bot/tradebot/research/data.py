@@ -273,16 +273,47 @@ def build(job: dict, exness_path: Path | None, out: Path, years: float, symbols:
     return meta
 
 
+def combine(parts: list[Path], out: Path) -> dict:
+    """Sembol basina indirilmis dosyalari tek dosyada birlestirir (bars, spreads, meta.symbols birlesimi)."""
+    db = sqlite3.connect(out)
+    for statement in _SCHEMA:
+        db.execute(statement)
+    meta: dict = {"symbols": {}}
+    for part in sorted(parts):
+        src = sqlite3.connect(part)
+        try:
+            db.executemany("INSERT OR REPLACE INTO bars VALUES (?,?,?,?,?,?,?,?)", src.execute("SELECT * FROM bars"))
+            db.executemany("INSERT OR REPLACE INTO spreads VALUES (?,?,?)", src.execute("SELECT * FROM spreads"))
+            row = src.execute("SELECT value FROM meta").fetchone()
+        finally:
+            src.close()
+        if row:
+            m = json.loads(row[0])
+            meta["symbols"].update(m.get("symbols", {}))
+            meta["start"], meta["end"] = m["start"], m["end"]
+            market = meta.setdefault("market", {"instruments": [], "spreads": {}})
+            seen = {r["symbol"] for r in market["instruments"]}
+            market["instruments"] += [r for r in m.get("market", {}).get("instruments", []) if r["symbol"] not in seen]
+            market["spreads"].update(m.get("market", {}).get("spreads", {}))
+    db.execute("INSERT OR REPLACE INTO meta VALUES ('meta', ?)", (json.dumps(meta),))
+    db.commit()
+    db.close()
+    return meta
+
+
 def main(argv: list[str]) -> dict:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--job", type=Path, required=True)
+    parser.add_argument("--job", type=Path)
     parser.add_argument("--exness", type=Path)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--years", type=float, default=6.0)
     parser.add_argument("--only", nargs="*")
+    parser.add_argument("--combine", nargs="*", type=Path, help="sembol dosyalarini birlestir")
     args = parser.parse_args(argv)
-    job = json.loads(args.job.read_text())
-    return build(job, args.exness, args.out, args.years, args.only)
+    if args.combine:
+        return combine(args.combine, args.out)
+    job = json.loads(args.job.read_text()) if args.job else {}
+    return build(job, args.exness, args.out, args.years, args.only, workers=12)
 
 
 if __name__ == "__main__":

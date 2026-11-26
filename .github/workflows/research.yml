@@ -71,11 +71,16 @@ jobs:
             [ "$code" = "200" ] && ok=$((ok+1))
           done
           echo "basarili: $ok"
-  data:
+  fetch:
     needs: [prep, probe]
     if: needs.prep.outputs.fetch == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 33
+      matrix:
+        symbol: ${{ fromJson(needs.prep.outputs.symbols) }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -91,12 +96,42 @@ jobs:
           path: market
           run-id: ${{ inputs.market_run || '45890500451' }}
           github-token: ${{ github.token }}
-      - name: Dukascopy / Binance + Exness birlestirme
+      - name: Indir (${{ matrix.symbol }})
         working-directory: trade-bot
+        env:
+          SYMBOL: ${{ matrix.symbol }}
         run: |
           set -euo pipefail
           gunzip -k ../market/history.db.gz
-          python -m tradebot.research.data --job ../market/job.json --exness ../market/history.db --out ../research.db
+          mkdir -p ../sym
+          python -m tradebot.research.data --job ../market/job.json --exness ../market/history.db \
+            --out "../sym/$SYMBOL.db" --only "$SYMBOL"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sym-${{ matrix.symbol }}
+          path: sym
+          retention-days: 2
+  data:
+    needs: fetch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: trade-bot
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --quiet -e trade-bot
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: sym-*
+          path: sym
+          merge-multiple: true
+      - name: Birlestir
+        working-directory: trade-bot
+        run: |
+          set -euo pipefail
+          python -m tradebot.research.data --combine ../sym/*.db --out ../research.db
           python - <<'PY'
           import json, sqlite3
           db = sqlite3.connect("../research.db")
