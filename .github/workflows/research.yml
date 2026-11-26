@@ -1,7 +1,11 @@
 name: Arastirma (Faz 5 walk-forward)
-# Faz 5 strateji arastirmasi. Sunucuda HICBIR hesap yapilmaz; sunucudan hicbir sey cekilmez:
-#   data : 5 yillik piyasa verisi. Exness'in son ~12 ayi, son yillik backtest calismasinin "market-data"
-#          artifact'indan (yalnizca piyasa verisi); oncesi Dukascopy (FX, metal, endeks) ve Binance (BTC, ETH).
+# Faz 5 strateji arastirmasi. Sunucuda HICBIR hesap yapilmaz ve sunucudan hicbir sey cekilmez.
+#   data     : 6 yillik piyasa verisi (5 yil + 1 yil isinma). Exness'in son ~12 ayi, son yillik backtest calismasinin
+#              "market-data" artifact'indan (yalnizca piyasa verisi); oncesi Dukascopy (FX, metal, endeks) ve
+#              Binance (BTC, ETH). Yalnizca commit mesajinda [veri] varsa (ya da elle) yeniden indirilir; yoksa
+#              trade-bot/tradebot/research/data_run.txt'deki calismanin verisi kullanilir.
+#   run      : sembol basina bir is; walk-forward (KASA VERISI KESILMIS) + monkey test.
+#   assemble : birlestirme, beklenen tesadufi gecen sayisi. KASA burada calismaz (ayri, bir kez).
 # Artifact'lar herkese aciktir: yalnizca piyasa verisi ve benzetim sonucu, kisa saklama. Hesap verisi YOK.
 on:
   workflow_dispatch:
@@ -10,15 +14,11 @@ on:
         description: 'Exness piyasa verisinin alinacagi backtest calismasi (run id)'
         required: false
         default: '45890500451'
-      years:
-        description: 'Kac yillik veri'
-        required: false
-        default: '5'
   push:
     branches: ['claude/faz5-**']
     paths:
       - '.github/workflows/research.yml'
-      - 'trade-bot/tradebot/research/data.py'
+      - 'trade-bot/tradebot/research/**'
 permissions:
   contents: read
   actions: read
@@ -29,9 +29,33 @@ env:
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONUTF8: '1'
 jobs:
-  data:
+  prep:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    outputs:
+      fetch: ${{ steps.p.outputs.fetch }}
+      symbols: ${{ steps.p.outputs.symbols }}
+      data_run: ${{ steps.p.outputs.data_run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: trade-bot/tradebot/research
+      - id: p
+        env:
+          MESSAGE: ${{ github.event.head_commit.message }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          echo "symbols=$(python3 -c 'import json;print(json.dumps(json.load(open("trade-bot/tradebot/research/symbols.json"))))')" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT" = "workflow_dispatch" ] || printf '%s' "$MESSAGE" | grep -q '\[veri\]' || [ ! -s trade-bot/tradebot/research/data_run.txt ]; then
+            echo "fetch=true" >> "$GITHUB_OUTPUT"; echo "data_run=${{ github.run_id }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "fetch=false" >> "$GITHUB_OUTPUT"; echo "data_run=$(tr -d '[:space:]' < trade-bot/tradebot/research/data_run.txt)" >> "$GITHUB_OUTPUT"
+          fi
+  data:
+    needs: prep
+    if: needs.prep.outputs.fetch == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
@@ -40,6 +64,13 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install --quiet -e trade-bot
+      - name: Kaynak yoklamasi (adres bicimi)
+        run: |
+          for u in "https://datafeed.dukascopy.com/datafeed/EURUSD/2023/00/BID_candles_hour_1.bi5" \
+                   "https://datafeed.dukascopy.com/datafeed/USA30IDXUSD/2023/00/BID_candles_hour_1.bi5" \
+                   "https://data.binance.vision/data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2023-01.zip"; do
+            curl -sS -o /dev/null -w "%{http_code} %{size_download} %{time_total}s $u\n" --max-time 60 "$u" || true
+          done
       - name: Exness piyasa verisi (onceki calismanin artifact'i)
         uses: actions/download-artifact@v4
         with:
@@ -52,21 +83,84 @@ jobs:
         run: |
           set -euo pipefail
           gunzip -k ../market/history.db.gz
-          python -m tradebot.research.data --job ../market/job.json --exness ../market/history.db \
-            --out ../research.db --years "${{ inputs.years || '5' }}"
+          python -m tradebot.research.data --job ../market/job.json --exness ../market/history.db --out ../research.db
           python - <<'PY'
           import json, sqlite3
           db = sqlite3.connect("../research.db")
           meta = json.loads(db.execute("SELECT value FROM meta").fetchone()[0])
-          print("sembol:", len(meta["symbols"]))
           for tf, n in db.execute("SELECT tf, COUNT(*) FROM bars GROUP BY tf"):
               print(tf, n)
-          print("ozet:", json.dumps({s: {k: v.get(k) for k in ("days", "source", "exness_h1", "other_h1", "compare", "error")}
-                                     for s, v in meta["symbols"].items()}))
+          print("kaynak:", json.dumps({s: {k: v.get(k) for k in ("days", "source", "exness_h1", "other_h1", "missing_months",
+                                                                    "failed", "compare", "error")}
+                                        for s, v in meta["symbols"].items()}))
           PY
           gzip -1 ../research.db
       - uses: actions/upload-artifact@v4
         with:
           name: research-data
           path: research.db.gz
-          retention-days: 3
+          retention-days: 7
+  run:
+    needs: [prep, data]
+    if: always() && needs.prep.result == 'success' && (needs.data.result == 'success' || needs.data.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        symbol: ${{ fromJson(needs.prep.outputs.symbols) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            trade-bot
+            trade-ai-unified
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --quiet -e trade-bot
+      - uses: actions/download-artifact@v4
+        with:
+          name: research-data
+          path: .
+          run-id: ${{ needs.prep.outputs.data_run }}
+          github-token: ${{ github.token }}
+      - name: Walk-forward (${{ matrix.symbol }})
+        working-directory: trade-bot
+        env:
+          SYMBOL: ${{ matrix.symbol }}
+        run: |
+          set -euo pipefail
+          gunzip -k ../research.db.gz
+          python -m tradebot.research.run symbol --data ../research.db --symbol "$SYMBOL" --out ../parts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: part-${{ matrix.symbol }}
+          path: parts
+          retention-days: 7
+  assemble:
+    needs: run
+    if: always() && needs.run.result != 'cancelled'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: trade-bot
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --quiet -e trade-bot
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: part-*
+          path: parts
+          merge-multiple: true
+      - name: Birlestir (kasa YOK)
+        working-directory: trade-bot
+        run: python -m tradebot.research.run assemble --parts ../parts --out ../wf.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: walk-forward
+          path: wf.json
+          retention-days: 14

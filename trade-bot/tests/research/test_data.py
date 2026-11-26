@@ -70,3 +70,28 @@ def test_symbol_sources_and_month_list():
     assert data.source_of("USTEC") == ("dukascopy", "USATECHIDXUSD") and data.source_of("BTCUSD")[0] == "binance"
     assert data.source_of("EURUSD") == ("dukascopy", "EURUSD")
     assert data.months(data.month_start(2023, 11), data.month_start(2024, 2)) == [(2023, 11), (2023, 12), (2024, 1)]
+
+
+def test_fetch_all_collects_bid_ask_and_counts_missing_and_failed_months(monkeypatch):
+    start, end = data.month_start(2024, 1), data.month_start(2024, 3)
+    jan = data.month_start(2024, 1)
+
+    def fake_get(url):
+        if "2024/01/" in url:  # subat (0'dan sayilir): eksik
+            return None
+        if "ETHUSDT" in url:
+            raise RuntimeError("ag")
+        if "BTCUSDT" in url:
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer, "w") as archive:
+                archive.writestr("x.csv", f"{jan * 1000},1,2,0.5,1.5,1")
+            return buffer.getvalue()
+        price = 108600 if "/BID_" in url else 108610
+        return bi5([(0, price, price, price - 50, price + 50, 1.0)])
+
+    monkeypatch.setattr(data, "_get", fake_get)
+    got = data.fetch_all(["EURUSD", "BTCUSD", "ETHUSD"], start, end, workers=4)
+    eur = got["EURUSD"]
+    assert eur["h1"] == [(jan, 108600, 108650, 108550, 108600, pytest.approx(1.0))]
+    assert eur["ask"] == {jan: 108610} and eur["missing_months"] == 1 and eur["failed"] == 0
+    assert got["BTCUSD"]["h1"][0][4] == 1.5 and got["ETHUSD"]["failed"] == 2

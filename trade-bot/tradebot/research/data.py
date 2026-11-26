@@ -164,33 +164,62 @@ def _get(url: str, tries: int = 5) -> bytes | None:
     raise RuntimeError(f"indirilemedi: {url}")
 
 
-def fetch_symbol(symbol: str, start: int, end: int) -> dict:
-    """-> {"h1": [(zaman, o, h, l, c, v)], "ask": {zaman: ask kapanisi} (Dukascopy), "raw": olceksiz mi}."""
+def _tasks(symbol: str, start: int, end: int) -> list[tuple]:
     source, code = source_of(symbol)
-    bars, ask = [], {}
+    out = []
     for year, month in months(start, end):
-        begin = month_start(year, month)
         if source == "binance":
-            raw = _get(BINANCE.format(code=code, year=year, month=month))
-            bars += parse_binance(raw) if raw else []
-            continue
-        for side in ("BID", "ASK"):
-            raw = _get(DUKASCOPY.format(code=code, year=year, month=month - 1, side=side))
-            rows = decode_dukascopy(raw, begin) if raw else []
-            if side == "BID":
-                bars += rows
+            out.append((symbol, "binance", BINANCE.format(code=code, year=year, month=month), month_start(year, month), "BID"))
+        else:
+            for side in ("BID", "ASK"):
+                out.append((symbol, "dukascopy", DUKASCOPY.format(code=code, year=year, month=month - 1, side=side),
+                            month_start(year, month), side))
+    return out
+
+
+def fetch_all(names: list[str], start: int, end: int, workers: int = 32) -> dict:
+    """Butun sembollerin aylik dosyalari tek havuzda paralel indirilir -> sembol -> {h1, ask, source, code, ...}."""
+    tasks = [task for name in names for task in _tasks(name, start, end)]
+    got: dict = {name: {"source": source_of(name)[0], "code": source_of(name)[1], "h1": [], "ask": {},
+                        "integer": source_of(name)[0] == "dukascopy", "missing_months": 0, "failed": 0}
+                 for name in names}
+
+    def one(task):
+        symbol, source, url, begin, side = task
+        try:
+            raw = _get(url)
+        except RuntimeError:
+            return task, None, True
+        if raw is None:
+            return task, None, False
+        return task, (parse_binance(raw) if source == "binance" else decode_dukascopy(raw, begin)), False
+
+    done = 0
+    with concurrent.futures.ThreadPoolExecutor(workers) as pool:
+        for (symbol, source, url, begin, side), rows, failed in pool.map(one, tasks):
+            done += 1
+            entry = got[symbol]
+            if failed:
+                entry["failed"] += 1
+            elif rows is None:
+                entry["missing_months"] += side == "BID"
+            elif side == "BID":
+                entry["h1"] += rows
             else:
-                ask.update({row[0]: row[4] for row in rows})
-    bars = [row for row in bars if start <= row[0] < end and row[2] >= row[3] > 0]
-    return {"source": source, "code": code, "h1": bars, "ask": ask, "integer": source == "dukascopy"}
+                entry["ask"].update({row[0]: row[4] for row in rows})
+            if done % 500 == 0:
+                print(f"indirildi {done}/{len(tasks)}", flush=True)
+    for entry in got.values():
+        entry["h1"] = sorted(r for r in entry["h1"] if start <= r[0] < end and r[2] >= r[3] > 0)
+    return got
 
 
 def build(job: dict, exness_path: Path | None, out: Path, years: float, symbols: list[str] | None = None,
-          workers: int = 8) -> dict:
+          workers: int = 32) -> dict:
     """Uc kaynagi birlestirip `out` dosyasini yazar -> meta."""
     from ..backtest import read_history  # sunucunun disa aktardigi dosya (Exness mumlari)
     exness = read_history(exness_path) if exness_path and exness_path.exists() else None
-    names = symbols or sorted({row["symbol"] for row in job.get("instruments", [])} | set(INDICES))
+    names = symbols or json.loads((Path(__file__).parent / "symbols.json").read_text())
     end = int(time.time() // D1 * D1)
     start = end - int(years * 365.25 * D1)
     meta: dict = {"start": start, "end": end, "symbols": {}}
@@ -198,13 +227,12 @@ def build(job: dict, exness_path: Path | None, out: Path, years: float, symbols:
     for statement in _SCHEMA:
         db.execute(statement)
 
-    def one(symbol: str):
-        return symbol, fetch_symbol(symbol, start, end)
-
-    with concurrent.futures.ThreadPoolExecutor(workers) as pool:
-        for symbol, fetched in pool.map(one, names):
+    fetched_all = fetch_all(names, start, end, workers)
+    if True:
+        for symbol, fetched in fetched_all.items():
             ex_h1 = [dict(bar) for bar in exness.all(symbol, "H1")] if exness else []
-            info = {"source": fetched["source"], "code": fetched["code"], "exness_h1": len(ex_h1)}
+            info = {"source": fetched["source"], "code": fetched["code"], "exness_h1": len(ex_h1),
+                    "missing_months": fetched["missing_months"], "failed": fetched["failed"]}
             rows = fetched["h1"]
             scale = 1.0
             if rows and fetched["integer"]:
@@ -233,6 +261,9 @@ def build(job: dict, exness_path: Path | None, out: Path, years: float, symbols:
             db.commit()
             print(f"{symbol:8s} {info['source']:9s} gun={info.get('days')} exness={len(ex_h1)} diger={len(other)} "
                   f"olcek={scale:g} fark={info['compare']}", flush=True)
+    meta["market"] = {"instruments": [{"symbol": row["symbol"], "kind": row.get("kind")}
+                                      for row in job.get("instruments", []) if row.get("symbol") in names],
+                      "spreads": {k: v for k, v in (job.get("spreads") or {}).items() if k in names}}
     db.execute("INSERT OR REPLACE INTO meta VALUES ('meta', ?)", (json.dumps(meta),))
     db.commit()
     db.close()
@@ -244,7 +275,7 @@ def main(argv: list[str]) -> dict:
     parser.add_argument("--job", type=Path, required=True)
     parser.add_argument("--exness", type=Path)
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--years", type=float, default=5.0)
+    parser.add_argument("--years", type=float, default=6.0)
     parser.add_argument("--only", nargs="*")
     args = parser.parse_args(argv)
     job = json.loads(args.job.read_text())
