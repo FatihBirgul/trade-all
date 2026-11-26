@@ -52,3 +52,43 @@ def test_stages_can_be_switched_off_and_missing_entry_bar_is_not_guessed():
     assert result["r"] == -1.0
     late = [b for b in bars((99.9, 100.1, 100.0), (99.9, 100.1, 100.0)) if b["time"] != 100 * 900]
     assert simulate("BUY", 100.0, 99.0, 102.0, 103.0, AT, late, **RULES) is None
+
+
+# ---------------------------------------------------------------- swing cikis plani
+from tradebot.signals.outcome import simulate_swing  # noqa: E402
+
+
+def swing(side, moves, target_r=2.0, **kwargs):
+    stop = 99.0 if side == "BUY" else 101.0
+    return simulate_swing(side, 100.0, stop, target_r, AT, bars(*moves), **kwargs)
+
+
+def test_swing_stop_before_tp1_is_minus_one_r():
+    result = swing("BUY", [(99.5, 100.8, 100.2), (98.9, 100.3, 99.0)])
+    assert (result["first"], result["r"]) == ("SL", -1.0)
+
+
+def test_swing_tp1_closes_half_and_moves_the_stop_to_entry():
+    # 1R gorulur (yari kapanir, stop girise), sonra fiyat girise doner: +0,5R
+    result = swing("BUY", [(99.8, 101.05, 101.0), (99.9, 101.0, 100.0)])
+    assert (result["first"], result["r"]) == ("TP1", 0.5)
+
+
+def test_swing_progress_locks_profit_then_target_closes_the_rest():
+    # 2R hedef. %60 ilerleme (1,2R): kilit 0,6R. Sonra geri donus: yari 1R + yari 0,6R = 0,8R
+    locked = swing("BUY", [(99.8, 101.25, 101.2), (100.5, 101.2, 100.55)])
+    assert locked["r"] == 0.8
+    # %80 ilerleme (1,6R): kilit 1,2R -> yari 1R + yari 1,2R = 1,1R
+    assert swing("BUY", [(99.8, 101.65, 101.6), (101.1, 101.6, 101.15)])["r"] == 1.1
+    # hedef: yari 1R + yari 2R = 1,5R
+    full = swing("BUY", [(99.8, 101.3, 101.2), (101.25, 102.1, 102.0)])
+    assert (full["first"], full["r"]) == ("TP1", 1.5)
+
+
+def test_swing_sell_pays_the_spread_at_the_stop_and_small_targets_have_no_partial():
+    # SAT: bid 100,95'e cikti; spread 0,1 ile ask 101,05 stopa degdi
+    assert swing("SELL", [(99.5, 100.95, 100.9)], spread_at=lambda moment: 0.1)["r"] == -1.0
+    assert swing("SELL", [(99.5, 100.95, 100.9)])["r"] is None  # spread'siz stop olmazdi
+    # Hedef 1R ise ara hedef yok: tamami hedefte kapanir
+    assert swing("BUY", [(99.8, 101.05, 101.0)], target_r=1.0)["r"] == 1.0
+    assert simulate_swing("BUY", 100.0, 100.0, 2.0, AT, bars()) is None  # risk sifir
