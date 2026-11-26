@@ -1,7 +1,7 @@
 import React from "react";
 import { Alert } from "react-native";
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
-import Connection from "../app/(tabs)/connection";
+import Connection from "../app/connection";
 import { BotError } from "../src/bot/client";
 import { useBot } from "../src/bot/state";
 import { ThemeProvider } from "../src/theme";

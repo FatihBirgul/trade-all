@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import { Alert } from "react-native";
-import { BotInput, BotPage } from "../../src/bot/BotPage";
-import { useBot } from "../../src/bot/state";
-import { useTheme } from "../../src/theme";
-import { Button, Card, Heading, Label, Row, ScreenHeader } from "../../src/ui";
+import { BotInput, BotPage } from "../src/bot/BotPage";
+import { useBot } from "../src/bot/state";
+import { useTheme } from "../src/theme";
+import { Button, Card, Heading, Label, Row, ScreenHeader } from "../src/ui";
 
 export default function Connection() {
   const bot = useBot();
