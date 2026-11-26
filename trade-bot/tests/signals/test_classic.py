@@ -125,3 +125,62 @@ def test_forward_replay_runs_the_three_strategies_with_their_own_exits():
     moment = d1[100]["time"] + 86400  # 100. gunluk mumun kapanisi
     assert level(moment, "BUY", 20) == min(b["low"] for b in d1[80:100])  # kapanan gunun kendisi dahil degil
     assert level(d1[5]["time"] + 86400, "BUY", 20) is None
+
+
+# ---------------------------------------------------------------- bagimsiz inceleme bulgulari (PR #29)
+def _bar(time, close, low=None, high=None):
+    return {"time": time, "open": close, "high": high if high is not None else close + 0.1,
+            "low": low if low is not None else close - 0.1, "close": close}
+
+
+def test_channel_exit_sees_a_daily_close_that_has_no_midnight_bar():
+    """Cuma: piyasa gece yarisindan once kapanir. Gunun son mumu kanali kirdiysa, sonraki ILK mumda cikilir."""
+    from tradebot.signals import outcome
+    day = 86400 * 20000
+    friday = [_bar(day + 900 * i, 100.0) for i in range(80)] + [_bar(day + 900 * 80, 98.9)]  # son mum 20:15'te kapanir
+    monday = [_bar(day + 3 * 86400 - 7200 + 900 * i, 99.2) for i in range(4)]
+    seen = []
+
+    def channel(moment):
+        seen.append(moment)
+        return 99.0
+
+    result = outcome.simulate_channel("BUY", 100.0, 95.0, day + 5, friday + monday, channel)
+    assert seen == [day + 86400]  # cuma gununun kapanisi icin soruldu
+    assert result["first"] == "CHANNEL" and result["closed_at"] == monday[0]["time"] + 900
+    assert result["r"] == round((99.2 - 100.0) / 5.0, 3)  # cikis, gercekte islem yapilabilen ilk mumun kapanisindan
+    kept = outcome.simulate_channel("BUY", 100.0, 95.0, day + 5, friday[:-1] + [_bar(day + 900 * 80, 99.5)] + monday,
+                                    lambda moment: 99.0)
+    assert kept["first"] is None  # cuma kapanisi kanalin ustunde: islem surer
+
+
+def test_fixed_exit_keeps_its_clock_time_when_bars_are_missing_and_rejects_a_target_inside_the_spread():
+    from tradebot.signals import outcome
+    at = 86400 * 20000
+    bars = [_bar(at + 900 * i, 100.0) for i in range(1, 30) if i not in (3, 4, 5)]  # uc mum eksik
+    result = outcome.simulate_fixed("BUY", 100.0, 99.0, 102.0, at + 900, bars, max_bars=40, deadline=at + 900 * 10)
+    assert result["first"] == "TIME" and result["closed_at"] == at + 900 * 10
+    assert outcome.simulate_fixed("BUY", 10.03, 9.0, 10.02, at + 900, bars) is None
+    assert outcome.simulate_fixed("SELL", 9.97, 11.0, 9.98, at + 900, bars) is None
+
+
+def test_turtle_evaluates_a_friday_close_on_the_first_bar_of_the_week_and_only_once():
+    from tradebot.signals.modules.base import Context
+    from tradebot.signals.modules.strategies.classic import Turtle55
+    day = 86400 * 20000
+    d1 = [{"time": day - 86400 * (90 - i), "open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0} for i in range(89)]
+    d1.append({"time": day - 86400, "open": 100.0, "high": 104.0, "low": 100.0, "close": 103.5})  # kirilim gunu ("cuma")
+    last_of_day = _bar(day - 7200, 103.5)  # piyasa 22:15'te kapandi: gece yarisi mumu yok
+    first = _bar(day + 2 * 86400 - 7200, 103.6)  # haftanin ilk mumu
+    second = _bar(first["time"] + 900, 103.7)
+
+    def run(m15, days=d1):
+        return Turtle55().evaluate(Context(symbol="X", bars={"M15": m15, "D1": days}, now=m15[-1]["time"] + 900))
+
+    assert run([last_of_day]) is None  # gunluk mum henuz kapanmadi (veri: yalnizca kapanmis gunluk mumlar)
+    signal = run([last_of_day, first])
+    assert signal is not None and signal.side == "BUY" and signal.stop < signal.entry
+    assert run([last_of_day, first, second]) is None  # ayni gunluk kapanis ikinci kez degerlendirilmez
+    midnight = _bar(day - 900, 103.5)
+    assert run([_bar(day - 1800, 103.4), midnight]) is not None  # olagan gun: gece yarisi mumu
+    assert run([_bar(day + 5 * 86400, 103.6)]) is None  # bayat gunluk veri

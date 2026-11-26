@@ -238,6 +238,7 @@ def simulate_channel(side: str, entry: float, stop: float, at: float, bars: list
     spread_at = spread_at or (lambda moment: 0.0)
     after = [b for b in bars if b["time"] + BAR_SECONDS > at][:CHANNEL_MAX_BARS]
     best = worst = 0.0
+    previous = None  # onceki mum (giristen sonraki)
     for index, bar in enumerate(after):
         shift = spread_at(bar["time"]) if side == "SELL" else 0.0
         adverse = ((bar["low"] if side == "BUY" else bar["high"] + shift) - entry) * sign / risk
@@ -247,9 +248,19 @@ def simulate_channel(side: str, entry: float, stop: float, at: float, bars: list
         if adverse <= -1.0:
             return {"first": "SL", "r": -1.0, "closed_at": closed_at, "bars": index + 1, "mfe_r": round(best, 2),
                     "mae_r": round(worst, 2)}
+        # Gun kapanisi: gece yarisinda kapanan mum varsa o mumun kapanisi. Yoksa (cuma: piyasa gece yarisindan once
+        # kapanir) gunun son mumunun kapanisina bakilir ve cikis, sonraki ILK mumun kapanisindan yapilir.
+        daily, boundary = None, None
         if closed_at % 86400 == 0:
-            level = channel(closed_at)
-            if level is not None and (bar["close"] - level) * sign < 0:
+            daily, boundary = bar["close"], closed_at
+        elif previous is not None:
+            before = previous["time"] + BAR_SECONDS
+            if before % 86400 and before // 86400 < closed_at // 86400:
+                daily, boundary = previous["close"], (before // 86400 + 1) * 86400
+        previous = bar
+        if daily is not None:
+            level = channel(boundary)
+            if level is not None and (daily - level) * sign < 0:
                 return {"first": "CHANNEL", "r": round((bar["close"] + shift - entry) * sign / risk, 3),
                         "closed_at": closed_at, "bars": index + 1, "mfe_r": round(best, 2), "mae_r": round(worst, 2)}
     last = ((after[-1]["close"] + (spread_at(after[-1]["time"]) if side == "SELL" else 0.0)) - entry) * sign / risk if after else 0.0
@@ -258,15 +269,17 @@ def simulate_channel(side: str, entry: float, stop: float, at: float, bars: list
 
 
 def simulate_fixed(side: str, entry: float, stop: float, target: float, at: float, bars: list[dict], *,
-                   spread_at=None, max_bars: int = FIXED_MAX_BARS) -> dict | None:
+                   spread_at=None, max_bars: int = FIXED_MAX_BARS, deadline: float | None = None) -> dict | None:
     """Sabit stop + sabit hedef (golge izleyicinin kurali), ondan BAGIMSIZ yazilmis ikinci hesap.
 
     Fiyatlar acikca alis/satis olarak izlenir: AL pozisyonu satis fiyatindan (bid) kapanir, SAT pozisyonu alis
     fiyatindan (ask = bid + spread). `entry`, pozisyonun acildigi gercek fiyattir (AL icin ask, SAT icin bid).
     Ayni mumda stop ve hedef birlikte gorulurse stop sayilir. `max_bars` mum icinde ikisi de olmazsa o mumun
-    kapanisindan cikilir; daha az mum varsa islem aciktir (r None)."""
+    kapanisindan cikilir; daha az mum varsa islem aciktir (r None). `deadline` verilirse, o anda ya da sonra kapanan
+    ilk mumun kapanisindan cikilir (eksik mum olsa da saat kaymaz). Hedef, gercek giris fiyatinin kar tarafinda
+    degilse (spread hedefi yuttu) islem yoktur (None)."""
     risk = abs(entry - stop)
-    if risk <= 0:
+    if risk <= 0 or (target - entry) * (1.0 if side == "BUY" else -1.0) <= 0:
         return None
     spread_at = spread_at or (lambda moment: 0.0)
     after = [b for b in bars if b["time"] + BAR_SECONDS > at][:max_bars]
@@ -286,6 +299,10 @@ def simulate_fixed(side: str, entry: float, stop: float, target: float, at: floa
             return {"first": "SL" if lost else "TP", "r": -1.0 if lost else round(abs(target - entry) / risk, 3),
                     "closed_at": bar["time"] + BAR_SECONDS, "bars": index + 1, "mfe_r": round(best, 2),
                     "mae_r": round(worst, 2)}
+        if deadline is not None and bar["time"] + BAR_SECONDS >= deadline:
+            after = after[:index + 1]
+            max_bars = index + 1
+            break
     if len(after) >= max_bars:
         last = after[-1]
         exit_price = last["close"] + (spread_at(last["time"]) if side == "SELL" else 0.0)

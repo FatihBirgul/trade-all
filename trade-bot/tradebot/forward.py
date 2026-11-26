@@ -180,7 +180,8 @@ def _simulate_planned(signal, entry: float, now: float, after: list[dict], state
     kind = signal.plan["type"]
     if kind == "FIXED":  # sabit stop + sabit hedef; sure dolunca kapanistan cikis
         return outcome.simulate_fixed(signal.side, entry, signal.stop, signal.plan["target"], now, after,
-                                      spread_at=spread_at, max_bars=int(signal.plan["max_bars"]))
+                                      spread_at=spread_at, max_bars=int(signal.plan["max_bars"]),
+                                      deadline=signal.plan.get("exit_at"))
     if kind == "CHANNEL":
         return outcome.simulate_channel(signal.side, entry, signal.stop, now, after,
                                         lambda moment: channel(moment, signal.side, int(signal.plan["exit_days"])),

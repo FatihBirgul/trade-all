@@ -34,6 +34,7 @@ ASIA_END, LONDON_END, DAY_EXIT = 8, 12, 21  # Londra saati
 ASIA_MIN_BARS = 24
 RANGE_MIN_ATR, RANGE_MAX_ATR = 0.2, 1.0
 TURTLE_ENTRY, TURTLE_EXIT, TURTLE_N, TURTLE_STOP_N = 55, 20, 20, 2.0
+TURTLE_STALE = 3 * 86400  # gunluk kapanistan bu kadar sonra gelen ilk mum hala gecerli (hafta sonu)
 
 
 def _local(moment: float, zone: ZoneInfo) -> datetime:
@@ -137,7 +138,7 @@ class AsiaLondon:
         exit_at = local.replace(hour=DAY_EXIT, minute=0, second=0, microsecond=0)
         bars_left = max(1, int((exit_at.timestamp() - closed_at) // M15))
         detail = {"type": "FIXED", "model": "asya araligi / londra kirilimi", "score": None, "target": target,
-                  "max_bars": bars_left, "volume_ratio": None}
+                  "max_bars": bars_left, "exit_at": exit_at.timestamp(), "volume_ratio": None}
         return Signal(side, close, stop, target, "Asya araliginin Londra seansinda kapanisla kirilimi",
                       bar_time=int(m15[-1]["time"]), plan=detail)
 
@@ -150,8 +151,13 @@ class Turtle55:
         if not m15 or len(d1) < TURTLE_ENTRY + TURTLE_N + 1:
             return None
         closed_at = int(m15[-1]["time"]) + M15
-        if int(d1[-1]["time"]) + 86400 != closed_at:
-            return None  # gunluk mum bu M15 mumuyla kapanmadi (ya da veri guncel degil)
+        day_close = int(d1[-1]["time"]) + 86400
+        # Gunluk mum kapandiktan sonraki ILK M15 kapanisi: olagan gunde gece yarisi mumu; cuma gunu (piyasa gece
+        # yarisindan once kapanir) haftanin ilk mumu.
+        if not (day_close <= closed_at <= day_close + TURTLE_STALE):
+            return None  # gunluk mum henuz kapanmadi ya da veri guncel degil
+        if len(m15) >= 2 and int(m15[-2]["time"]) + M15 >= day_close:
+            return None  # bu gunluk kapanis daha once degerlendirildi
         frame = Frame(d1)
         n_value = v13.rma_series(frame.tr, TURTLE_N)[-1]
         close = frame.C[-1]
