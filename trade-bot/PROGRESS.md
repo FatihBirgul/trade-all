@@ -878,3 +878,60 @@ Okuma:
   bu listede yok. Eski masanın altın ağırlıklı sonuçları bu yüzden burada sınanamadı (açık konu).
 - Sonuç sunucuya yüklendi; uygulamadaki Backtest ekranı bu tabloyu gösterir. Canlıya alma kapısı açılmadı
   (hiçbir strateji geçmedi); bot dry-run'da.
+
+## Altın/gümüş tarama listesinden düştü: kök neden ve düzeltme (2026-11-26 gece, kontrolcü kararı 1)
+
+**Belirti:** 16:18 UTC'de ayar ekranında 30/30 sembol vardı; 21:08 UTC'de XAGUSD ve XAUUSD yoktu. Bot 28 sembol
+taradı, ilk yıllık backtest de 28 sembolle çalıştı. Kullanıcıya hiçbir bildirim gitmedi.
+
+**Kök neden (kodda doğrulandı):** evren üyeliği, broker'ın o ANKİ işlem kipine bağlıydı (`tradable` =
+sözleşme bilgisi tam VE `trade_mode == enabled`) ve katalog yalnızca açılışta okunuyordu. Açılışta — ya da olay
+akışından gelen bir enstrüman iletisinde — "işleme kapalı" görünen sembol, broker yeniden açsa bile süreç yaşadıkça
+evrende yoktu; ayar ekranı (`/symbols`), ayar doğrulaması ve backtest dışa aktarımı da aynı listeyi kullandığı için
+sembol her yerden kayboluyordu. 26 Kasım ABD Şükran Günü: metaller erken kapandı; akşamki üç dağıtım (19:41, 20:19
+UTC) botu metaller kapalıyken yeniden başlattı. Bugünkü değişikliklerin (maliyet kapısı, spread profili, swap
+alanları) hiçbiri sembol elemiyor: gerçek XAUUSD koşul kaydı ayrıştırıcıdan sorunsuz geçiyor (test).
+**Doğrulanamayan:** sunucudaki o anki `trade_mode` değeri (günlüğe yazılmıyordu); düzeltmeden sonra sağlık çıktısı
+bunu gösterir.
+
+**Düzeltme:**
+- Üyelik ile "şu an açık" ayrıldı: `Instrument.listed` / `trade_mode`, `catalog.members()` (bütün üyeler) ve
+  `catalog.universe()` (şu an taranabilir; emir yolu için DEĞİŞMEDİ: kapalı sembol taranmaz, emir açılmaz).
+- `/symbols`, ayar doğrulaması ve backtest dışa aktarımı üyeleri kullanır: tatil günü liste kısalmaz, backtest
+  kapalı sembolü de geçmiş mumlarıyla ölçer.
+- `watch_universe` (açılışta ve 10 dakikada bir, yalnızca okuma): kapalı/okunamamış üyeleri broker'dan yeniden
+  okur; açıldıysa tarama listesine ve fiyat aboneliğine geri döner.
+- **Uyarı:** daha önce taranmış bir sembol listeden düşünce bir kez `symbols_dropped` bildirimi (neden: broker işlem
+  kipi ya da "katalogda yok/okunamadı"), dönünce `symbols_restored`. Durum yeniden başlatmadan sonra da hatırlanır.
+- Eksik (kısmi) bir olay iletisi bilinen bir sembolü evrenden düşüremez.
+- Sağlık çıktısı: `universe` = üye / taranan sayısı, kapalı semboller ve işlem kipleri (hesap verisi değil).
+- Testler: `tests/test_universe_watch.py` (5 test).
+
+## Backtest sonrası kararlar (2026-11-26 gece, kontrolcü: kullanıcının yetkisiyle; hepsi sıkılaştırma)
+
+- **M15 stratejileri kapalı** (`tb_ema_pullback_v1`, `tb_donchian_breakout_v1`, `tb_silver_bullet_v1`): gölgede
+  bile karneyi kirletiyorlardı. **V9'un dört stratejisi canlıdan gölgeye** (`fx_failed_breakout_v6`,
+  `fx_confirmed_breakout_v6`, `fx_range_reversion_v6`; `fx_trend_momentum_v6` gölgede izlenir). Sunucuda BİR KEZ
+  uygulanır (`strategy_policy` = 1), daha sıkı bir seçimi gevşetmez, sonrasında kullanıcının uygulamadan yaptığı
+  seçim korunur. Sonuç: canlıya geçilse bile şu an emir açabilecek strateji YOK. Test: `tests/test_strategy_policy.py`.
+- **WEEK TRADE adil kıyas satırı** (`tb_week_trade_v1_orig6`): özgün altı sembol (BTC, ETH, XAU, EUR, USDCHF,
+  GBPAUD) ve kendi portföy kuralı (grup başına tek açık işlem, günde en çok 2 giriş). Yalnızca bilgi satırı:
+  canlıya alma kapısında sayılmaz, birleşik portföye girmez. 28 sembolde PF 0,73 kendi tasarımının dışında bir
+  kullanımdı.
+- **Not (kontrolcü 5):** 90 günlük ileri testte ARTI çıkan "eski yorum" stratejileri bir yılda EKSİ:
+  `tb_smc_sweep_v1` 1 yıl −3,2R (PF 0,92; yarıyıllar −4,2R / +1,0R), `tb_emapb_h1_20_21_v1` 1 yıl −9,7R (PF 0,84).
+  90 günlük artı, pencere seçiminin ürünüydü.
+
+## Yapılacaklar (ertelendi; 30 sembollü backtestten sonra, bu sırayla — ŞİMDİ YAPILMAYACAK)
+
+1. Telefona push bildirim (uygulama kapalıyken).
+2. Sunucu çökerse dış uyarı.
+3. Art arda 3 kayıpta günü durdur.
+4. Kötü giden stratejiyi otomatik gölgeye al.
+5. Günlük özet bildirimi.
+6. Bakiye grafiği.
+7. İşlemin açılış nedeni.
+8. Uygulama bildirim simgesi eksik (boş kare görünüyor).
+9. Bütün ayarlar önerilen aralığın dışına çıkabilsin, "emin misin?" uyarısıyla (kullanıcı yönetici); stopsuz
+   işlem ve emir başı lot tavanı için iki aşamalı onay. (Bu madde risk sınırlarını gevşetme yolu açar: test +
+   bağımsız inceleme + kullanıcının açık onayı gerekir.)

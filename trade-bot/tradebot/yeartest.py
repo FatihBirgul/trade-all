@@ -50,6 +50,15 @@ COVERAGE_QUANTILE = 0.2  # kapsam, sembollerin en kotu %20'lik diliminin sinirin
 UNRESOLVED_HOLD = 31 * DAY  # sonuclanmamis islem portfoyde en cok bu kadar yer tutar (benzetimin en uzun tutma suresi)
 PASS_MAX_AGE = 45 * DAY  # gecis, pencerenin bitisinden bu kadar sonra gecerliligini yitirir
 TB_IDS = forward.SWING_IDS + forward.PLAN_IDS + forward.FIXED_IDS
+# Adil kiyas satiri (kullanici istegi 2026-11-26): WEEK TRADE, eski masadaki OZGUN kullanimiyla: alti sembol ve
+# kendi portfoy kurali (grup basina tek acik islem, gunde en cok 2 giris). Yalnizca bilgi satiridir: canliya alma
+# kapisinda sayilmaz, birlesik portfoye girmez.
+WEEK_ID = "tb_week_trade_v1"
+WEEK_VARIANT_ID = "tb_week_trade_v1_orig6"
+WEEK_SYMBOLS = ("BTCUSD", "ETHUSD", "XAUUSD", "EURUSD", "USDCHF", "GBPAUD")
+WEEK_GROUP = {"BTCUSD": "kripto", "ETHUSD": "kripto", "EURUSD": "usd", "XAUUSD": "usd", "USDCHF": "usd",
+              "GBPAUD": "gbpaud"}
+WEEK_MAX_PER_DAY = 2
 
 
 def compact(trade: dict) -> dict:
@@ -148,10 +157,25 @@ def verdict(windows: dict, halves: dict, complete: bool) -> dict:
     return {"passed": not reasons, "reasons": reasons}
 
 
-def summarize(trades: list[dict], currencies: dict, start: float, end: float, covered: dict) -> dict:
-    """Bir stratejinin (ya da birlesik portfoyun) sonucu. `covered`: pencere -> veri tam mi."""
+def week_portfolio(trades: list[dict], currencies: dict | None = None) -> tuple[list[dict], int]:
+    """WEEK TRADE'in kendi portfoy kurali (`bt.py`): grup basina tek acik islem, gunde en cok 2 giris."""
+    accepted, rejected, open_until, per_day = [], 0, {}, {}
+    for trade in sorted(trades, key=lambda t: (t["a"], t["y"])):
+        group, day = WEEK_GROUP[trade["y"]], int(trade["a"] // DAY)
+        if open_until.get(group, 0.0) > trade["a"] or per_day.get(day, 0) >= WEEK_MAX_PER_DAY:
+            rejected += 1
+            continue
+        open_until[group] = trade["c"] if trade["c"] is not None else trade["a"] + UNRESOLVED_HOLD
+        per_day[day] = per_day.get(day, 0) + 1
+        accepted.append(trade)
+    return accepted, rejected
+
+
+def summarize(trades: list[dict], currencies: dict, start: float, end: float, covered: dict, rule=None) -> dict:
+    """Bir stratejinin (ya da birlesik portfoyun) sonucu. `covered`: pencere -> veri tam mi. `rule`: portfoy
+    kurali (varsayilan: botun kurali)."""
     opened = [t for t in trades if not t["b"]]
-    accepted, rejected = portfolio(opened, currencies)
+    accepted, rejected = (rule or portfolio)(opened, currencies)
     span = end - start
     windows = {name: {**metrics(accepted, end - share * span), "complete": bool(covered.get(name))}
                for name, share in WINDOW_SHARES.items()}
@@ -283,6 +307,11 @@ def run(job: dict, folder: Path, pool_factory=None) -> dict:
         mine = [t for t in v9_trades if t["s"] == strategy_id]
         strategies[strategy_id] = {"source": "v9", **summarize(mine, currencies, start, end, covered(max(v9_from, data_from)))}
     passed = [name for name, row in strategies.items() if row["verdict"]["passed"]]
+    original = [t for t in tb_trades if t["s"] == WEEK_ID and t["y"] in WEEK_GROUP]
+    strategies[WEEK_VARIANT_ID] = {
+        "source": "variant", "of": WEEK_ID, "symbols": [s for s in WEEK_SYMBOLS if s in symbols],
+        "symbols_missing": [s for s in WEEK_SYMBOLS if s not in symbols],
+        **summarize(original, currencies, start, end, covered(data_from, tb_done == len(symbols)), week_portfolio)}
     combined = None
     if passed:
         both = [t for t in tb_trades + v9_trades if t["s"] in passed]

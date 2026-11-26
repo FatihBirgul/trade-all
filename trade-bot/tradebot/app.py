@@ -100,6 +100,15 @@ BACKTEST_ROUNDS = 6  # V9 bitmediyse ayni gecmisle art arda en cok bu kadar tur 
 # ceker ve disa aktarir (yalnizca piyasa verisi); hesap GitHub Actions'ta yapilir, sonuc dosyasi sunucuya yuklenir.
 BACKTEST_ON_SERVER = False
 RESULTS_DIR = Path(os.environ.get("TRADEBOT_RESULTS_DIR", "/opt/tradebot/backtest-results"))  # dagitim kullanicisi yazar
+# Kullanici karari (2026-11-26, ilk yillik backtestten sonra): asagidaki kipler BIR KEZ uygulanir; sonrasinda
+# kullanici uygulamadan degistirebilir. Yalnizca sikilastirir (hicbir stratejiyi canliya almaz).
+STRATEGY_POLICY = "strategy_policy"
+STRATEGY_POLICY_VERSION = 1
+POLICY_OFF = ("tb_ema_pullback_v1", "tb_donchian_breakout_v1", "tb_silver_bullet_v1")  # M15: karneyi kirletiyor
+POLICY_SHADOW = ("fx_failed_breakout_v6", "fx_confirmed_breakout_v6", "fx_range_reversion_v6",
+                 "fx_trend_momentum_v6")  # V9: 1 yilda zararda / kenari olcutun altinda -> canlidan golgeye
+UNIVERSE_INTERVAL = 600.0  # isleme kapali / okunamamis evren sembollerine yeniden bakma araligi (sn)
+UNIVERSE_WATCH = "universe_watch"  # ayar: {"seen": [...], "missing": {sembol: neden}}
 RESULTS_INTERVAL = 60.0  # yuklenen sonuc dosyalarina bakma araligi (sn)
 RESULTS_MAX_BYTES = 8_000_000
 YEAR_DAYS = 365.0  # yillik backtestin penceresi (bkz. yeartest.py)
@@ -260,6 +269,80 @@ class Bot:
                            f"{len(universe)} sembol izleniyor" + pause,
                            {"universe": len(universe), "catalog_errors": len(catalog_errors), "dry_run": dry_run,
                             "version": _version()})
+        await self.watch_universe(recheck=False)
+        await self._apply_strategy_policy()
+
+    async def _apply_strategy_policy(self) -> None:
+        """Backtest sonrasi kullanici kararini bir kez uygular: M15 stratejileri kapali, V9 stratejileri golgede.
+        Daha siki bir kip (kapali) gevsetilmez; hicbir strateji canliya alinmaz."""
+        if (self.repo.get_setting(STRATEGY_POLICY) or 0) >= STRATEGY_POLICY_VERSION:
+            return
+        settings = self.repo.get_bot_settings()
+        changed = {}
+        for strategy_id in POLICY_OFF:
+            if strategy_mode(settings, strategy_id) != "off":
+                settings.strategy_modes[strategy_id] = changed[strategy_id] = "off"
+        for strategy_id in POLICY_SHADOW:
+            if strategy_mode(settings, strategy_id) == "live":
+                settings.strategy_modes[strategy_id] = changed[strategy_id] = "shadow"
+        if changed:
+            self.repo.set_bot_settings(settings)
+        self.repo.set_setting(STRATEGY_POLICY, STRATEGY_POLICY_VERSION)
+        if changed:
+            await self._record("info", "strategy_policy",
+                               "Backtest sonrası strateji kipleri güncellendi: "
+                               + ", ".join(f"{name} → {'kapalı' if mode == 'off' else 'gölge'}"
+                                           for name, mode in changed.items()), {"modes": changed})
+
+    def universe_status(self) -> dict:
+        """Evrenin durumu (yalnizca sembol adlari ve broker'in islem kipi): kac uye, kaci su an taranabilir,
+        hangileri kapali / okunamadi. Hesap verisi icermez."""
+        active = {i.symbol for i in self.catalog.universe()}
+        closed = {i.symbol: (i.trade_mode or "bilinmiyor") for i in self.catalog.members() if i.symbol not in active}
+        return {"members": len(active) + len(closed), "active": len(active), "closed": closed,
+                "unreadable": sorted(self.catalog.errors)}
+
+    async def watch_universe(self, recheck: bool = True) -> dict:
+        """Evrenden sembol dusmesini yakalar ve gecici kapanmayi kendiliginden toparlar -> eksikler {sembol: neden}.
+
+        Evrenin uyesi olup su an taranamayan (broker'da islem kipi kapali) ya da okunamamis enstrumanlar broker'dan
+        yeniden okunur; acildiysa tarama listesine geri doner. Daha once taranmis bir sembol listeden dusunce bir
+        kez UYARI, geri gelince bir kez bilgi bildirimi gonderilir. Yalnizca okuma yapar; emir yolu degismez."""
+        def snapshot():
+            active = {i.symbol for i in self.catalog.universe()}
+            return active, {i.symbol: i for i in self.catalog.members() if i.symbol not in active}
+
+        active, closed = snapshot()
+        suspects = sorted({i.broker_symbol for i in closed.values()} | set(self.catalog.errors))
+        if recheck and suspects:
+            await self.catalog.recheck(suspects)
+            active, closed = snapshot()
+        state = self.repo.get_setting(UNIVERSE_WATCH)
+        state = state if isinstance(state, dict) else {}
+        seen = {str(s) for s in state.get("seen") or []}
+        previous = state.get("missing") if isinstance(state.get("missing"), dict) else {}
+        missing = {}
+        for symbol in sorted((seen | set(closed)) - active):
+            instrument = closed.get(symbol)
+            missing[symbol] = (f"broker işlem kipi: {instrument.trade_mode or 'bilinmiyor'}" if instrument is not None
+                               else "broker kataloğunda yok ya da okunamadı")
+        dropped = [s for s in missing if s not in previous]
+        restored = sorted(s for s in previous if s not in missing)
+        if dropped:
+            await self._record("warning", "symbols_dropped",
+                               "Tarama listesinden düşen sembol: " + ", ".join(f"{s} ({missing[s]})" for s in dropped)
+                               + f". Şu an {len(active)} sembol taranıyor.",
+                               {"symbols": dropped, "reasons": {s: missing[s] for s in dropped}, "active": len(active)},
+                               notify=True, title="Sembol listeden düştü")
+        if restored:
+            await self._record("info", "symbols_restored",
+                               "Tarama listesine geri dönen sembol: " + ", ".join(restored)
+                               + f". Şu an {len(active)} sembol taranıyor.",
+                               {"symbols": restored, "active": len(active)}, notify=True,
+                               title="Sembol listeye döndü")
+        if dropped or restored or seen != seen | active:
+            self.repo.set_setting(UNIVERSE_WATCH, {"seen": sorted(seen | active), "missing": missing})
+        return missing
 
     def _set_account(self, state: AccountState | None) -> None:
         if state is None or self._details is None:
@@ -1367,7 +1450,8 @@ class Bot:
             profile = {symbol: {"hours": {str(hour): value for hour, value in entry["hours"].items()},
                                 "all": entry["all"]} for symbol, entry in self.repo.spread_profile().items()}
             bounds: dict[str, list[float]] = {}
-            for instrument in self.catalog.universe():
+            # Evrenin butun uyeleri: o an isleme kapali (tatil) semboller de gecmis mumlariyla olculur.
+            for instrument in self.catalog.members():
                 symbol = instrument.symbol
                 if symbol not in profile:
                     limit, quote = self.quotes.max_spread(symbol), self.quotes.quote(symbol)
@@ -1379,7 +1463,7 @@ class Bot:
                     profile.pop(symbol, None)  # hesap para birimine cevrilemeyen sembol olculmez
                     continue
                 bounds[symbol] = [rate[0], rate[1]]
-            instruments = sorted((i for i in self.catalog.universe() if i.symbol in profile),
+            instruments = sorted((i for i in self.catalog.members() if i.symbol in profile),
                                  key=lambda i: (i.symbol not in BACKTEST_MAJORS, i.kind != "forex", i.symbol))
             end = float(int(now // 86400) * 86400)  # gun basi
             folder.mkdir(parents=True, exist_ok=True)
@@ -1911,6 +1995,7 @@ class Bot:
             self._every(SPREAD_STATS_INTERVAL, self.record_spreads, "spread olcumu"),
             self._once_after(BACKTEST_DELAY, self.backtest_once),
             self._every(RESULTS_INTERVAL, self.import_results, "sonuc ice alma"),
+            self._every(UNIVERSE_INTERVAL, self.watch_universe, "evren denetimi"),
         )
 
 

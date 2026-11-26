@@ -62,7 +62,9 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
                 # Art arda hata veren ic gorevler (ad -> sayi). Bos olmali; doluysa gunluge bakilir.
                 "failing_loops": bot.failing_loops() if hasattr(bot, "failing_loops") else {},
                 # Yeniden baslatmadan sonraki bekleme suruyor mu (bu surede yeni islem acilmaz).
-                "entries_paused": bot.entry_paused() if hasattr(bot, "entry_paused") else False}
+                "entries_paused": bot.entry_paused() if hasattr(bot, "entry_paused") else False,
+                # Evren: uye / su an taranan sembol sayisi, kapali olanlar (sembol -> broker islem kipi).
+                "universe": bot.universe_status() if hasattr(bot, "universe_status") else None}
 
     @public.get("/health/summary")
     async def health_summary(hours: float = Query(default=24.0, ge=0.25, le=168.0)):
@@ -285,13 +287,14 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
 
     @private.get("/symbols")
     async def symbols():
-        """Islem yapilabilen evren: elle islem ekrani ve ayarlar icin."""
+        """Evrenin butun uyeleri (elle islem ekrani ve ayarlar icin). Broker'da gecici olarak isleme kapali olan
+        sembol listede kalir, `open` yanlis doner: liste tatil gunu kisalmaz."""
         now = clock()
         rows = []
-        for instrument in bot.catalog.universe():
+        for instrument in bot.catalog.members():
             age = bot.quotes.age(instrument.symbol)
             quote = bot.quotes.quote(instrument.symbol)
-            is_open = bot._is_open(instrument, now)
+            is_open = instrument.tradable and bot._is_open(instrument, now)
             fresh = age is not None and age <= QUOTE_MAX_AGE
             rows.append({"symbol": instrument.symbol, "kind": instrument.kind, "open": is_open, "quoted": fresh,
                          "bid": quote["bid"] if quote and fresh else None, "ask": quote["ask"] if quote and fresh else None,
@@ -413,7 +416,7 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
         if unknown:
             raise HTTPException(status_code=422, detail="bilinmeyen strateji: " + ", ".join(unknown))
         if body.enabled_symbols is not None:
-            known = {instrument.symbol for instrument in bot.catalog.universe()}
+            known = {instrument.symbol for instrument in bot.catalog.members()}
             # Yalnizca YENI eklenenler denetlenir: listede kalmis, artik evrende olmayan eski bir sembol
             # baska bir ayarin kaydedilmesini engellemesin (o sembol zaten taranmaz).
             strangers = sorted(body.enabled_symbols - known - (previous.enabled_symbols or set()))
