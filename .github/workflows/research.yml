@@ -35,6 +35,8 @@ jobs:
       fetch: ${{ steps.p.outputs.fetch }}
       symbols: ${{ steps.p.outputs.symbols }}
       data_run: ${{ steps.p.outputs.data_run }}
+      mode: ${{ steps.p.outputs.mode }}
+      holdout_runs: ${{ steps.p.outputs.holdout_runs }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -46,6 +48,9 @@ jobs:
         run: |
           set -euo pipefail
           echo "symbols=$(python3 -c 'import json;print(json.dumps(json.load(open("trade-bot/tradebot/research/symbols.json"))))')" >> "$GITHUB_OUTPUT"
+          # kip: base (tum stratejiler) | d1 (ek kural: D1 trend ailesi + sepet) | holdout (KASA, bir kez)
+          echo "mode=$(tr -d '[:space:]' < trade-bot/tradebot/research/mode.txt 2>/dev/null || echo base)" >> "$GITHUB_OUTPUT"
+          echo "holdout_runs=$(tr '\n' ' ' < trade-bot/tradebot/research/holdout_runs.txt 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
           if [ "$EVENT" = "workflow_dispatch" ] || printf '%s' "$MESSAGE" | grep -q '\[veri\]' || [ ! -s trade-bot/tradebot/research/data_run.txt ]; then
             echo "fetch=true" >> "$GITHUB_OUTPUT"; echo "data_run=${{ github.run_id }}" >> "$GITHUB_OUTPUT"
           else
@@ -150,7 +155,7 @@ jobs:
           retention-days: 7
   run:
     needs: [prep, data]
-    if: always() && needs.prep.result == 'success' && (needs.data.result == 'success' || needs.data.result == 'skipped')
+    if: always() && needs.prep.result == 'success' && needs.prep.outputs.mode != 'holdout' && (needs.data.result == 'success' || needs.data.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 300
     strategy:
@@ -181,7 +186,12 @@ jobs:
         run: |
           set -euo pipefail
           gunzip -k ../research.db.gz
-          python -m tradebot.research.run symbol --data ../research.db --symbol "$SYMBOL" --out ../parts
+          if [ "${{ needs.prep.outputs.mode }}" = "d1" ]; then
+            python -m tradebot.research.run symbol --data ../research.db --symbol "$SYMBOL" --out ../parts --d1-rule \
+              --only A01_turtle_s1 A02_turtle_s2 A03_ma_cross A04_faber_sma200 A05_tsmom12 A06_clenow A09_psar A10_ichimoku A11_macd_zero
+          else
+            python -m tradebot.research.run symbol --data ../research.db --symbol "$SYMBOL" --out ../parts
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: part-${{ matrix.symbol }}
@@ -189,7 +199,7 @@ jobs:
           retention-days: 7
   assemble:
     needs: run
-    if: always() && needs.run.result != 'cancelled'
+    if: always() && needs.run.result != 'cancelled' && needs.run.result != 'skipped'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -213,3 +223,48 @@ jobs:
           name: walk-forward
           path: wf.json
           retention-days: 14
+  holdout:
+    # KASA: yalnizca mode.txt = holdout iken; holdout_runs.txt'deki walk-forward calismalarinin BUTUN adaylari icin
+    # BIR KEZ. Sonucuna gore hicbir kural ya da secim degistirilmez.
+    needs: prep
+    if: needs.prep.outputs.mode == 'holdout'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: trade-bot
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --quiet -e trade-bot numpy==2.2.6
+      - uses: actions/download-artifact@v4
+        with:
+          name: research-data
+          path: .
+          run-id: ${{ needs.prep.outputs.data_run }}
+          github-token: ${{ github.token }}
+      - name: Walk-forward sonuclari
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUNS: ${{ needs.prep.outputs.holdout_runs }}
+        run: |
+          set -euo pipefail
+          mkdir -p wf
+          for r in $RUNS; do
+            gh run download "$r" --repo "${{ github.repository }}" --name walk-forward --dir "wf/$r"
+          done
+          ls -R wf
+      - name: KASA (bir kez)
+        working-directory: trade-bot
+        run: |
+          set -euo pipefail
+          gunzip -k ../research.db.gz
+          extra=""
+          if [ -s tradebot/research/index_costs.json ]; then extra="--index-costs tradebot/research/index_costs.json"; fi
+          python -m tradebot.research.run holdout --data ../research.db --wf ../wf/*/wf.json --out ../holdout.json $extra
+      - uses: actions/upload-artifact@v4
+        with:
+          name: holdout
+          path: holdout.json
+          retention-days: 30

@@ -265,13 +265,13 @@ def _in(trades, span):
     return [x for x in trades if span[0] <= x.entry_time < span[1]]
 
 
-def selected(m: dict) -> bool:
-    return bool(m["trades"] >= SELECT["min_trades"] and m["pf"] is not None and m["pf"] >= SELECT["min_pf"]
+def selected(m: dict, min_trades: int | None = None) -> bool:
+    return bool(m["trades"] >= (SELECT["min_trades"] if min_trades is None else min_trades) and m["pf"] is not None and m["pf"] >= SELECT["min_pf"]
                 and m["max_dd_pct"] <= SELECT["max_dd_pct"])
 
 
 def walk_forward(trades: list[Trade], plan: dict, data_from: int, risk_pct: float = RISK_PCT,
-                 gaps: list[int] | None = None) -> dict:
+                 gaps: list[int] | None = None, select_min: int | None = None) -> dict:
     """Pencere sonuclari ve gecme karari. `data_from`: sembolun verisinin (isinma sonrasi) basladigi an. `gaps`:
     verisi indirilemeyen aylarin baslangiclari; boyle bir ay iceren pencere kullanilmaz."""
     rows, counted = [], []
@@ -283,7 +283,7 @@ def walk_forward(trades: list[Trade], plan: dict, data_from: int, risk_pct: floa
         sel = metrics(_in(trades, w["select"]), risk_pct)
         test_trades = _in(trades, w["test"])
         test = metrics(test_trades, risk_pct)
-        pick = selected(sel)
+        pick = selected(sel, select_min)
         rows.append({"k": w["k"], "usable": True, "selected": pick, "select": sel, "test": test})
         if pick:
             counted.append((test_trades, test))
@@ -296,7 +296,8 @@ def walk_forward(trades: list[Trade], plan: dict, data_from: int, risk_pct: floa
 
 
 def monkey(series: Series, spec: Spec, costs: Costs, real: list[tuple[int, int]], plan: dict, data_from: int,
-           reps: int = 200, seed: int = 1, gaps: list[int] | None = None) -> dict:
+           reps: int = 200, seed: int = 1, gaps: list[int] | None = None, select_min: int | None = None,
+           keep: bool = False) -> dict:
     """Ayni sayida ve ayni AL/SAT oraninda rastgele girisler, ayni cikis kurali ve maliyetle. Gercek sinyallerin
     PF'si rastgele dagilimin hangi yuzdeligide; rastgele tekrarlarin kacta kaci gecme kuralini sagliyor."""
     region = plan["region"]
@@ -309,7 +310,7 @@ def monkey(series: Series, spec: Spec, costs: Costs, real: list[tuple[int, int]]
     if count < 5 or len(eligible) < count:
         return {"reps": 0}
     rng = np.random.default_rng(seed)
-    pfs, passes = [], 0
+    pfs, passes, kept = [], 0, []
     for _ in range(reps):
         picks = np.sort(rng.choice(eligible, size=count, replace=False))
         sides = np.array([1] * longs + [-1] * (count - longs))
@@ -317,6 +318,11 @@ def monkey(series: Series, spec: Spec, costs: Costs, real: list[tuple[int, int]]
         trades, _ = simulate(series, spec, costs, entries=list(zip(picks.tolist(), sides.tolist())))
         m = metrics(_in(trades, region))
         pfs.append(m["pf"] if m["pf"] is not None else 0.0)
-        passes += walk_forward(trades, plan, data_from, gaps=gaps)["passed"]
-    return {"reps": reps, "pf_median": round(float(np.median(pfs)), 3), "pass_rate": round(passes / reps, 4),
-            "pfs": pfs}
+        passes += walk_forward(trades, plan, data_from, gaps=gaps, select_min=select_min)["passed"]
+        if keep:  # sepet icin: ayni tekrar sirasiyla sembollerin rastgele islemleri birlestirilir
+            kept.append([[t.entry_time, t.exit_time, t.side, round(t.r, 4)] for t in trades if t.r is not None])
+    out = {"reps": reps, "pf_median": round(float(np.median(pfs)), 3), "pass_rate": round(passes / reps, 4),
+           "pfs": pfs}
+    if keep:
+        out["trades"] = kept
+    return out
