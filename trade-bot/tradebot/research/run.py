@@ -217,10 +217,11 @@ def basket(parts: list[dict]) -> dict:
             trades = [E.Trade(a, b, c, d, w) for row in rows for a, b, c, d, w in row["variants"].get(variant, {}).get("trades", [])]
             wf = E.walk_forward(trades, plan, plan["region"][0], select_min=D1_SELECT_MIN)
             variants[variant] = {**wf, "symbols": len(rows)}
-        reps = min((len(r.get("monkey_trades") or []) for r in rows), default=0)
+        reps = max((len(r.get("monkey_trades") or []) for r in rows), default=0)
         passes = 0
-        for k in range(reps):
-            trades = [E.Trade(a, b, c, d) for r in rows for a, b, c, d in (r.get("monkey_trades") or [])[k]]
+        for k in range(reps):  # monkey'i olmayan (cok az islemli) sembol o tekrara islemsiz katilir
+            trades = [E.Trade(a, b, c, d) for r in rows for a, b, c, d in
+                      ((r.get("monkey_trades") or [])[k] if k < len(r.get("monkey_trades") or []) else [])]
             passes += E.walk_forward(trades, plan, plan["region"][0], select_min=D1_SELECT_MIN)["passed"]
         out[sid] = {"variants": variants, "monkey": {"reps": reps, "pass_rate": round(passes / reps, 4) if reps else None}}
     return out
@@ -295,9 +296,12 @@ def report(summary: dict) -> str:
         lines.append("portfoy (gorulmemis donem): " + json.dumps({k: p[k] for k in ("trades", "rejected", "risk")}))
     for sid, b in (summary.get("baskets") or {}).items():
         won = [v for v, wf in b["variants"].items() if wf["passed"]]
-        first = b["variants"].get("F0/P1", {}).get("oos", {})
-        lines.append(f"  SEPET {sid:22s} gecen={won} F0/P1 gorulmemis: islem={first.get('trades')} R={first.get('net_r')} "
-                     f"PF={first.get('pf')} DD%={first.get('max_dd_pct')} monkey={b['monkey']['pass_rate']}")
+        first = b["variants"].get("F0/P1", {})
+        sel = " ".join(f"k{w['k']}:n={w['select']['trades']},PF={w['select']['pf']},DD={w['select']['max_dd_pct']}"
+                       f"{'*' if w['selected'] else ''}" for w in first.get("windows", []) if w.get("usable"))
+        oos = first.get("oos", {})
+        lines.append(f"  SEPET {sid:22s} gecen={won} monkey={b['monkey']['pass_rate']} F0/P1 secim[{sel}] "
+                     f"gorulmemis: islem={oos.get('trades')} R={oos.get('net_r')} PF={oos.get('pf')}")
     if summary.get("baskets") is not None:
         lines.append(f"sepet tesadufen beklenen gecen: {summary['basket_expected_by_chance']}")
     if summary["errors"]:
