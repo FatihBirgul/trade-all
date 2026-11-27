@@ -15,6 +15,7 @@ import io
 import json
 import lzma
 import math
+import random
 import sqlite3
 import statistics
 import struct
@@ -149,7 +150,7 @@ def compare(exness: list[dict], other: list[dict]) -> dict | None:
 
 
 # ---------------------------------------------------------------- indirme (yalnizca Actions)
-def _get(url: str, tries: int = 4) -> bytes | None:
+def _get(url: str, tries: int = 9) -> bytes | None:
     """404 -> None (o ay yok). 401/403 kalici: hemen hata. Diger hatalar kisa beklemeyle yeniden denenir."""
     for attempt in range(tries):
         try:
@@ -163,7 +164,7 @@ def _get(url: str, tries: int = 4) -> bytes | None:
                 raise RuntimeError(f"erisim reddedildi ({exc.code}): {url}") from exc
         except (urllib.error.URLError, TimeoutError, ConnectionError, OSError):
             pass
-        time.sleep(1.0 + attempt)
+        time.sleep(min(60.0, 2.0 ** attempt) + random.random())  # 503 (sinirlama): artan bekleme
     raise RuntimeError(f"indirilemedi: {url}")
 
 
@@ -313,7 +314,11 @@ def main(argv: list[str]) -> dict:
     if args.combine:
         return combine(args.combine, args.out)
     job = json.loads(args.job.read_text()) if args.job else {}
-    return build(job, args.exness, args.out, args.years, args.only, workers=12)
+    meta = build(job, args.exness, args.out, args.years, args.only, workers=4)
+    failed = {k: v["failed"] for k, v in meta["symbols"].items() if v.get("failed")}
+    if failed:
+        raise SystemExit(f"indirilemeyen dosya kaldi: {failed}")  # eksik veriyle arastirma yapilmaz
+    return meta
 
 
 if __name__ == "__main__":
