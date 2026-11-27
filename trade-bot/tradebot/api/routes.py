@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 
 from .. import yeartest
 from ..app import QUOTE_MAX_AGE, Bot
+from ..market.catalog import in_family
 from ..config import BotSettings, strategy_mode
 from ..signals import custom, scorecard, v9
 from ..signals.shadow import ShadowBook
@@ -253,6 +254,8 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
             instrument = bot.catalog.get(body.symbol)
         except KeyError:
             raise HTTPException(status_code=404, detail="sembol bulunamadı") from None
+        if not in_family(instrument):
+            raise HTTPException(status_code=422, detail="sembol işlem evreninde değil")
         if not instrument.tradable:
             raise HTTPException(status_code=409, detail="sembol işleme kapalı")
         plan = _manual_plan(body, instrument, preview=True)
@@ -309,6 +312,9 @@ def build_router(bot: Bot, clock, stream_interval: float) -> APIRouter:
             instrument = bot.catalog.get(body.symbol)
         except KeyError:
             raise HTTPException(status_code=404, detail="sembol bulunamadı") from None
+        if not in_family(instrument):
+            # Evren disi (or. yalnizca spread olcumu icin fiyati izlenen endeksler): elle de emir yok.
+            raise HTTPException(status_code=422, detail="sembol işlem evreninde değil")
         if not instrument.tradable:
             raise HTTPException(status_code=409, detail="sembol işleme kapalı")
         if body.client_id is not None:

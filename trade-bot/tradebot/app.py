@@ -107,6 +107,9 @@ STRATEGY_POLICY_VERSION = 1
 POLICY_OFF = ("tb_ema_pullback_v1", "tb_donchian_breakout_v1", "tb_silver_bullet_v1")  # M15: karneyi kirletiyor
 POLICY_SHADOW = ("fx_failed_breakout_v6", "fx_confirmed_breakout_v6", "fx_range_reversion_v6",
                  "fx_trend_momentum_v6")  # V9: 1 yilda zararda / kenari olcutun altinda -> canlidan golgeye
+# Yalnizca OLCUM: bu enstrumanlarin fiyatina abone olunur ve spread'i kaydedilir (arastirmanin maliyet modeli icin).
+# Islem evreninde DEGILLER: taranmaz, sinyal uretmez, emir acilmaz.
+MEASURE_ONLY = ("US30", "US500", "USTEC")
 UNIVERSE_INTERVAL = 600.0  # isleme kapali / okunamamis evren sembollerine yeniden bakma araligi (sn)
 UNIVERSE_RECHECK_MAX = 40  # bir turda yeniden okunacak en cok enstruman
 UNIVERSE_ERROR_TRIES = 3  # okunamayan enstruman en cok bu kadar tur yeniden denenir (sonra yeniden baslatmayi bekler)
@@ -363,9 +366,19 @@ class Bot:
         except ValueError as exc:
             log.warning("hesap durumu okunamadi: %s", exc)
 
+    def _measured(self) -> list:
+        """Yalnizca spread olcumu icin izlenen enstrumanlar (katalogda varsa)."""
+        out = []
+        for symbol in MEASURE_ONLY:
+            try:
+                out.append(self.catalog.get(symbol))
+            except KeyError:
+                continue
+        return out
+
     def _tick_symbols(self) -> list[str]:
         """Evren + acik islemlerin sembolleri (broker adlariyla). Donusum pariteleri evrenin icindedir."""
-        names = {i.broker_symbol for i in self.catalog.universe()}
+        names = {i.broker_symbol for i in self.catalog.universe()} | {i.broker_symbol for i in self._measured()}
         for trade in self.repo.open_trades():
             try:
                 names.add(self.catalog.get(trade.symbol).broker_symbol)
@@ -376,13 +389,17 @@ class Bot:
     def _open_streams(self) -> None:
         account_id = self.client.account_id
         ticks = self._stream_factory(self.client, schema.ticks_ws_path(account_id), self.on_tick_message, "ticks")
-        symbols = self._tick_symbols()
+        measured = sorted({i.broker_symbol for i in self._measured()})
+        symbols = [s for s in self._tick_symbols() if s not in measured]
         rate = self._limits.tick_subscription_rate
         chunk = max(1, min(TICK_CHUNK, rate[2])) if rate else 10
         ticks.subscription_delay = (rate[1] * chunk / rate[0] * 1.1) if rate else 1.0
+        # Olcum sembolleri AYRI mesajda: broker onlari (or. isleme kapali oldugu icin) reddederse islem
+        # sembollerinin aboneligi etkilenmez.
         ticks.set_subscriptions([schema.subscribe_ticks(f"ticks-{i // chunk}", symbols[i:i + chunk])
-                                 for i in range(0, len(symbols), chunk)])
-        self._subscribed = set(symbols)
+                                 for i in range(0, len(symbols), chunk)]
+                                + ([schema.subscribe_ticks("ticks-measure", measured)] if measured else []))
+        self._subscribed = set(symbols) | set(measured)
         events = self._stream_factory(self.client, schema.events_ws_path(account_id), self.on_event_message, "events")
         events.subscription_delay = 0.5
         events.set_subscriptions([schema.subscribe_events("events-tx", "transactions"),
@@ -1292,7 +1309,8 @@ class Bot:
             # Basarisiz olursa sayac guncellenmez; bir sonraki kalp atisinda yeniden denenir.
             self._event_connections = connections
         if self._tick_stream is not None:
-            missing = [s for s in self._tick_symbols() if s not in self._subscribed]
+            measured = {i.broker_symbol for i in self._measured()}
+            missing = [s for s in self._tick_symbols() if s not in self._subscribed and s not in measured]
             if missing:
                 self._subscribed.update(missing)
                 await self._tick_stream.subscribe(schema.subscribe_ticks(f"ticks-extra-{int(now)}", missing))
@@ -1750,7 +1768,7 @@ class Bot:
         now = self._clock()
         slot = int(now // SPREAD_STATS_INTERVAL) * SPREAD_STATS_INTERVAL
         rows = []
-        for instrument in self.catalog.universe():
+        for instrument in self.catalog.universe() + self._measured():
             found = self.quotes.recent_median(instrument.symbol, SPREAD_STATS_INTERVAL)
             if found is not None:
                 rows.append((instrument.symbol, slot, found[0], found[1]))
