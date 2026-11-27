@@ -389,13 +389,17 @@ class Bot:
     def _open_streams(self) -> None:
         account_id = self.client.account_id
         ticks = self._stream_factory(self.client, schema.ticks_ws_path(account_id), self.on_tick_message, "ticks")
-        symbols = self._tick_symbols()
+        measured = sorted({i.broker_symbol for i in self._measured()})
+        symbols = [s for s in self._tick_symbols() if s not in measured]
         rate = self._limits.tick_subscription_rate
         chunk = max(1, min(TICK_CHUNK, rate[2])) if rate else 10
         ticks.subscription_delay = (rate[1] * chunk / rate[0] * 1.1) if rate else 1.0
+        # Olcum sembolleri AYRI mesajda: broker onlari (or. isleme kapali oldugu icin) reddederse islem
+        # sembollerinin aboneligi etkilenmez.
         ticks.set_subscriptions([schema.subscribe_ticks(f"ticks-{i // chunk}", symbols[i:i + chunk])
-                                 for i in range(0, len(symbols), chunk)])
-        self._subscribed = set(symbols)
+                                 for i in range(0, len(symbols), chunk)]
+                                + ([schema.subscribe_ticks("ticks-measure", measured)] if measured else []))
+        self._subscribed = set(symbols) | set(measured)
         events = self._stream_factory(self.client, schema.events_ws_path(account_id), self.on_event_message, "events")
         events.subscription_delay = 0.5
         events.set_subscriptions([schema.subscribe_events("events-tx", "transactions"),
@@ -1305,7 +1309,8 @@ class Bot:
             # Basarisiz olursa sayac guncellenmez; bir sonraki kalp atisinda yeniden denenir.
             self._event_connections = connections
         if self._tick_stream is not None:
-            missing = [s for s in self._tick_symbols() if s not in self._subscribed]
+            measured = {i.broker_symbol for i in self._measured()}
+            missing = [s for s in self._tick_symbols() if s not in self._subscribed and s not in measured]
             if missing:
                 self._subscribed.update(missing)
                 await self._tick_stream.subscribe(schema.subscribe_ticks(f"ticks-extra-{int(now)}", missing))
