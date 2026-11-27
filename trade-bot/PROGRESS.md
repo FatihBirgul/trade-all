@@ -1045,3 +1045,19 @@ XAUUSD ve XAGUSD dahil 30 sembol, 365 gün (medyan = taban), V9 763 374 değerle
 Okuma: WEEK TRADE'in özgün kullanımı bir yıllık sınavı geçti (eski masanın 2 yıllık sonucuyla tutarlı: XAU ve kripto
 ağırlıklı). Bu tek pencere çoklu deneme etkisine açıktır; asıl sınav Faz 5'in 5 yıllık walk-forward + kasa testidir
 (orada WEEK TRADE sembol bazında `X_week_trade` olarak ölçülür). Canlıya alma yine kullanıcının onayıyla.
+
+## Faz 5 ilk koşu (2026-11-27 01:50 UTC, run 45917492316) — HATA BULUNDU, sonuçları geçersiz
+
+- Veri: 33 sembol, ~6 yıl (2105–2191 gün). Kaynak farkı küçük: Exness'le örtüşen H1 kapanış farkı medyanı binde
+  0,01–0,75; H1 getiri korelasyonu 0,97–0,9997 (USDHKD 0,62: sabit kur, oynaklık yok). Dukascopy sınırlaması (503)
+  nedeniyle ilk denemede bazı sembollerde ayların yarısı eksikti; artık yeniden deneniyor, kalan boşluklar
+  kaydediliyor ve o ayı içeren pencere kullanılmıyor.
+- Sonuç (geçersiz sayılır): 7888 eşleşme, 167 geçen (34 sembol × strateji çifti), tesadüfen beklenen 71,8.
+- **Hata:** D1 mumları UTC gece yarısıyla kurulduğu için FX/metal/endekste 2–3 saatlik bir "Pazar mumu" oluşuyordu;
+  dar aralık (NR7/NR4) ve dünkü aralık (Williams) kuralları bu mumla bozuluyordu (XAUUSD NR7: 61 işlemde +341R).
+  Düzeltme: Pazar saatleri Pazartesi mumuna katılır (kripto hariç). Portföy hesabı aynı çiftin 10 varyantını ayrı
+  sayıyordu; artık çift başına sabit sıradaki ilk geçen varyant (F0..F4, P1 önce; sonuca bakılmadan). Seçim/geçme
+  kuralları DEĞİŞMEDİ. Kasa henüz çalıştırılmadı.
+- **Gözlem (kural değişikliği DEĞİL, kullanıcıya soru):** D1 trend stratejileri (Turtle, 50/200, Faber, TSMOM,
+  Clenow, MACD) hiçbir seçim penceresinde seçilmedi: sembol başına 24 ayda 30 işleme ulaşmaları yapısal olarak
+  imkânsız (ör. Turtle 55/20 yılda ~5–10 işlem). Ön kayıttaki "≥ 30 işlem" kuralı bu aileyi baştan eliyor.
