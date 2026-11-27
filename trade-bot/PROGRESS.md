@@ -1061,3 +1061,48 @@ ağırlıklı). Bu tek pencere çoklu deneme etkisine açıktır; asıl sınav F
 - **Gözlem (kural değişikliği DEĞİL, kullanıcıya soru):** D1 trend stratejileri (Turtle, 50/200, Faber, TSMOM,
   Clenow, MACD) hiçbir seçim penceresinde seçilmedi: sembol başına 24 ayda 30 işleme ulaşmaları yapısal olarak
   imkânsız (ör. Turtle 55/20 yılda ~5–10 işlem). Ön kayıttaki "≥ 30 işlem" kuralı bu aileyi baştan eliyor.
+
+## Faz 5 düzeltilmiş koşu (2026-11-27 02:03 UTC, run 45925646926) — walk-forward sonucu (kasa ÇALIŞTIRILMADI)
+
+**7888 eşleşme, 159 geçen varyant, 34 (sembol, strateji) çifti; tesadüfen beklenen geçen 59,4** (gerçek ≈ 2,7 katı).
+Geçen stratejiler: ADX/DMI 31, Keltner 29, WEEK TRADE 24, Williams 23, Ichimoku 18, Double 7s 14, Supertrend 9,
+PSAR 6, ORB 4, gece getirisi 1. Hiç geçmeyenler: D1 trend ailesi (seçim kuralına yapısal olarak giremiyor, aşağıda),
+RSI(2), IBS, 3 gün, Turtle Soup, Holy Grail, takvim (ay dönümü, tatil), para birimi / varlıklar arası momentum,
+Bollinger (sıkışma, dönüş), Asya/Londra H1, NR4, EMA H1 20/21 ve 21/50.
+
+| Çift (ilk geçen varyant) | Görülmemiş: işlem / R / PF / düşüş | pencere / artı payı |
+|---|---|---|
+| XAUUSD WEEK TRADE | 47 / +25,8 / 3,13 / %1,4 | 4 / 1,0 |
+| XAUUSD Keltner | 53 / +43,0 / 3,74 / %2,5 | 3 / 0,67 |
+| XAUUSD ADX/DMI · PSAR · Ichimoku | 52 / +33,4 / 2,53 · 46 / +19,1 / 2,40 · 49 / +10,9 / 1,86 | 3–4 |
+| ETHUSD ADX/DMI · Keltner · Williams | 57 / +35,0 / 2,25 · 87 / +29,0 / 1,82 · 216 / +27,4 / 1,32 | 2–4 |
+| BTCUSD Williams · Keltner · Supertrend | 442 / +48,9 / 1,27 · 98 / +15,8 / 1,35 · 98 / +9,2 / 1,24 | 4 |
+| USTEC Williams · ADX · gece getirisi | 125 / +54,8 / 1,87 · 63 / +31,3 / 1,84 · 213 / +29,1 / 1,36 | 2–4 |
+| US30 Keltner · ADX | 81 / +25,4 / 1,63 · 87 / +19,0 / 1,34 | 3–4 |
+| CHFJPY WEEK TRADE · EURNZD ADX · EURJPY Supertrend | 46 / +7,2 / 1,66 · 60 / +16,9 / 1,48 · 68 / +10,1 / 1,37 | 3–4 |
+| (diğer 17 çift) | PF 1,16–1,88 | |
+
+**Görülmemiş dönem portföyü** (34 çiftin her biri bir varyantla; en çok 3 açık işlem, sembol başına 1, para birimi yönü
+başına 2; 358 işlem kabul, 2654 red): 2000 USC → **%0,5 risk: 2665 (düşüş %6,4)**, **%1 risk: 3506 (düşüş %12,5)**; en
+uzun düşüş süresi 174 gün. Bu, seçimden SONRAKİ görülmemiş pencerelerin birleşimidir (4 × 6 ay); kasa değildir.
+
+Okuma ve uyarılar:
+- Geçenler kripto, altın ve ABD endekslerinde yoğun: 2021–2025'in güçlü trendleri. Rejim değişirse (yatay piyasa) bu
+  aileler zarar eder; kasa dönemi bunun ilk sınavı.
+- Tesadüfi beklenti 59 iken 159 geçiş: kenarın bir kısmı gerçek olabilir, ama aynı çiftin varyantları birbirine
+  bağımlıdır (34 çift); tek tek "geçti" yerine çift ve portföy düzeyinde okunmalı.
+- Endeks maliyeti Exness ölçümü değil, Dukascopy ask-bid (Exness spread'i daha geniş olabilir: USTEC/US30 sonuçları
+  iyimser olabilir).
+
+## Nerede kaldım (2026-11-27 02:10 UTC) ve sıradaki adımlar
+
+Durum: Faz 5 altyapısı, 30 stratejinin tamamı + mevcutlar, düzeltilmiş walk-forward koşusu tamam; kod
+`claude/faz5-arastirma` dalında (main'e alınmadı; canlı botu etkilemez). **Kasa çalıştırılmadı.**
+
+Kullanıcı kararı bekleyen:
+1. **D1 trend kuralı:** ön kayıttaki "seçim penceresinde ≥ 30 işlem" D1 trend ailesini yapısal olarak eliyor. Seçenek:
+   kuralı olduğu gibi bırakmak (aile dışarıda kalır) ya da D1 stratejileri için ayrı, tarihli bir ek kural (ör. ≥ 10
+   işlem). Ek kural yazılırsa yalnızca o aile için yeni bir koşu yapılır, sonra kasa.
+2. **Kasanın zamanı:** (1) karara bağlanınca, bütün adaylar için BİR KEZ.
+Sonra: (E) uygulamada "onaylı eşleşmeler" matrisi + botun yalnız onaylı eşleşmeleri kullanması (canlıyı etkiler:
+bağımsız inceleme + kullanıcı onayı). Ertelenen işler listesi geçerli.
