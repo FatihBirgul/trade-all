@@ -1124,3 +1124,21 @@ ailenin (PSAR ve Ichimoku hariç) hiçbir seçim penceresinde seçilmediğiydi; 
 - PSAR ve Ichimoku eski kuralla da denenmişti; adaylar iki koşunun birleşimidir (raporda ayrı görünür).
 - Rapor hem sembol bazında hem sepet bazında verilir. Kasa bütün adaylar için bundan sonra BİR KEZ çalışır;
   kasa sonucuna göre hiçbir kural ya da seçim değiştirilmez.
+
+## D1 ek kural koşusu (2026-11-27 04:54 UTC, run 45942344095)
+
+- **Sembol bazında** (≥ 10 işlem): 2376 eşleşme, 24 geçen varyant, 6 çift (BTCUSD/USDJPY/USTEC/XAUUSD Ichimoku,
+  EURJPY/XAUUSD PSAR) — hepsi eski kuralla da geçmişti; tesadüfen beklenen 1,24. Turtle, Faber, Clenow, MACD artık
+  seçim penceresine giriyor ama sembol başına görülmemiş dönemde 40 işleme ulaşamıyor.
+- **Sepet** (33 sembol birlikte): hiçbiri geçmedi; seçim pencerelerinde PF neredeyse hep < 1 (Turtle S1 0,81–0,91,
+  Turtle S2 0,55–0,66, 50/200 0,36–0,95, Faber 0,54–0,99, TSMOM 0,30–0,62, Clenow 0,78–0,94, PSAR 0,92–1,18,
+  Ichimoku 0,85–0,93, MACD 0,79–0,98); düşüş %14–62. Sepet tesadüfen beklenen 0,84. Okuma: bu dönemde FX ağırlıklı
+  bir CTA trend sepeti maliyet sonrası para kaybettirdi; trend kenarı yalnız tek tek güçlü trendli enstrümanlarda
+  (altın, kripto, Nasdaq) görülüyor.
+
+## KASA — 2026-11-27 (bir kez)
+
+Adaylar: run 45925646926 (159 varyant / 34 çift) ∪ run 45942344095 (24 varyant, ilkinin alt kümesi). Sepet adayı
+yok. Kasa bu adaylar için BİR KEZ çalıştırıldı; sonucu hiçbir kuralı ya da seçimi değiştirmez. Endeks maliyeti bu
+koşuda Dukascopy ask-bid; Exness'in canlı endeks spread'i ölçülmeye başlanınca (PR #32) aynı adaylarla yalnızca
+maliyet duyarlılığı olarak ikinci bir hesap verilecek (seçim değişmez).
