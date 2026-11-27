@@ -23,6 +23,7 @@ from . import engine as E
 from .strategies import BY_ID, STRATEGIES
 
 WARMUP_DAYS = 300
+MAX_MISSING_SHARE = 0.05  # indirilemeyen dosya payi bundan fazlaysa sembol arastirmaya alinmaz
 MONKEY_REPS = 200
 INDICES = {"US30", "US500", "USTEC"}
 
@@ -129,6 +130,13 @@ def run_symbol(data: Path, job: dict, symbol: str, out: Path, only: list[str] | 
         return result
     data_from = int(series["H1"].time[0]) + WARMUP_DAYS * 86400
     result["data_from"] = data_from
+    info = meta.get("symbols", {}).get(symbol, {})
+    gaps = info.get("gaps") or []
+    result["gaps"] = gaps
+    if info.get("files") and info.get("failed", 0) > MAX_MISSING_SHARE * info["files"]:
+        result["error"] = f"veri eksik ({info['failed']}/{info['files']} dosya indirilemedi)"
+        out.write_text(json.dumps(result))
+        return result
     daily = series["D1"]
     series["universe"] = load_universe(data, plan["holdout"][0])  # capraz kesit: diger sembollerin D1'i (kasa kesik)
     for strategy in STRATEGIES:
@@ -151,7 +159,7 @@ def run_symbol(data: Path, job: dict, symbol: str, out: Path, only: list[str] | 
                     E.Trade(t.entry_time, t.exit_time, t.side, t.r,
                             float(weights[int(np.searchsorted(s.time, t.entry_time - s.seconds))]), t.reason)
                     for t in trades]
-                wf = E.walk_forward(weighted, plan, data_from)
+                wf = E.walk_forward(weighted, plan, data_from, gaps=gaps)
                 entry = {**wf, "stats": stats}
                 if wf["passed"]:  # portfoy icin: sayilan test pencerelerindeki islemler (gorulmemis donem)
                     spans = [w["test"] for w, r in zip(plan["windows"], wf["windows"]) if r.get("selected")]
@@ -159,7 +167,7 @@ def run_symbol(data: Path, job: dict, symbol: str, out: Path, only: list[str] | 
                                            for t in weighted if t.r is not None
                                            and any(a <= t.entry_time < b for a, b in spans)]
                 row["variants"][f"{fname}/{sizing}"] = entry
-        mk = E.monkey(s, spec, costs, real or [], plan, data_from, reps=reps)
+        mk = E.monkey(s, spec, costs, real or [], plan, data_from, reps=reps, gaps=gaps)
         region = [t for t in E.simulate(s, spec, costs)[0] if plan["region"][0] <= t.entry_time < plan["region"][1]]
         real_pf = E.metrics(region)["pf"] or 0.0
         pfs = mk.pop("pfs", [])

@@ -123,3 +123,10 @@ def test_monkey_keeps_count_and_side_mix_and_reports_a_pass_rate():
     sp = spec(n, stop=0.5, max_bars=24)
     out = E.monkey(s, sp, E.Costs({}, 0.01), entries, plan, int(s.time[0]), reps=20, seed=5)
     assert out["reps"] == 20 and 0.0 <= out["pass_rate"] <= 1.0 and 0.5 < out["pf_median"] < 2.0
+
+
+def test_a_window_touching_a_missing_month_is_not_used():
+    plan = E.timeline(E.add_months(T0, 72))
+    gap = E.add_months(plan["windows"][3]["test"][0], 1)
+    wf = E.walk_forward([], plan, plan["region"][0], gaps=[gap])
+    assert [r["usable"] for r in wf["windows"]] == [True, True, True, False]

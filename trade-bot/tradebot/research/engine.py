@@ -270,11 +270,14 @@ def selected(m: dict) -> bool:
                 and m["max_dd_pct"] <= SELECT["max_dd_pct"])
 
 
-def walk_forward(trades: list[Trade], plan: dict, data_from: int, risk_pct: float = RISK_PCT) -> dict:
-    """Pencere sonuclari ve gecme karari. `data_from`: sembolun verisinin (isinma sonrasi) basladigi an."""
+def walk_forward(trades: list[Trade], plan: dict, data_from: int, risk_pct: float = RISK_PCT,
+                 gaps: list[int] | None = None) -> dict:
+    """Pencere sonuclari ve gecme karari. `data_from`: sembolun verisinin (isinma sonrasi) basladigi an. `gaps`:
+    verisi indirilemeyen aylarin baslangiclari; boyle bir ay iceren pencere kullanilmaz."""
     rows, counted = [], []
     for w in plan["windows"]:
-        if data_from > w["select"][0]:
+        holed = any(w["select"][0] <= g < w["test"][1] for g in gaps or [])
+        if data_from > w["select"][0] or holed:
             rows.append({"k": w["k"], "usable": False})
             continue
         sel = metrics(_in(trades, w["select"]), risk_pct)
@@ -293,7 +296,7 @@ def walk_forward(trades: list[Trade], plan: dict, data_from: int, risk_pct: floa
 
 
 def monkey(series: Series, spec: Spec, costs: Costs, real: list[tuple[int, int]], plan: dict, data_from: int,
-           reps: int = 200, seed: int = 1) -> dict:
+           reps: int = 200, seed: int = 1, gaps: list[int] | None = None) -> dict:
     """Ayni sayida ve ayni AL/SAT oraninda rastgele girisler, ayni cikis kurali ve maliyetle. Gercek sinyallerin
     PF'si rastgele dagilimin hangi yuzdeligide; rastgele tekrarlarin kacta kaci gecme kuralini sagliyor."""
     region = plan["region"]
@@ -314,6 +317,6 @@ def monkey(series: Series, spec: Spec, costs: Costs, real: list[tuple[int, int]]
         trades, _ = simulate(series, spec, costs, entries=list(zip(picks.tolist(), sides.tolist())))
         m = metrics(_in(trades, region))
         pfs.append(m["pf"] if m["pf"] is not None else 0.0)
-        passes += walk_forward(trades, plan, data_from)["passed"]
+        passes += walk_forward(trades, plan, data_from, gaps=gaps)["passed"]
     return {"reps": reps, "pf_median": round(float(np.median(pfs)), 3), "pass_rate": round(passes / reps, 4),
             "pfs": pfs}

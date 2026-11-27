@@ -199,12 +199,23 @@ def fetch_all(names: list[str], start: int, end: int, workers: int = 32) -> dict
         return task, (parse_binance(raw) if source == "binance" else decode_dukascopy(raw, begin)), False
 
     done = 0
+    results = []
     with concurrent.futures.ThreadPoolExecutor(workers) as pool:
-        for (symbol, source, url, begin, side), rows, failed in pool.map(one, tasks):
+        results = list(pool.map(one, tasks))
+    retry = [r[0] for r in results if r[2]]
+    if retry:  # sinirlama: soguma beklemesinden sonra basarisizlar yavasca bir kez daha
+        print(f"yeniden denenecek: {len(retry)} dosya", flush=True)
+        time.sleep(90)
+        results = [r for r in results if not r[2]]
+        with concurrent.futures.ThreadPoolExecutor(2) as pool:
+            results += list(pool.map(one, retry))
+    if True:
+        for (symbol, source, url, begin, side), rows, failed in results:
             done += 1
             entry = got[symbol]
             if failed:
                 entry["failed"] += 1
+                entry.setdefault("gaps", []).append(begin)
             elif rows is None:
                 entry["missing_months"] += side == "BID"
             elif side == "BID":
@@ -236,7 +247,9 @@ def build(job: dict, exness_path: Path | None, out: Path, years: float, symbols:
         for symbol, fetched in fetched_all.items():
             ex_h1 = [dict(bar) for bar in exness.all(symbol, "H1")] if exness else []
             info = {"source": fetched["source"], "code": fetched["code"], "exness_h1": len(ex_h1),
-                    "missing_months": fetched["missing_months"], "failed": fetched["failed"]}
+                    "missing_months": fetched["missing_months"], "failed": fetched["failed"],
+                    "files": len(_tasks(symbol, start, end)),
+                    "gaps": sorted(set(fetched.get("gaps", [])))}
             rows = fetched["h1"]
             scale = 1.0
             if rows and fetched["integer"]:
@@ -317,7 +330,8 @@ def main(argv: list[str]) -> dict:
     meta = build(job, args.exness, args.out, args.years, args.only, workers=4)
     failed = {k: v["failed"] for k, v in meta["symbols"].items() if v.get("failed")}
     if failed:
-        raise SystemExit(f"indirilemeyen dosya kaldi: {failed}")  # eksik veriyle arastirma yapilmaz
+        print(f"UYARI indirilemeyen dosya: {failed} (eksik aylar kayitli; arastirma o aylari iceren pencereleri "
+              f"kullanmaz, %5'ten fazla eksik sembolu disarida birakir)", flush=True)
     return meta
 
 

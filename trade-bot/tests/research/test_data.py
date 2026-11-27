@@ -90,6 +90,7 @@ def test_fetch_all_collects_bid_ask_and_counts_missing_and_failed_months(monkeyp
         return bi5([(0, price, price, price - 50, price + 50, 1.0)])
 
     monkeypatch.setattr(data, "_get", fake_get)
+    monkeypatch.setattr(data.time, "sleep", lambda seconds: None)  # yeniden deneme beklemesi
     got = data.fetch_all(["EURUSD", "BTCUSD", "ETHUSD"], start, end, workers=4)
     eur = got["EURUSD"]
     assert eur["h1"] == [(jan, 108600, 108650, 108550, 108600, pytest.approx(1.0))]
