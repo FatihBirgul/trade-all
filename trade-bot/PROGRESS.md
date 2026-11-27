@@ -1106,3 +1106,21 @@ Kullanıcı kararı bekleyen:
 2. **Kasanın zamanı:** (1) karara bağlanınca, bütün adaylar için BİR KEZ.
 Sonra: (E) uygulamada "onaylı eşleşmeler" matrisi + botun yalnız onaylı eşleşmeleri kullanması (canlıyı etkiler:
 bağımsız inceleme + kullanıcı onayı). Ertelenen işler listesi geçerli.
+
+## Ön kayda EK KURAL — 2026-11-27 (kullanıcı kararı, kontrolcü aracılığıyla)
+
+Bu ek, D1 trend ailesinin bu kurala göre HİÇBİR sonucu görülmeden yazıldı. Bilinen tek şey, eski kuralla bu
+ailenin (PSAR ve Ichimoku hariç) hiçbir seçim penceresinde seçilmediğiydi; performans rakamları bakılmadı.
+Önceki kural silinmez; ek yalnızca aşağıdaki aileye uygulanır.
+
+- **D1 trend ailesi:** A01 Turtle S1, A02 Turtle S2, A03 50/200, A04 Faber SMA200, A05 TSMOM 12 ay, A06 Clenow,
+  A11 MACD ve bu çalışmada D1 olan A09 PSAR, A10 Ichimoku (Supertrend ve ADX/DMI H4'tür, ailede değildir).
+- **(a) Sembol bazında:** seçim penceresinde en az **10** işlem (eski: 30). PF ≥ 1,2, düşüş ≤ %15 ve görülmemiş dönem
+  geçme koşulları (≥ 40 işlem, PF ≥ 1,15, sayılan pencerelerin ≥ %60'ı artı, ≥ 2 pencere) AYNI.
+- **(b) Sepet:** her strateji 33 sembolün hepsinde, her işlem eşit riskle (%0,5), birlikte (CTA usulü; portföy
+  sınırı yok) tek bir eşleşme sayılır; aynı walk-forward (24 + 6 ay), aynı seçim (≥ 10 işlem, PF ≥ 1,2, düşüş
+  ≤ %15) ve aynı geçme ölçütü sepet düzeyinde uygulanır. Filtre / boyut varyantları sembol bazındakiyle aynı.
+  Çoklu deneme koruması: sembol bazındaki monkey tekrarları aynı tekrar sırasıyla sepette birleştirilir.
+- PSAR ve Ichimoku eski kuralla da denenmişti; adaylar iki koşunun birleşimidir (raporda ayrı görünür).
+- Rapor hem sembol bazında hem sepet bazında verilir. Kasa bütün adaylar için bundan sonra BİR KEZ çalışır;
+  kasa sonucuna göre hiçbir kural ya da seçim değiştirilmez.
