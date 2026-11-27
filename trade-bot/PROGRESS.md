@@ -1197,3 +1197,19 @@ ile 05:10 UTC'de başladı). `mode.txt = done`: kasa işi bir daha tetiklenmez.
 - Okuma: tek başına onaylı çiftlerin çoğu kripto (Williams, Keltner, WEEK) ve altın; endeks trend stratejileri
   kasada çöktü. Yalnızca "onaylılar"dan kurulan bir portföy kasa sonucuna göre seçilmiş olur (bu kez kasa da
   seçime karışır); ileriye dönük beklenti için bozulma oranı esas alınmalı.
+
+## Prop firma sınavı benzetimi (2026-11-27, kullanıcı isteği: Funded Trader Markets 2-Step Plus, cTrader)
+
+Kurallar (kullanıcının ekran görüntülerinden): Faz 1 %8, Faz 2 %5 (faz 2'de bakiye sıfırlanır); toplam kayıp STATİK
+%10; günlük kayıp %4 (17:00 NY'de bakiye/equity büyüğü − başlangıcın %4'ü; gün içi equity); sınavda açık zarar sınırı
+yok; 30 gün işlemsiz = ihlal; swap yok; komisyon her yönde FX %0,0025 / endeks %0,005 / kripto %0,03 (metal FX gibi
+sayıldı — benim varsayımım). Fonlu: ek %1 açık zarar sınırı (hepsi kapanır, pay 70→50→40→30→20).
+Benzetim (`tradebot/research/prop.py`, testler `tests/research/test_prop.py`):
+- Bakış-öne yok: test penceresi k'de yalnızca seçim penceresi k'de seçilmiş eşleşmeler (çift başına sabit sıradaki
+  ilk seçilen varyant); kasa döneminde önceden tanımlı 34 çift (`holdout_pairs.json`).
+- Başlangıçlar: ilk test penceresinden (T−36 ay; öncesi yalnız seçim dönemi) bugüne HER HAFTA; son 12 ay ayrı satır.
+- Equity saatlik (H1) izlenir; bir saatte açık işlemlerin en kötü noktaları aynı anda olmuş sayılır (kötümser).
+- İşlem riski başlangıç bakiyesinin yüzdesi (sabit tutar); P2 varyantında oynaklık çarpanıyla. En çok 3 açık işlem,
+  sembol başına 1. Varyantlar: %0,5 / %0,75 / %1 / uyarlanan (%1; −%4'te %0,5; −%7'de %0,25) / %1 + günlük −%3'te
+  bot hepsini kapatıp günü bitirir.
+- Fonlu: %0,3 × en çok 3 (toplam açık risk ≤ %0,9); ay sonunda başlangıç üstü kâr çekilir, zarar devreder.

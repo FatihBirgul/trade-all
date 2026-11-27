@@ -420,6 +420,107 @@ def holdout_report(result: dict) -> str:
     return "\n".join(lines)
 
 
+def _prop_trade(t, s, spec, costs, h1, weight, rate) -> dict | None:
+    """Islemi prop benzetimi icin: giris fiyati, stop mesafesi, komisyon (R) ve H1 deger yolu."""
+    idx = int(np.searchsorted(s.time, t.entry_time - s.seconds))
+    dist = float(spec.stop[idx])
+    if not dist > 0 or t.r is None:
+        return None
+    spread_in = costs.at(t.entry_time)
+    entry = float(s.close[idx]) + (spread_in if t.side > 0 else 0.0)
+    j0, j1 = int(np.searchsorted(h1.time, t.entry_time)), int(np.searchsorted(h1.time, t.exit_time))
+    worst, close = [], []
+    for j in range(j0, max(j1, j0 + 1)):
+        if j >= len(h1):
+            break
+        if t.side > 0:
+            w, c = (h1.low[j] - entry) / dist, (h1.close[j] - entry) / dist
+        else:
+            shift = costs.at(int(h1.time[j]))
+            w, c = (entry - h1.high[j] - shift) / dist, (entry - h1.close[j] - shift) / dist
+        worst.append(round(float(w), 3))
+        close.append(round(float(c), 3))
+    if not close:
+        worst, close = [round(t.r, 3)], [round(t.r, 3)]
+    close[-1] = round(t.r, 3)
+    worst[-1] = min(worst[-1], round(t.r, 3))
+    return {"entry": t.entry_time, "exit": t.exit_time, "r": round(t.r, 4), "comm_r": round(2 * rate * entry / dist, 5),
+            "w": round(weight, 4), "worst": worst, "close": close}
+
+
+def prop_symbol(data: Path, job: dict, symbol: str, out: Path, holdout_pairs: dict, only: list[str] | None = None) -> dict:
+    """Prop benzetimi icin bacaklar. Test penceresi k'de: secim penceresi k'de SECILEN eslesmelerden cift basina sabit
+    siradaki ilk varyant (bakis-one yok). Kasa doneminde: onceden tanimli portfoy (`holdout_pairs`)."""
+    from .prop import COMMISSION
+    series, spreads, meta = load(data, symbol, None)
+    plan = E.timeline(meta["end"])
+    result = {"symbol": symbol, "plan": plan, "trades": []}
+    if not len(series["H1"]):
+        out.write_text(json.dumps(result))
+        return result
+    series["universe"] = load_universe(data, None)
+    kind, costs = kind_of(symbol, job), costs_for(symbol, job, spreads)
+    rate = COMMISSION.get(kind, COMMISSION["forex"])
+    info = meta.get("symbols", {}).get(symbol, {})
+    gaps, data_from = info.get("gaps") or [], int(series["H1"].time[0]) + WARMUP_DAYS * 86400
+    holdout0 = plan["holdout"][0]
+    for strategy in STRATEGIES:
+        if kind not in strategy.kinds or (only and strategy.id not in only):
+            continue
+        s = series[strategy.tf]
+        spec = strategy.build(s, series)
+        gates = E.filters(s, series["D1"], kind, spread_ratio(s, spreads))
+        weights = E.p2_weights(s, series["D1"])
+        select_min = D1_SELECT_MIN if strategy.id in D1_FAMILY else None
+        by_variant = {}
+        for variant in VARIANT_ORDER:
+            fname, sizing = variant.split("/")
+            if gates.get(fname) is None:
+                continue
+            trades, _ = E.simulate(s, spec, costs, allow=gates[fname])
+            if sizing == "P2":
+                trades = [E.Trade(t.entry_time, t.exit_time, t.side, t.r,
+                                  float(weights[int(np.searchsorted(s.time, t.entry_time - s.seconds))]), t.reason)
+                          for t in trades]
+            wf = E.walk_forward([t for t in trades if t.entry_time < holdout0], plan, data_from, gaps=gaps,
+                                select_min=select_min)
+            by_variant[variant] = (trades, {r["k"] for r in wf["windows"] if r.get("selected")})
+        spans = []
+        for w in plan["windows"]:
+            chosen = next((v for v in VARIANT_ORDER if v in by_variant and w["k"] in by_variant[v][1]), None)
+            if chosen:
+                spans.append((chosen, w["test"]))
+        held = holdout_pairs.get(symbol, {}).get(strategy.id)
+        if held in by_variant:
+            spans.append((held, tuple(plan["holdout"])))
+        for variant, (a, b) in spans:
+            for t in by_variant[variant][0]:
+                if a <= t.entry_time < b:
+                    row = _prop_trade(t, s, spec, costs, series["H1"], t.weight, rate)
+                    if row:
+                        result["trades"].append({"symbol": symbol, "strategy": strategy.id, "variant": variant, **row})
+    out.write_text(json.dumps(result))
+    return result
+
+
+def prop_assemble(parts: Path, out: Path) -> dict:
+    from . import prop
+    trades, plan, end = [], None, 0
+    for path in sorted(parts.glob("*.json")):
+        part = json.loads(path.read_text())
+        plan = plan or part["plan"]
+        for t in part["trades"]:
+            trades.append(prop.PTrade(t["symbol"], int(t["entry"]), int(t["exit"]), float(t["r"]), float(t["comm_r"]),
+                                      float(t["w"]), np.array(t["worst"]), np.array(t["close"])))
+            end = max(end, int(t["exit"]))
+    windows = [tuple(w["test"]) for w in plan["windows"]]
+    result = prop.run_all(trades, windows, tuple(plan["holdout"]), min(end, plan["holdout"][1]))
+    result["trades"] = len(trades)
+    out.write_text(json.dumps(result))
+    print(prop.report(result))
+    return result
+
+
 def _market(path: Path) -> dict:
     db = sqlite3.connect(path)
     try:
@@ -430,7 +531,7 @@ def _market(path: Path) -> dict:
 
 def main(argv: list[str]) -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("symbol", "assemble", "holdout"))
+    parser.add_argument("mode", choices=("symbol", "assemble", "holdout", "prop-symbol", "prop-assemble"))
     parser.add_argument("--data", type=Path)
     parser.add_argument("--job", type=Path, help="verilmezse veri dosyasindaki piyasa bilgisi (meta.market)")
     parser.add_argument("--symbol")
@@ -443,6 +544,14 @@ def main(argv: list[str]) -> None:
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
     job = json.loads(args.job.read_text()) if args.job else (_market(args.data) if args.data else {})
+    if args.mode == "prop-symbol":
+        args.out.mkdir(parents=True, exist_ok=True)
+        pairs = json.loads((Path(__file__).parent / "holdout_pairs.json").read_text())
+        prop_symbol(args.data, job, args.symbol, args.out / f"{args.symbol}.json", pairs)
+        return
+    if args.mode == "prop-assemble":
+        prop_assemble(args.parts, args.out)
+        return
     if args.mode == "symbol":
         args.out.mkdir(parents=True, exist_ok=True)
         run_symbol(args.data, job, args.symbol, args.out / f"{args.symbol}.json", args.only, args.reps, args.d1_rule)

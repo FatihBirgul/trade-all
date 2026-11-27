@@ -48,7 +48,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "symbols=$(python3 -c 'import json;print(json.dumps(json.load(open("trade-bot/tradebot/research/symbols.json"))))')" >> "$GITHUB_OUTPUT"
-          # kip: base (tum stratejiler) | d1 (ek kural: D1 trend ailesi + sepet) | holdout (KASA, bir kez)
+          # kip: base | d1 (ek kural) | holdout (KASA, bir kez) | prop (prop firma sinavi benzetimi) | done
           echo "mode=$(tr -d '[:space:]' < trade-bot/tradebot/research/mode.txt 2>/dev/null || echo base)" >> "$GITHUB_OUTPUT"
           echo "holdout_runs=$(tr '\n' ' ' < trade-bot/tradebot/research/holdout_runs.txt 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
           if [ "$EVENT" = "workflow_dispatch" ] || printf '%s' "$MESSAGE" | grep -q '\[veri\]' || [ ! -s trade-bot/tradebot/research/data_run.txt ]; then
@@ -186,7 +186,9 @@ jobs:
         run: |
           set -euo pipefail
           gunzip -k ../research.db.gz
-          if [ "${{ needs.prep.outputs.mode }}" = "d1" ]; then
+          if [ "${{ needs.prep.outputs.mode }}" = "prop" ]; then
+            python -m tradebot.research.run prop-symbol --data ../research.db --symbol "$SYMBOL" --out ../parts
+          elif [ "${{ needs.prep.outputs.mode }}" = "d1" ]; then
             python -m tradebot.research.run symbol --data ../research.db --symbol "$SYMBOL" --out ../parts --d1-rule \
               --only A01_turtle_s1 A02_turtle_s2 A03_ma_cross A04_faber_sma200 A05_tsmom12 A06_clenow A09_psar A10_ichimoku A11_macd_zero
           else
@@ -198,7 +200,7 @@ jobs:
           path: parts
           retention-days: 7
   assemble:
-    needs: run
+    needs: [prep, run]
     if: always() && needs.run.result != 'cancelled' && needs.run.result != 'skipped'
     runs-on: ubuntu-latest
     steps:
@@ -217,7 +219,12 @@ jobs:
       - run: python -m pip install --quiet numpy==2.2.6
       - name: Birlestir (kasa YOK)
         working-directory: trade-bot
-        run: python -m tradebot.research.run assemble --parts ../parts --out ../wf.json
+        run: |
+          if [ "${{ needs.prep.outputs.mode }}" = "prop" ]; then
+            python -m tradebot.research.run prop-assemble --parts ../parts --out ../wf.json
+          else
+            python -m tradebot.research.run assemble --parts ../parts --out ../wf.json
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: walk-forward

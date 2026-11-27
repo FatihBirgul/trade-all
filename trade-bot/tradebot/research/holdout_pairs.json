@@ -1,0 +1,60 @@
+{
+ "AUDCHF": {
+  "C20_double7": "F2/P1"
+ },
+ "AUDJPY": {
+  "C20_double7": "F4/P1"
+ },
+ "BTCUSD": {
+  "A07_supertrend": "F0/P1",
+  "A08_adx_dmi": "F0/P1",
+  "A10_ichimoku": "F0/P2",
+  "B12_williams": "F0/P1",
+  "B16_keltner": "F0/P1",
+  "C20_double7": "F0/P1"
+ },
+ "CHFJPY": {
+  "X_week_trade": "F0/P1"
+ },
+ "ETHUSD": {
+  "A07_supertrend": "F0/P2",
+  "A08_adx_dmi": "F0/P1",
+  "B12_williams": "F0/P1",
+  "B16_keltner": "F0/P1",
+  "X_week_trade": "F0/P1"
+ },
+ "EURJPY": {
+  "A07_supertrend": "F1/P1",
+  "A08_adx_dmi": "F1/P1",
+  "A09_psar": "F0/P2"
+ },
+ "EURNZD": {
+  "A08_adx_dmi": "F1/P1"
+ },
+ "US30": {
+  "A08_adx_dmi": "F0/P1",
+  "B16_keltner": "F2/P1"
+ },
+ "US500": {
+  "B16_keltner": "F1/P1"
+ },
+ "USDJPY": {
+  "A10_ichimoku": "F0/P1"
+ },
+ "USTEC": {
+  "A08_adx_dmi": "F1/P1",
+  "A10_ichimoku": "F0/P1",
+  "B12_williams": "F1/P1",
+  "B15_orb": "F1/P1",
+  "B16_keltner": "F1/P1",
+  "C20_double7": "F0/P1",
+  "D27_overnight": "F1/P2"
+ },
+ "XAUUSD": {
+  "A08_adx_dmi": "F1/P2",
+  "A09_psar": "F0/P1",
+  "A10_ichimoku": "F0/P1",
+  "B16_keltner": "F1/P1",
+  "X_week_trade": "F0/P1"
+ }
+}

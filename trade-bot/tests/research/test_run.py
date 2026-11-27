@@ -5,6 +5,7 @@ import sqlite3
 import numpy as np
 
 from tradebot.research import data, engine as E, run
+from tradebot.research import prop as PROP
 
 END = E.add_months(1_790_000_000, 0)
 
@@ -87,3 +88,22 @@ def test_d1_rule_lowers_the_selection_minimum_and_builds_a_basket(tmp_path):
     assert b["variants"]["F0/P1"]["symbols"] == 2 and "A07_supertrend" not in summary["baskets"]
     sel = [w for w in b["variants"]["F0/P1"]["windows"] if w.get("usable")]
     assert all(w["selected"] == E.selected(w["select"], run.D1_SELECT_MIN) for w in sel)
+
+
+def test_prop_legs_use_only_what_was_selected_before_each_window(tmp_path):
+    make_db(tmp_path / "a.db")
+    job = run._market(tmp_path / "a.db")
+    pairs = {"EURUSD": {"A07_supertrend": "F0/P1"}}
+    out = run.prop_symbol(tmp_path / "a.db", job, "EURUSD", tmp_path / "p.json", pairs, only=["A07_supertrend"])
+    plan = out["plan"]
+    held = [t for t in out["trades"] if t["entry"] >= plan["holdout"][0]]
+    assert held and all(t["variant"] == "F0/P1" for t in held)  # kasa: onceden tanimli varyant
+    for t in out["trades"]:
+        assert len(t["worst"]) == len(t["close"]) >= 1 and abs(t["close"][-1] - t["r"]) < 1e-3 and t["comm_r"] > 0
+        if t["entry"] < plan["holdout"][0]:
+            assert any(w["test"][0] <= t["entry"] < w["test"][1] for w in plan["windows"])
+    (tmp_path / "pp").mkdir()
+    (tmp_path / "pp" / "EURUSD.json").write_text((tmp_path / "p.json").read_text())
+    result = run.prop_assemble(tmp_path / "pp", tmp_path / "prop.json")
+    assert set(result["variants"]) == set(PROP.VARIANTS)
+    assert result["variants"]["%1"]["holdout"]["starts"] > 0
