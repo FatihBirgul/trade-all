@@ -1027,3 +1027,21 @@ onayıyla. Risk ayarları değişmez.
   yazılı; H1 uyarlaması sonraki adım), Silver Bullet ve diğer M15 stratejileri (karar: M15 yok).
 - **Kasa koruması:** araştırma koşusunda veri kasa başlangıcında kesilir; test: kasa dönemi tamamen değiştirilse de
   araştırma sonucu birebir aynı (`tests/research/test_run.py`).
+
+## Yıllık backtest — 30 sembol (2026-11-27 00:40 UTC, Actions run 45909940950)
+
+XAUUSD ve XAGUSD dahil 30 sembol, 365 gün (medyan = taban), V9 763 374 değerlendirme, 1 hata. Sonuç sunucuya yüklendi.
+
+| Strateji | 1 yıl: işlem / R / PF / düşüş | Not |
+|---|---|---|
+| **tb_week_trade_v1_orig6** (kıyas satırı) | 86 / **+11,60** / **1,49** / %2,4 | **Ölçütü sağlıyor** (6 ay: 33 / +7,89 / 1,96). Özgün 6 sembol + kendi portföy kuralı. Bilgi satırı: canlıya alma kapısını açmaz |
+| tb_week_trade_v1 (30 sembol) | 122 / −7,49 / 0,82 / %7,9 | kendi tasarımı dışında kullanım |
+| tb_smc_sweep_v1 | 84 / +3,7 / 1,09 / %6,9 | metallerle artıya döndü; ölçütün altında |
+| tb_emapb_h1_21_50_v1 | 109 / +4,0 / 1,08 / %5,4 | aynı |
+| tb_asia_london_v1 | 1030 / +3,68 / 1,01 / %12,6 | başa baş |
+| fx_trend_momentum_v6 | 788 / +9,5 / 1,02 / %15,2 | ince kenar |
+| diğerleri | eksi | M15 stratejileri hâlâ %72–77 düşüş |
+
+Okuma: WEEK TRADE'in özgün kullanımı bir yıllık sınavı geçti (eski masanın 2 yıllık sonucuyla tutarlı: XAU ve kripto
+ağırlıklı). Bu tek pencere çoklu deneme etkisine açıktır; asıl sınav Faz 5'in 5 yıllık walk-forward + kasa testidir
+(orada WEEK TRADE sembol bazında `X_week_trade` olarak ölçülür). Canlıya alma yine kullanıcının onayıyla.
