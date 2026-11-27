@@ -1142,3 +1142,58 @@ Adaylar: run 45925646926 (159 varyant / 34 çift) ∪ run 45942344095 (24 varyan
 yok. Kasa bu adaylar için BİR KEZ çalıştırıldı; sonucu hiçbir kuralı ya da seçimi değiştirmez. Endeks maliyeti bu
 koşuda Dukascopy ask-bid; Exness'in canlı endeks spread'i ölçülmeye başlanınca (PR #32) aynı adaylarla yalnızca
 maliyet duyarlılığı olarak ikinci bir hesap verilecek (seçim değişmez).
+
+## KASA SONUCU — 2026-11-27 05:05 UTC (run 45943091286; bir kez çalıştı, TEKRARLANMAZ)
+
+Kapsam: 34 çift / 159 varyant (sepet adayı yok). Maliyet: endekslerde Dukascopy ask-bid (Exness endeks ölçümü PR #32
+ile 05:10 UTC'de başladı). `mode.txt = done`: kasa işi bir daha tetiklenmez.
+
+Çift bazında (her çift için ön kayıttaki sabit sıranın ilk varyantı; kasa sonucuna bakmadan):
+
+| Çift | Kasa: işlem / R / PF / düşüş | R/işlem: görülmemiş → kasa | Sonuç |
+|---|---|---|---|
+| USTEC Williams (F1/P1) | 157 / +31,7 / 1,38 / %6,1 | 0,44 → 0,20 | ONAY |
+| BTCUSD Williams (F0/P1) | 201 / +20,5 / 1,25 / %6,0 | 0,11 → 0,10 | ONAY |
+| BTCUSD Keltner (F0/P1) | 47 / +16,3 / 1,66 / %4,1 | 0,16 → 0,35 | ONAY |
+| ETHUSD Williams (F0/P1) | 204 / +14,5 / 1,17 / %6,2 | 0,13 → 0,07 | ONAY |
+| EURJPY ADX/DMI (F1/P1) | 15 / +9,6 / 2,33 / %2,0 | 0,09 → 0,64 | ONAY |
+| USTEC gece getirisi (F1/P2) | 238 / +9,3 / 1,09 / %6,3 | 0,14 → 0,04 | ONAY |
+| XAUUSD Keltner (F1/P1) | 21 / +7,8 / 1,97 / %2,1 | 0,81 → 0,37 | ONAY |
+| AUDCHF Double 7s (F2/P1) | 15 / +5,9 / 3,76 / %0,6 | 0,19 → 0,39 | ONAY |
+| BTCUSD Ichimoku (F0/P2) | 26 / +4,8 / 2,24 / %0,5 | 0,04 → 0,19 | ONAY |
+| XAUUSD Ichimoku (F0/P1) | 21 / +4,4 / 2,08 / %0,8 | 0,22 → 0,21 | ONAY |
+| CHFJPY WEEK TRADE (F0/P1) | 22 / +4,4 / 1,62 / %1,2 | 0,16 → 0,20 | ONAY |
+| XAUUSD WEEK TRADE (F0/P1) | 28 / +4,1 / 1,66 / %1,8 | 0,55 → 0,15 | ONAY |
+| ETHUSD WEEK TRADE (F0/P1) | 24 / +4,0 / 1,95 / %0,9 | 0,08 → 0,17 | ONAY |
+| ETHUSD Supertrend (F0/P2) | 54 / +3,6 / 1,14 / %3,0 | 0,16 → 0,07 | ONAY |
+| BTCUSD Double 7s (F0/P1) | 25 / +3,1 / 1,59 / %0,8 | 0,14 → 0,12 | ONAY |
+| ETHUSD Keltner (F0/P1) | 46 / +2,7 / 1,11 / %5,6 | 0,33 → 0,06 | ONAY |
+| AUDJPY Double 7s (F4/P1) | 16 / +2,1 / 1,49 / %1,5 | 0,21 → 0,13 | ONAY |
+| US500 Keltner (F1/P1) | 30 / +2,0 / 1,12 / %2,5 | 0,13 → 0,07 | ONAY |
+| XAUUSD PSAR (F0/P1) | 18 / +1,9 / 1,37 / %1,5 | 0,41 → 0,11 | ONAY |
+| ETHUSD ADX/DMI (F0/P1) | 46 / +0,8 / 1,03 / %3,9 | 0,61 → 0,02 | ONAY |
+| US30 Keltner (F2/P1) | 74 / −32,0 / 0,36 / %16,2 | 0,31 → −0,43 | RED |
+| US30 ADX/DMI (F0/P1) | 74 / −27,5 / 0,50 / %15,0 | 0,22 → −0,37 | RED |
+| EURNZD ADX/DMI (F1/P1) | 23 / −7,6 / 0,50 / %5,7 | 0,28 → −0,33 | RED |
+| EURJPY PSAR (F0/P2) | 25 / −6,1 / 0,46 / %3,3 | 0,09 → −0,24 | RED |
+| USTEC Ichimoku (F0/P1) | 41 / −4,9 / 0,58 / %2,9 | 0,23 → −0,12 | RED |
+| USDJPY Ichimoku (F0/P1) | 25 / −4,0 / 0,48 / %2,3 | 0,05 → −0,16 | RED |
+| XAUUSD ADX/DMI (F1/P2) | 25 / −3,8 / 0,65 / %2,4 | 0,64 → −0,15 | RED |
+| USTEC ADX/DMI (F1/P1) | 45 / −3,6 / 0,88 / %6,7 | 0,50 → −0,08 | RED |
+| USTEC Double 7s (F0/P1) | 23 / −2,7 / 0,73 / %2,3 | 0,21 → −0,12 | RED |
+| EURJPY Supertrend (F1/P1) | 19 / −2,4 / 0,69 / %3,0 | 0,15 → −0,13 | RED |
+| BTCUSD Supertrend (F0/P1) | 58 / −2,1 / 0,92 / %5,1 | 0,09 → −0,04 | RED |
+| USTEC Keltner (F1/P1) | 39 / −2,0 / 0,91 / %4,0 | 0,25 → −0,05 | RED |
+| USTEC ORB (F1/P1) | 119 / −0,7 / 0,97 / %3,2 | 0,04 → −0,01 | RED |
+| BTCUSD ADX/DMI (F0/P1) | 51 / −0,5 / 0,99 / %5,4 | 0,10 → −0,01 | RED |
+
+- **20 çift onaylı, 14 red.** Tek başına toplam: onaylılar +153,5R, redler −99,8R, hepsi +53,7R / 1895 işlem
+  (0,03 R/işlem). Görülmemiş dönemde aynı çiftler işlem başına ~0,2R veriyordu: **bozulma ≈ %85**.
+- **Önceden tanımlı birleşik portföy (34 çift, en çok 3 açık, sembol başına 1, para birimi yönü başına 2) KASADA
+  ZARAR:** 219 işlem, −10,2R; %0,5 risk: 2000 → **1892 USC** (düşüş %12,7); %1 risk: 2000 → **1776 USC** (düşüş
+  %24,1); en uzun düşüş süresi 366 gün (kasanın tamamı). Portföy sınırları yer kapışmasında kârlı işlemleri de
+  eledi (US30'un zararlı işlemleri yer kapladı).
+- Sepet: aday yoktu. Endeks sonuçları Exness spread'iyle henüz hesaplanmadı (ölçüm 24 saat sürer).
+- Okuma: tek başına onaylı çiftlerin çoğu kripto (Williams, Keltner, WEEK) ve altın; endeks trend stratejileri
+  kasada çöktü. Yalnızca "onaylılar"dan kurulan bir portföy kasa sonucuna göre seçilmiş olur (bu kez kasa da
+  seçime karışır); ileriye dönük beklenti için bozulma oranı esas alınmalı.
