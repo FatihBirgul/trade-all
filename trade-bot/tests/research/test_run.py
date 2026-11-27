@@ -57,3 +57,10 @@ def test_symbol_run_assemble_and_holdout(tmp_path):
     result = ho["results"][0]
     assert result["holdout"]["trades"] >= 0 and result["approved"] == (result["holdout"]["trades"] >= 1
                                                                       and result["holdout"]["net_r"] > 0)
+
+
+def test_portfolio_takes_one_fixed_variant_per_pair():
+    passed = [{"symbol": "X", "strategy": "s", "variant": v} for v in ("F2/P2", "F1/P1", "F1/P2")] + [
+        {"symbol": "Y", "strategy": "s", "variant": "F4/P2"}]
+    chosen = {(p["symbol"], p["variant"]) for p in run.one_variant_per_pair(passed)}
+    assert chosen == {("X", "F1/P1"), ("Y", "F4/P2")}

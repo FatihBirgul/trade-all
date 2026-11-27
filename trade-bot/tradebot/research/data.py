@@ -109,11 +109,18 @@ def scale_for(raw_closes: list[float], reference: float | None, price_range: tup
 
 
 # ---------------------------------------------------------------- birlestirme
-def aggregate(h1: list[dict], size: int) -> list[dict]:
-    """H1 mumlarindan UTC sinirlarinda daha buyuk mumlar (H4: 00/04/..., D1: gece yarisi)."""
+def sunday_to_monday(moment: int) -> int:
+    """D1 kovasi: UTC gun basi; PAZAR saatleri (FX / metal / endeksin hafta acilisi) Pazartesi mumuna katilir. Aksi
+    halde 2-3 saatlik bir 'Pazar mumu' olusur ve dar-aralik / dunku-aralik kurallarini bozar."""
+    day = moment - moment % D1
+    return day + D1 if (day // D1 + 3) % 7 == 6 else day  # 1970-01-01 Persembe; Pazartesi = 0 -> Pazar = 6
+
+
+def aggregate(h1: list[dict], size: int, key=None) -> list[dict]:
+    """H1 mumlarindan UTC sinirlarinda daha buyuk mumlar (H4: 00/04/..., D1: gece yarisi). `key`: kova baslangici."""
     out: list[dict] = []
     for bar in h1:
-        start = bar["time"] - bar["time"] % size
+        start = key(bar["time"]) if key else bar["time"] - bar["time"] % size
         if out and out[-1]["time"] == start:
             last = out[-1]
             last["high"], last["low"] = max(last["high"], bar["high"]), min(last["low"], bar["low"])

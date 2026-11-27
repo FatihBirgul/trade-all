@@ -28,13 +28,23 @@ MONKEY_REPS = 200
 INDICES = {"US30", "US500", "USTEC"}
 
 
+def _daily_rows(db, symbol: str) -> list:
+    """D1, H1'den yeniden kurulur: kripto disinda Pazar saatleri Pazartesi mumuna katilir (data.sunday_to_monday)."""
+    from .data import aggregate, sunday_to_monday
+    h1 = [{"time": r[0], "open": r[1], "high": r[2], "low": r[3], "close": r[4]} for r in db.execute(
+        "SELECT time, open, high, low, close FROM bars WHERE symbol=? AND tf='H1' ORDER BY time", (symbol,))]
+    crypto = kind_of(symbol, {}) == "crypto"
+    bars = aggregate(h1, 86400, None if crypto else sunday_to_monday)
+    return [(b["time"], b["open"], b["high"], b["low"], b["close"]) for b in bars]
+
+
 def load(path: Path, symbol: str, until: int | None) -> tuple[dict, dict, dict]:
     db = sqlite3.connect(path)
     try:
         series = {}
         for tf in ("H1", "H4", "D1"):
-            rows = db.execute("SELECT time, open, high, low, close FROM bars WHERE symbol=? AND tf=? ORDER BY time",
-                              (symbol, tf)).fetchall()
+            rows = _daily_rows(db, symbol) if tf == "D1" else db.execute(
+                "SELECT time, open, high, low, close FROM bars WHERE symbol=? AND tf=? ORDER BY time", (symbol, tf)).fetchall()
             if until is not None:
                 size = E.TF_SECONDS[tf]
                 rows = [r for r in rows if r[0] + size <= until]  # kasa baslangicindan once KAPANMIS mumlar
@@ -55,8 +65,7 @@ def load_universe(path: Path, until: int | None) -> dict:
         names = [r[0] for r in db.execute("SELECT DISTINCT symbol FROM bars WHERE tf='D1'")]
         out = {}
         for name in names:
-            rows = db.execute("SELECT time, open, high, low, close FROM bars WHERE symbol=? AND tf='D1' ORDER BY time",
-                              (name,)).fetchall()
+            rows = _daily_rows(db, name)
             if until is not None:
                 rows = [r for r in rows if r[0] + 86400 <= until]
             if rows:
@@ -207,7 +216,7 @@ def assemble(parts: Path, out: Path) -> dict:
         agg["passed"] += r["passed"]
         agg["selected_windows"] += r["counted"]
     from .portfolio import build as build_portfolio
-    portfolio = build_portfolio(passed) if passed else None
+    portfolio = build_portfolio(one_variant_per_pair(passed)) if passed else None
     summary = {"version": "wf-1", "tested": tested, "portfolio": portfolio, "passed": len(passed), "expected_by_chance": round(chance, 2),
                "approved_candidates": passed, "by_strategy": by_strategy, "errors": errors, "rows": rows,
                "finished_at": time.time()}
@@ -215,10 +224,25 @@ def assemble(parts: Path, out: Path) -> dict:
     return summary
 
 
+VARIANT_ORDER = [f"{f}/{p}" for f in ("F0", "F1", "F2", "F3", "F4") for p in ("P1", "P2")]
+
+
+def one_variant_per_pair(passed: list[dict]) -> list[dict]:
+    """Portfoyde her (sembol, strateji) bir kez: gecen varyantlardan SABIT siradaki ilki (F0..F4, P1 once). Siralama
+    sonuca bakmaz (en iyi varyanti secmek ek bir secim yanlisligi olurdu)."""
+    best: dict = {}
+    for item in passed:
+        key = (item["symbol"], item["strategy"])
+        if key not in best or VARIANT_ORDER.index(item["variant"]) < VARIANT_ORDER.index(best[key]["variant"]):
+            best[key] = item
+    return list(best.values())
+
+
 def report(summary: dict) -> str:
     """Gunluge yazilan ozet: strateji basina denenen / gecen; gecenlerin gorulmemis sonucu; tesadufi beklenti."""
+    pairs = {(k["symbol"], k["strategy"]) for k in summary["approved_candidates"]}
     lines = [f"denenen eslesme: {summary['tested']} | gecen: {summary['passed']} | "
-             f"tesadufen beklenen gecen: {summary['expected_by_chance']}"]
+             f"tesadufen beklenen gecen: {summary['expected_by_chance']} | gecen (sembol, strateji) cifti: {len(pairs)}"]
     for sid, agg in sorted(summary["by_strategy"].items()):
         lines.append(f"  {sid:26s} denenen={agg['tested']:4d} gecen={agg['passed']:3d} secilen_pencere={agg['selected_windows']}")
     for key in summary["approved_candidates"]:

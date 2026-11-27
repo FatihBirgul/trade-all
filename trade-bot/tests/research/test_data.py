@@ -116,3 +116,15 @@ def test_combine_merges_symbol_files_and_their_meta(tmp_path):
     assert set(meta["symbols"]) == {"EURUSD", "US30"} and len(meta["market"]["instruments"]) == 2
     db = sqlite3.connect(tmp_path / "all.db")
     assert db.execute("SELECT COUNT(*) FROM bars").fetchone()[0] == 2
+
+
+def test_sunday_hours_join_the_monday_daily_bar():
+    monday = data.month_start(2024, 1)  # 2024-01-01 Pazartesi
+    sunday_evening = monday - 3 * 3600
+    assert data.sunday_to_monday(sunday_evening) == monday and data.sunday_to_monday(monday + 5 * 3600) == monday
+    saturday = monday - 2 * 86400 + 3600
+    assert data.sunday_to_monday(saturday) == monday - 2 * 86400
+    h1 = [{"time": sunday_evening + i * 3600, "open": 1.0, "high": 1.0 + i, "low": 1.0, "close": 1.0 + i}
+          for i in range(6)]
+    bars = data.aggregate(h1, data.D1, data.sunday_to_monday)
+    assert len(bars) == 1 and bars[0]["time"] == monday and bars[0]["high"] == 6.0
