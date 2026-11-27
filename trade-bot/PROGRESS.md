@@ -1213,3 +1213,28 @@ Benzetim (`tradebot/research/prop.py`, testler `tests/research/test_prop.py`):
   sembol başına 1. Varyantlar: %0,5 / %0,75 / %1 / uyarlanan (%1; −%4'te %0,5; −%7'de %0,25) / %1 + günlük −%3'te
   bot hepsini kapatıp günü bitirir.
 - Fonlu: %0,3 × en çok 3 (toplam açık risk ≤ %0,9); ay sonunda başlangıç üstü kâr çekilir, zarar devreder.
+
+### Prop sınavı sonucu (run 45949048863, 2026-11-27 06:03 UTC)
+
+Haftalık başlangıç: 156 (105'i kasa öncesi, 51'i son 12 ay). "Bitmedi" = veri bitti, sınav sürüyordu.
+
+| Varyant | Faz 1 | Faz 2 (F1'i geçenlerde) | Toplam geçme | Gün medyan / %75 | Başarısızlık: toplam %10 / günlük %4 / bitmedi |
+|---|---|---|---|---|---|
+| %0,5 | %25,0 | %7,7 | **%1,9** | 159 / 247 | %40,4 / %35,3 / %22,4 |
+| %0,75 | %35,9 | %41,1 | **%14,7** | 129 / 205 | %46,8 / %26,9 / %11,5 |
+| %1 | %32,1 | %48,0 | **%15,4** | 58 / 85 | %35,3 / %44,2 / %5,1 |
+| uyarlanan (%1→%0,5→%0,25) | %35,9 | %50,0 | **%17,9** | 66 / 100 | %27,6 / %41,7 / %12,8 |
+| %1 + günlük −%3'te dur | %45,5 | %59,2 | **%26,9** | 95 / 142 | %50,6 / %20,5 / %1,9 |
+| Son 12 ay — %1 + %3'te dur | %39,2 | %50,0 | **%19,6** | 39 / 88 | %54,9 / %19,6 / %5,9 |
+| Son 12 ay — uyarlanan | %23,5 | %50,0 | **%11,8** | 20 / 30 | %17,6 / %31,4 / %39,2 |
+| Son 12 ay — %1 | %25,5 | %38,5 | **%9,8** | 10 / 30 | %37,3 / %37,3 / %15,7 |
+
+Fonlu aşama (%0,3 × en çok 3; toplam açık risk ≤ %0,9), 35 ay: aylık getiri medyanı **−%0,48** (p25 −%1,49,
+p75 +%0,77), 35 ayın 19'u eksi; %1 açık zarar ihlali 5 kez (pay %70 → %20'ye düştü); 2 hesap kaybı (günlük/toplam);
+**yıllık beklenen ödeme ≈ 0** (10K ve 25K için $0). Son 12 ay: medyan −%0,61, 11 ayın 7'si eksi, 2 açık zarar ihlali,
+1 hesap kaybı, ödeme 0.
+
+Okuma: sınavı geçme olasılığı en iyi varyantta ~%20–27 (38$ ücretle beklenen geçiş başı maliyet ~140–190$); ama fonlu
+aşamada bu strateji seti %0,9 açık risk sınırıyla kâr üretmiyor (kenar ince, işlem başı risk küçülünce maliyet ve
+eksi aylar baskın). Yaklaşımlar: saat içi en kötü noktalar aynı anda (kötümser); risk başlangıç bakiyesinin yüzdesi;
+metal komisyonu FX gibi; endeks maliyeti Dukascopy spread'i.
