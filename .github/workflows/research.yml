@@ -155,7 +155,7 @@ jobs:
           retention-days: 7
   run:
     needs: [prep, data]
-    if: always() && needs.prep.result == 'success' && needs.prep.outputs.mode != 'holdout' && (needs.data.result == 'success' || needs.data.result == 'skipped')
+    if: always() && needs.prep.result == 'success' && needs.prep.outputs.mode != 'holdout' && needs.prep.outputs.mode != 'done' && (needs.data.result == 'success' || needs.data.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 300
     strategy:
