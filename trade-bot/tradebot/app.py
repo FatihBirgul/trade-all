@@ -107,6 +107,9 @@ STRATEGY_POLICY_VERSION = 1
 POLICY_OFF = ("tb_ema_pullback_v1", "tb_donchian_breakout_v1", "tb_silver_bullet_v1")  # M15: karneyi kirletiyor
 POLICY_SHADOW = ("fx_failed_breakout_v6", "fx_confirmed_breakout_v6", "fx_range_reversion_v6",
                  "fx_trend_momentum_v6")  # V9: 1 yilda zararda / kenari olcutun altinda -> canlidan golgeye
+# Yalnizca OLCUM: bu enstrumanlarin fiyatina abone olunur ve spread'i kaydedilir (arastirmanin maliyet modeli icin).
+# Islem evreninde DEGILLER: taranmaz, sinyal uretmez, emir acilmaz.
+MEASURE_ONLY = ("US30", "US500", "USTEC")
 UNIVERSE_INTERVAL = 600.0  # isleme kapali / okunamamis evren sembollerine yeniden bakma araligi (sn)
 UNIVERSE_RECHECK_MAX = 40  # bir turda yeniden okunacak en cok enstruman
 UNIVERSE_ERROR_TRIES = 3  # okunamayan enstruman en cok bu kadar tur yeniden denenir (sonra yeniden baslatmayi bekler)
@@ -363,9 +366,19 @@ class Bot:
         except ValueError as exc:
             log.warning("hesap durumu okunamadi: %s", exc)
 
+    def _measured(self) -> list:
+        """Yalnizca spread olcumu icin izlenen enstrumanlar (katalogda varsa)."""
+        out = []
+        for symbol in MEASURE_ONLY:
+            try:
+                out.append(self.catalog.get(symbol))
+            except KeyError:
+                continue
+        return out
+
     def _tick_symbols(self) -> list[str]:
         """Evren + acik islemlerin sembolleri (broker adlariyla). Donusum pariteleri evrenin icindedir."""
-        names = {i.broker_symbol for i in self.catalog.universe()}
+        names = {i.broker_symbol for i in self.catalog.universe()} | {i.broker_symbol for i in self._measured()}
         for trade in self.repo.open_trades():
             try:
                 names.add(self.catalog.get(trade.symbol).broker_symbol)
@@ -1750,7 +1763,7 @@ class Bot:
         now = self._clock()
         slot = int(now // SPREAD_STATS_INTERVAL) * SPREAD_STATS_INTERVAL
         rows = []
-        for instrument in self.catalog.universe():
+        for instrument in self.catalog.universe() + self._measured():
             found = self.quotes.recent_median(instrument.symbol, SPREAD_STATS_INTERVAL)
             if found is not None:
                 rows.append((instrument.symbol, slot, found[0], found[1]))
