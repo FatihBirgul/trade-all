@@ -1238,3 +1238,9 @@ Okuma: sınavı geçme olasılığı en iyi varyantta ~%20–27 (38$ ücretle be
 aşamada bu strateji seti %0,9 açık risk sınırıyla kâr üretmiyor (kenar ince, işlem başı risk küçülünce maliyet ve
 eksi aylar baskın). Yaklaşımlar: saat içi en kötü noktalar aynı anda (kötümser); risk başlangıç bakiyesinin yüzdesi;
 metal komisyonu FX gibi; endeks maliyeti Dukascopy spread'i.
+
+## Kasa — maliyet duyarlılığı (2026-11-28; SEÇİM DEĞİŞMEZ)
+
+Aynı adaylar, aynı kasa dönemi; tek fark endekslerin maliyeti: Exness'in canlı ölçülen US30/US500/USTEC saatlik spread
+profili (PR #32; 2026-11-27 05:10'dan itibaren ~24 saat; dışa aktarım run 46113257144). Bu koşu bir kural ya da
+seçimi değiştirmez; yalnızca "exness_endeks" maliyet senaryosunu ekler.
