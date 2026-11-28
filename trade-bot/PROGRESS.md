@@ -1244,3 +1244,12 @@ metal komisyonu FX gibi; endeks maliyeti Dukascopy spread'i.
 Aynı adaylar, aynı kasa dönemi; tek fark endekslerin maliyeti: Exness'in canlı ölçülen US30/US500/USTEC saatlik spread
 profili (PR #32; 2026-11-27 05:10'dan itibaren ~24 saat; dışa aktarım run 46113257144). Bu koşu bir kural ya da
 seçimi değiştirmez; yalnızca "exness_endeks" maliyet senaryosunu ekler.
+- **Sonuç (2026-11-28 05:56 UTC):** Exness bu cent hesapta endeks fiyatı vermiyor: `ticks-measure` aboneliği
+  `MARKET_INSTRUMENT_NOT_FOUND` (kod 4000) ile reddedildi; enstrüman koşullarında da üçü `trading_disabled`. Spread
+  ölçülemedi; maliyet duyarlılığı senaryosu üretilemedi (koşu yalnızca kaynak senaryoyu tekrarladı, sonuç aynı).
+  **Sonuç: US30/US500/USTEC bu hesapta işlenemez**; onaylı çiftlerden USTEC Williams, USTEC gece getirisi ve US500
+  Keltner bu hesap için kullanılamaz (17 çift kalır). Ayrı abonelik mesajı tasarımı doğru çıktı: diğer sembollerin
+  aboneliği etkilenmedi.
+- **Altın/gümüş hâlâ `trading_disabled`** (26 Kasım akşamından beri; Cuma tam işlem günüydü, Cumartesi 05:56 UTC'de
+  de kapalı). Şükran Günü açıklaması artık yetmiyor; Pazartesi de kapalıysa hesap düzeyinde bir kısıtlama olabilir
+  (Exness'e sorulmalı). Bot kapalı sembolü listede tutuyor ve açılınca kendiliğinden döner.
