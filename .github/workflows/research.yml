@@ -262,6 +262,23 @@ jobs:
             gh run download "$r" --repo "${{ github.repository }}" --name walk-forward --dir "wf/$r"
           done
           ls -R wf
+      - name: Exness endeks spread profili (maliyet duyarliligi; secimi degistirmez)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run=$(tr -d '[:space:]' < trade-bot/tradebot/research/index_costs_run.txt 2>/dev/null || true)
+          if [ -n "$run" ]; then
+            gh run download "$run" --repo "${{ github.repository }}" --name market-data --dir market
+            python3 - <<'PY'
+          import json
+          job = json.load(open("market/job.json"))
+          picked = {k: v for k, v in (job.get("spreads") or {}).items() if k in ("US30", "US500", "USTEC")}
+          print("endeks profili:", {k: round(v["all"], 3) for k, v in picked.items()})
+          if picked:
+              json.dump(picked, open("trade-bot/tradebot/research/index_costs.json", "w"))
+          PY
+          fi
       - name: KASA (bir kez)
         working-directory: trade-bot
         run: |
